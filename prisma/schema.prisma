@@ -1,0 +1,525 @@
+// ============================================================
+// App Personal — Prisma Schema
+// Supabase (PostgreSQL) + Prisma ORM
+// Cada módulo tiene su propio bloque de modelos
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// AUTH — NextAuth v5 + @auth/prisma-adapter
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts     Account[]
+  sessions     Session[]
+
+  // Módulo: Sueño
+  sleepLogs    SleepLog[]
+
+  // Módulo: Fitness
+  workouts     Workout[]
+  gymRoutines  GymRoutine[]
+
+  // Módulo: Nutrición
+  meals        Meal[]
+  waterLogs    WaterLog[]
+  diet         UserDiet?
+
+  // Módulo: Proyectos
+  projects     Project[]
+
+  // Módulo: Ideas
+  ideas        Idea[]
+
+  // Scoring
+  dailyScores  DailyScore[]
+
+  // Hábitos esperados
+  habits       UserHabit[]
+
+  // Configuración
+  settings     UserSettings?
+
+  @@map("users")
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================================
+// MÓDULO: SUEÑO
+// TODO: Sesión 3 — agregar lógica de notificaciones y sync Garmin
+// ============================================================
+
+model SleepLog {
+  id        String   @id @default(cuid())
+  userId    String
+  date      DateTime @db.Date // Fecha del sueño (día de despertar)
+  bedTime   DateTime // Hora de acostarse
+  wakeTime  DateTime? // Hora de despertar (puede ser null si aún no se registró)
+
+  // Datos calculados
+  durationMinutes Int? // Duración total en minutos
+
+  // Datos de Garmin Connect (TODO: Sesión 3)
+  garminSleepId       String? @unique
+  garminScore         Int? // Score de Garmin 0-100
+  deepSleepMinutes    Int?
+  lightSleepMinutes   Int?
+  remSleepMinutes     Int?
+  awakeMinutes        Int?
+  stressScore         Int? // Estrés durante el sueño (Garmin)
+
+  // Datos extra de Garmin (Sesión 3)
+  spo2Avg           Float?  // SpO2 promedio (% de oxígeno en sangre)
+  respirationAvg    Float?  // Frecuencia respiratoria promedio (resp/min)
+  bodyBatteryChange Int?    // Cambio en Body Battery durante el sueño (+/-%)
+
+  // Notas adicionales
+  notes    String?
+  flexible Boolean @default(false) // "hoy salgo tarde, te aviso después"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("sleep_logs")
+}
+
+// ============================================================
+// MÓDULO: FITNESS
+// TODO: Sesión 4 — smart habits, logging natural, sync Garmin
+// ============================================================
+
+enum WorkoutType {
+  GYM
+  RUNNING
+  SWIMMING
+  WALKING
+  CYCLING
+  OTHER
+}
+
+model Workout {
+  id       String      @id @default(cuid())
+  userId   String
+  date     DateTime
+  type     WorkoutType
+  durationMinutes Int?
+  notes    String?
+
+  // Para GYM: lista de ejercicios realizados
+  exercises WorkoutExercise[]
+
+  // Para actividades (running, swimming, etc.)
+  distanceKm  Float?
+  calories    Int?
+
+  // Nuevos campos Sesión 4
+  title   String?           // Nombre de la actividad (Garmin o manual)
+  source  String  @default("MANUAL") // "MANUAL" | "GARMIN"
+  steps   Int?              // Pasos (Garmin walking/running)
+
+  // Datos Garmin (sincronizado Sesión 4)
+  garminActivityId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("workouts")
+}
+
+model WorkoutExercise {
+  id        String @id @default(cuid())
+  workoutId String
+  name      String // "Press plano", "Sentadilla", etc.
+  order     Int    @default(0)
+  notes     String?
+
+  sets WorkoutSet[]
+
+  workout Workout @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+
+  @@map("workout_exercises")
+}
+
+model WorkoutSet {
+  id         String @id @default(cuid())
+  exerciseId String
+  setNumber  Int
+  reps       Int?
+  weightKg   Float?
+  notes      String?
+
+  exercise WorkoutExercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@map("workout_sets")
+}
+
+// Rutinas predefinidas de gym del usuario
+model GymRoutine {
+  id     String   @id @default(cuid())
+  userId String
+  name   String // "Rutina A — Push", "Rutina B — Pull"
+  days   String[] // ["MONDAY", "TUESDAY", "THURSDAY", "FRIDAY"]
+  active Boolean  @default(true)
+
+  exercises GymRoutineExercise[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("gym_routines")
+}
+
+model GymRoutineExercise {
+  id        String @id @default(cuid())
+  routineId String
+  name      String
+  order     Int    @default(0)
+  sets      Int    @default(3)
+  repsRange String? // "8-12", "5"
+  notes     String?
+
+  routine GymRoutine @relation(fields: [routineId], references: [id], onDelete: Cascade)
+
+  @@map("gym_routine_exercises")
+}
+
+// ============================================================
+// MÓDULO: NUTRICIÓN
+// TODO: Sesión 5 — cálculo de macros con IA, sync dieta
+// ============================================================
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+  OTHER
+}
+
+model Meal {
+  id          String   @id @default(cuid())
+  userId      String
+  date        DateTime @db.Date
+  mealType    MealType
+  description String // Descripción en lenguaje natural
+  notes       String?
+
+  // Macros calculados por IA (TODO: Sesión 5)
+  calories Float?
+  proteinG Float?
+  carbsG   Float?
+  fatG     Float?
+
+  // Alineación con la dieta del usuario (TODO: Sesión 5)
+  dietAlignmentScore Int? // 0-100
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("meals")
+}
+
+model WaterLog {
+  id       String   @id @default(cuid())
+  userId   String
+  date     DateTime @db.Date
+  thermos  Float // Unidades de termo de 2L (ej: 0.5 = medio termo)
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("water_logs")
+}
+
+// Dieta del usuario — texto libre que la IA usa como referencia
+model UserDiet {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  content   String   // Texto completo de la dieta
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_diets")
+}
+
+// ============================================================
+// MÓDULO: PROYECTOS
+// TODO: Sesión 6 — Kanban, timeline, integración Notion
+// ============================================================
+
+enum ProjectStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  ARCHIVED
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+  status      ProjectStatus @default(TODO)
+  deadline    DateTime?
+  order       Int           @default(0) // Para el Kanban
+  color       String?       // Color hex para identificación visual
+
+  // Integración Notion (TODO: Sesión 6)
+  notionId String? @unique
+
+  tasks ProjectTask[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("projects")
+}
+
+model ProjectTask {
+  id        String  @id @default(cuid())
+  projectId String
+  title     String
+  done      Boolean @default(false)
+  order     Int     @default(0)
+
+  // Integración Notion (TODO: Sesión 6)
+  notionId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("project_tasks")
+}
+
+// ============================================================
+// MÓDULO: IDEAS
+// TODO: Sesión 5 — limpieza con IA, sync con Lumina
+// ============================================================
+
+model Idea {
+  id          String   @id @default(cuid())
+  userId      String
+  rawText     String   // Texto original tal como llegó
+  cleanedText String?  // Texto limpiado/estructurado por IA (TODO: Sesión 5)
+  title       String?  // Título generado por IA
+  tags        String[] // Tags generados por IA
+
+  // Integración Lumina (TODO: Sesión 5)
+  luminaId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ideas")
+}
+
+// ============================================================
+// SCORING
+// TODO: Sesión 2 — lógica completa de scoring por módulo
+// ============================================================
+
+model DailyScore {
+  id     String   @id @default(cuid())
+  userId String
+  date   DateTime @db.Date
+
+  // Scores por módulo (0-100)
+  sleepScore     Int?
+  fitnessScore   Int?
+  nutritionScore Int?
+  projectsScore  Int?
+  ideasScore     Int?
+
+  // Score global
+  globalScore Int?
+
+  // Detalle de qué se cumplió y qué no
+  // JSON con estructura: { sleep: { met: [...], missed: [...] }, ... }
+  details Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("daily_scores")
+}
+
+// ============================================================
+// CONFIGURACIÓN Y HÁBITOS ESPERADOS
+// TODO: Sesión 2 — UI de settings
+// ============================================================
+
+model UserSettings {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  // Sueño
+  expectedSleepTime String? // "23:00" (hora habitual de dormir)
+  expectedWakeTime  String? // "07:00" (hora habitual de despertar)
+
+  // Fitness
+  expectedGymTime String?  // "06:00"
+  gymDays         String[] // ["MONDAY", "TUESDAY", "THURSDAY", "FRIDAY"]
+
+  // Nutrición
+  dailyWaterGoalThermos Float @default(1.0) // Meta de termos por día
+
+  // Garmin Connect — sesión cacheada (Sesión 3)
+  garminSessionKey String?   // Cookie de sesión encriptada
+  garminSessionExp DateTime? // Expiración de la sesión
+
+  // WhatsApp
+  whatsappNumber       String?
+  notificationsEnabled Boolean @default(true)
+
+  // Preferencias UI
+  prefersDarkMode Boolean @default(true)
+  language        String  @default("es")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+enum HabitType {
+  GYM
+  SLEEP
+  HYDRATION
+  MEAL_LOG
+  IDEA_LOG
+  PROJECT_UPDATE
+}
+
+model UserHabit {
+  id           String    @id @default(cuid())
+  userId       String
+  type         HabitType
+  expectedTime String?   // "06:00" — hora esperada del hábito
+  expectedDays String[]  // Días de la semana que aplica
+  active       Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_habits")
+}
+
+// ============================================================
+// MENSAJES DEL ORQUESTRADOR (WhatsApp)
+// TODO: Sesión 8 — orquestrador completo
+// ============================================================
+
+enum MessageDirection {
+  INBOUND  // Usuario → App
+  OUTBOUND // App → Usuario
+}
+
+enum MessageStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+model WhatsAppMessage {
+  id        String           @id @default(cuid())
+  userId    String?
+  direction MessageDirection
+  content   String
+  status    MessageStatus    @default(PENDING)
+
+  // Metadata del mensaje de WhatsApp
+  waMessageId String?  @unique
+  phoneNumber String?
+
+  // Resultado del procesamiento por el orquestrador
+  intent     String? // Intención detectada
+  module     String? // Módulo al que se derivó
+  agentResponse String? // Respuesta del sub-agente
+
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@map("whatsapp_messages")
+}

@@ -1,0 +1,87 @@
+{
+  "name": "App Personal",
+  "short_name": "App Personal",
+  "description": "Tu vida centralizada — sueño, fitness, nutrición, proyectos e ideas",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0D0F14",
+  "theme_color": "#0D0F14",
+  "orientation": "portrait",
+  "scope": "/",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "apple touch icon"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/",
+      "icons": [{ "src": "/icons/icon-96x96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Sueño",
+      "url": "/sleep",
+      "icons": [{ "src": "/icons/icon-96x96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Fitness",
+      "url": "/fitness",
+      "icons": [{ "src": "/icons/icon-96x96.png", "sizes": "96x96" }]
+    }
+  ],
+  "categories": ["health", "fitness", "productivity", "lifestyle"],
+  "screenshots": []
+}

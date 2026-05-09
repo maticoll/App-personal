@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light mode variables */
+    --bg: #F8FAFC;
+    --surface: #FFFFFF;
+    --surface-hover: #F1F5F9;
+    --border: #E2E8F0;
+    --text-primary: #0F172A;
+    --text-secondary: #64748B;
+    --text-muted: #94A3B8;
+    --accent: #6366F1;
+  }
+
+  .dark {
+    /* Dark mode variables */
+    --bg: #0D0F14;
+    --surface: #1A1D27;
+    --surface-hover: #232736;
+    --border: #2D3148;
+    --text-primary: #F1F5F9;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --accent: #818CF8;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    /* Smooth scroll */
+    scroll-behavior: smooth;
+    /* Prevenir selección accidental en mobile */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--text-primary);
+    font-family: var(--font-inter), system-ui, sans-serif;
+    /* Safe area para iOS (notch / Dynamic Island) */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Scrollbar minimalista */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+  }
+}
+
+@layer components {
+  /* Card base */
+  .card {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    @apply rounded-2xl p-4;
+  }
+
+  /* Score bar */
+  .score-bar-track {
+    background-color: var(--border);
+    @apply h-2 rounded-full overflow-hidden;
+  }
+
+  /* Botón primario */
+  .btn-primary {
+    background-color: var(--accent);
+    @apply text-white font-medium px-4 py-2.5 rounded-xl transition-opacity hover:opacity-90 active:opacity-75;
+  }
+
+  /* Input base */
+  .input {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    @apply rounded-xl px-3 py-2 text-sm outline-none w-full;
+  }
+
+  .input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .input:focus {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  /* Link de navegación */
+  .nav-item {
+    @apply flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-colors text-xs font-medium;
+    color: var(--text-muted);
+  }
+
+  .nav-item.active {
+    color: var(--accent);
+    background-color: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
+  .nav-item:hover:not(.active) {
+    background-color: var(--surface-hover);
+    color: var(--text-secondary);
+  }
+}
+
+@layer utilities {
+  /* iOS safe area helpers */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+}
