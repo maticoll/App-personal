@@ -126,12 +126,13 @@ function cardioLoggedText(
 
 export async function getFitnessSummaryText(userId: string): Promise<string> {
   const summary = await getTodayFitnessSummary(userId);
-  if (!summary || !summary.hasWorkouts) return "Sin actividad registrada hoy.";
+  if (!summary || summary.workouts.length === 0) return "Sin actividad registrada hoy.";
 
   const parts: string[] = [];
-  if (summary.gymSessions > 0) parts.push(`${summary.gymSessions} sesión de gym`);
-  if (summary.cardioSessions > 0) parts.push(`${summary.cardioSessions} sesión cardio`);
-  if (summary.totalMinutes > 0) parts.push(`${summary.totalMinutes} min totales`);
+  if (summary.didGym) parts.push("sesión de gym");
+  const cardio = summary.workouts.filter(w => w.type !== "GYM");
+  if (cardio.length > 0) parts.push(`${cardio.length} sesión cardio`);
+  if (summary.totalActivityMinutes > 0) parts.push(`${summary.totalActivityMinutes} min totales`);
 
   return `🏋️ Fitness: ${parts.join(", ")}.`;
 }
