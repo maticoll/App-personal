@@ -275,7 +275,7 @@ export const fitnessAgent = {
 
   // ─── Sync completo de Garmin (llamado por el cron job) ──────────────────────
   async syncGarmin(userId: string, date?: Date): Promise<void> {
-    const targetDate = date ?? new Date();
+    const targetDate = (date ?? new Date()).toISOString().split("T")[0];
     const activities = await fetchGarminActivities(userId, targetDate);
     for (const activity of activities) {
       await upsertWorkoutFromGarmin(userId, activity);
