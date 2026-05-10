@@ -126,7 +126,7 @@ function cardioLoggedText(
 
 export async function getFitnessSummaryText(userId: string): Promise<string> {
   const summary = await getTodayFitnessSummary(userId);
-  if (!summary.hasWorkouts) return "Sin actividad registrada hoy.";
+  if (!summary || !summary.hasWorkouts) return "Sin actividad registrada hoy.";
 
   const parts: string[] = [];
   if (summary.gymSessions > 0) parts.push(`${summary.gymSessions} sesión de gym`);
