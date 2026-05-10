@@ -11,6 +11,8 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Color 'border' mapeado a la variable CSS — requerido por @apply border-border en globals.css
+        border: "var(--border)",
         // Design system: dark mode
         dark: {
           bg: "#0D0F14",
