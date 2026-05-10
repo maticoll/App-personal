@@ -296,7 +296,8 @@ export const fitnessAgent = {
 
   // ─── Score de fitness ─────────────────────────────────────────────────────────
   async calculateScore(userId: string, date: Date): Promise<number | null> {
-    return calcFitnessScoreForDate(userId, date);
+    const result = await calcFitnessScoreForDate(userId, date);
+    return result.score;
   },
 
   // ─── Texto de resumen para Morning Summary (Sesión 8) ────────────────────────
