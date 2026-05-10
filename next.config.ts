@@ -92,10 +92,8 @@ const nextConfig: NextConfig = {
   images: {
     domains: [],
   },
-  experimental: {
-    // Needed for next-auth v5
-    serverComponentsExternalPackages: ["@prisma/client"],
-  },
+  // Needed for next-auth v5 + Prisma (moved out of experimental for Next.js 15)
+  serverExternalPackages: ["@prisma/client"],
 };
 
 export default pwaConfig(nextConfig);
