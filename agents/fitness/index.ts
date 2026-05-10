@@ -239,7 +239,7 @@ export const fitnessAgent = {
             };
           }
 
-          const today = new Date();
+          const today = new Date().toISOString().split("T")[0];
           const activities = await fetchGarminActivities(userId, today);
           let synced = 0;
 
