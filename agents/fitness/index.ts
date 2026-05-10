@@ -144,7 +144,7 @@ export const fitnessAgent = {
   description: "Registra y analiza datos de fitness",
 
   async process(input: AgentInput): Promise<AgentOutput> {
-    const { userId, text } = input;
+    const { userId, message: text } = input;
     const intent = detectIntent(text);
 
     switch (intent) {
