@@ -35,7 +35,7 @@ export default async function FitnessPage() {
     getWorkoutHistory(userId, 14).catch(() => []),
     getWeeklyStats(userId).catch(() => []),
     getTodayGymRoutine(userId).catch(() => null),
-    checkSmartHabitDeviation(userId).catch(() => ({ shouldNotify: false })),
+    checkSmartHabitDeviation(userId).catch(() => ({ shouldNotify: false, message: null })),
     checkGarminStatus(userId).catch(() => ({ connected: false })),
   ]);
 
