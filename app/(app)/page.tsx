@@ -213,8 +213,7 @@ export default async function DashboardPage() {
           <ModuleSummaryCard
             href="/sleep"
             label="Sueño"
-            icon={Moon}
-            color="text-module-sleep"
+            icon={<Moon className="w-5 h-5 text-module-sleep" />}
             bgColor="bg-purple-500/10"
             score={todayScore?.sleep ?? null}
             summary={summaries?.sleep ?? "Sin datos hoy"}
@@ -223,8 +222,7 @@ export default async function DashboardPage() {
           <ModuleSummaryCard
             href="/fitness"
             label="Fitness"
-            icon={Dumbbell}
-            color="text-module-fitness"
+            icon={<Dumbbell className="w-5 h-5 text-module-fitness" />}
             bgColor="bg-cyan-500/10"
             score={todayScore?.fitness ?? null}
             summary={summaries?.fitness ?? "Sin actividad registrada"}
@@ -234,8 +232,7 @@ export default async function DashboardPage() {
           <ModuleSummaryCard
             href="/nutrition"
             label="Nutrición"
-            icon={Salad}
-            color="text-module-nutrition"
+            icon={<Salad className="w-5 h-5 text-module-nutrition" />}
             bgColor="bg-emerald-500/10"
             score={todayScore?.nutrition ?? null}
             summary={summaries?.nutrition ?? "Sin comidas registradas"}
@@ -244,8 +241,7 @@ export default async function DashboardPage() {
           <ModuleSummaryCard
             href="/projects"
             label="Proyectos"
-            icon={FolderKanban}
-            color="text-module-projects"
+            icon={<FolderKanban className="w-5 h-5 text-module-projects" />}
             bgColor="bg-amber-500/10"
             score={todayScore?.projects ?? null}
             summary={summaries?.projects ?? "Sin proyectos activos"}
@@ -254,8 +250,7 @@ export default async function DashboardPage() {
           <ModuleSummaryCard
             href="/ideas"
             label="Ideas"
-            icon={Lightbulb}
-            color="text-module-ideas"
+            icon={<Lightbulb className="w-5 h-5 text-module-ideas" />}
             bgColor="bg-pink-500/10"
             score={null}
             summary={summaries?.ideas ?? "Sin ideas registradas"}

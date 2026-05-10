@@ -6,7 +6,7 @@
 // Sesión 2 — Dashboard + Scoring
 // ============================================================
 
-import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { ScoreBar } from "@/components/ui/ScoreBar";
@@ -14,8 +14,7 @@ import { ScoreBar } from "@/components/ui/ScoreBar";
 interface ModuleSummaryCardProps {
   href: string;
   label: string;
-  icon: LucideIcon;
-  color: string;       // "text-module-sleep"
+  icon: ReactNode;     // JSX ya renderizado — compatible con Server Components
   bgColor: string;     // "bg-purple-500/10"
   score: number | null;
   summary: string;     // Línea de resumen: "7h 30min · Calidad 82"
@@ -25,8 +24,7 @@ interface ModuleSummaryCardProps {
 export function ModuleSummaryCard({
   href,
   label,
-  icon: Icon,
-  color,
+  icon,
   bgColor,
   score,
   summary,
@@ -41,7 +39,7 @@ export function ModuleSummaryCard({
         {/* Header */}
         <div className="flex items-start justify-between">
           <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", bgColor)}>
-            <Icon className={cn("w-5 h-5", color)} />
+            {icon}
           </div>
           {badge && (
             <span className="text-xs bg-[var(--surface-hover)] text-[var(--text-secondary)] px-2 py-0.5 rounded-full">
