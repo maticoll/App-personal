@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/sleep-notifications",
-      "schedule": "*/30 20-23 * * *"
+      "schedule": "0 22 * * *"
     },
     {
       "path": "/api/cron/fitness-sync",
