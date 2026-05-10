@@ -136,7 +136,7 @@ export default function FitnessModuleClient({
           {/* Garmin sync */}
           <div className="flex justify-end">
             <GarminSyncButton
-              isConnected={garminConnected}
+              garminStatus={{ connected: garminConnected, sessionValid: garminConnected, lastSync: null }}
               onSynced={handleLogged}
             />
           </div>
