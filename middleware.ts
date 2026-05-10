@@ -1,9 +1,13 @@
 // ============================================================
-// Middleware — Protección de rutas con NextAuth v5
-// Todas las rutas excepto /login requieren autenticación
+// Middleware — Edge-compatible, usa auth.config.ts (sin Prisma)
+// PrismaClient no puede correr en Edge Runtime — por eso se
+// separa la config base del auth completo con adapter.
 // ============================================================
 
-import { auth } from "@/auth";
+import NextAuth from "next-auth";
+import { authConfig } from "./auth.config";
+
+const { auth } = NextAuth(authConfig);
 
 export default auth((req) => {
   const { nextUrl } = req;
