@@ -133,14 +133,6 @@ export default function FitnessModuleClient({
       {/* ─── TAB: HOY ─── */}
       {tab === "hoy" && (
         <div className="space-y-4">
-          {/* Garmin sync */}
-          <div className="flex justify-end">
-            <GarminSyncButton
-              garminStatus={{ connected: garminConnected, sessionValid: garminConnected, lastSync: null }}
-              onSynced={handleLogged}
-            />
-          </div>
-
           {/* Rutina del día */}
           {initialTodayRoutine && (
             <GymRoutineCard
@@ -160,6 +152,12 @@ export default function FitnessModuleClient({
               isRefreshing={isRefreshing}
             />
           )}
+
+          {/* Garmin sync — al fondo */}
+          <GarminSyncButton
+            garminStatus={{ connected: garminConnected, sessionValid: garminConnected, lastSync: null }}
+            onSynced={handleLogged}
+          />
         </div>
       )}
 

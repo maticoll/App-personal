@@ -203,7 +203,7 @@ export default function FitnessQuickActions({ onLogged }: Props) {
                 onChange={(e) => setDurationMinutes(e.target.value)}
                 placeholder="45"
                 min="1"
-                className="input"
+                className="input text-base"
               />
             </div>
             {showDistanceField && (
@@ -218,7 +218,7 @@ export default function FitnessQuickActions({ onLogged }: Props) {
                   onChange={(e) => setDistanceKm(e.target.value)}
                   placeholder="5.0"
                   min="0"
-                  className="input"
+                  className="input text-base"
                 />
               </div>
             )}
@@ -244,7 +244,7 @@ export default function FitnessQuickActions({ onLogged }: Props) {
             value={nlpText}
             onChange={(e) => setNlpText(e.target.value)}
             placeholder='ej: "press plano 100kg 4 reps 3 series"'
-            className="input flex-1"
+            className="input flex-1 text-base"
           />
           <button
             type="submit"
