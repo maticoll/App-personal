@@ -1,0 +1,289 @@
+<h2>¿Cómo ordenamos el Dashboard en mobile?</h2>
+<p class="subtitle">Actualmente: saludo → anillo de score → 6 cards de módulo en grid 2×3. ¿Cómo lo reorganizamos?</p>
+
+<style>
+  .phone-frame {
+    background: #0D0F14;
+    border-radius: 28px;
+    padding: 16px 12px 24px;
+    width: 220px;
+    min-height: 420px;
+    border: 2px solid #2a2d3a;
+    font-family: -apple-system, sans-serif;
+    position: relative;
+  }
+  .phone-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .phone-greeting {
+    font-size: 13px;
+    font-weight: 700;
+    color: #f8fafc;
+  }
+  .phone-date {
+    font-size: 9px;
+    color: #64748b;
+    margin-top: 2px;
+  }
+  .score-ring-sm {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: conic-gradient(#6366f1 0% 72%, #1e2030 72% 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #f8fafc;
+    position: relative;
+  }
+  .score-ring-inner {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: #0D0F14;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: #f8fafc;
+  }
+  .module-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #1a1d27;
+    border-radius: 10px;
+    padding: 7px 10px;
+    margin-bottom: 6px;
+  }
+  .module-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .module-label { font-size: 10px; color: #94a3b8; flex: 1; }
+  .module-score { font-size: 10px; font-weight: 700; color: #f8fafc; }
+  .score-bar-bg { flex: 1; height: 4px; background: #2a2d3a; border-radius: 2px; }
+  .score-bar-fill { height: 4px; border-radius: 2px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .mini-card {
+    background: #1a1d27;
+    border-radius: 10px;
+    padding: 9px;
+    text-align: center;
+  }
+  .mini-card-icon { font-size: 16px; margin-bottom: 3px; }
+  .mini-card-label { font-size: 9px; color: #94a3b8; }
+  .mini-card-val { font-size: 11px; font-weight: 700; color: #f8fafc; margin-top: 2px; }
+  .hero-card {
+    background: linear-gradient(135deg, #1e1b4b, #1a1d27);
+    border-radius: 16px;
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    border: 1px solid #2a2d3a;
+  }
+  .quick-action {
+    background: #6366f1;
+    border-radius: 10px;
+    padding: 8px;
+    font-size: 9px;
+    font-weight: 700;
+    color: #fff;
+    text-align: center;
+    margin-bottom: 6px;
+  }
+  .section-label { font-size: 9px; text-transform: uppercase; color: #475569; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .bottom-nav-mock {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #1a1d27;
+    border-top: 1px solid #2a2d3a;
+    border-radius: 0 0 26px 26px;
+    display: flex;
+    justify-content: space-around;
+    padding: 8px 4px 10px;
+  }
+  .nav-item { font-size: 8px; color: #475569; text-align: center; }
+  .nav-item.active { color: #6366f1; }
+</style>
+
+<div class="cards" style="display:flex;flex-wrap:wrap;gap:24px;justify-content:center">
+
+  <!-- Opción A: Score hero + lista de módulos -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)" style="padding:0;background:transparent;border:none">
+    <div class="card-image" style="padding:12px 12px 0">
+      <div class="phone-frame" style="padding-bottom:60px">
+        <div class="phone-header">
+          <div>
+            <div class="phone-greeting">Buenos días, Claudio 👋</div>
+            <div class="phone-date">sábado 10 de mayo</div>
+          </div>
+        </div>
+        <!-- Hero: anillo grande centrado -->
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;background:#1a1d27;border-radius:14px;padding:12px">
+          <div class="score-ring-sm" style="width:64px;height:64px">
+            <div class="score-ring-inner" style="width:48px;height:48px;font-size:14px">72</div>
+          </div>
+          <div>
+            <div style="font-size:9px;color:#94a3b8">Score hoy</div>
+            <div style="font-size:9px;font-weight:600;color:#22c55e;margin-top:2px">↑ Bien encaminado</div>
+          </div>
+        </div>
+        <!-- Lista de módulos con barra -->
+        <div class="section-label">Módulos</div>
+        <div class="module-chip">
+          <div class="module-dot" style="background:#a78bfa"></div>
+          <span class="module-label">Sueño</span>
+          <div class="score-bar-bg"><div class="score-bar-fill" style="width:80%;background:#a78bfa"></div></div>
+          <span class="module-score">80</span>
+        </div>
+        <div class="module-chip">
+          <div class="module-dot" style="background:#22d3ee"></div>
+          <span class="module-label">Fitness</span>
+          <div class="score-bar-bg"><div class="score-bar-fill" style="width:65%;background:#22d3ee"></div></div>
+          <span class="module-score">65</span>
+        </div>
+        <div class="module-chip">
+          <div class="module-dot" style="background:#34d399"></div>
+          <span class="module-label">Nutrición</span>
+          <div class="score-bar-bg"><div class="score-bar-fill" style="width:55%;background:#34d399"></div></div>
+          <span class="module-score">55</span>
+        </div>
+        <div class="module-chip">
+          <div class="module-dot" style="background:#f59e0b"></div>
+          <span class="module-label">Proyectos</span>
+          <div class="score-bar-bg"><div class="score-bar-fill" style="width:90%;background:#f59e0b"></div></div>
+          <span class="module-score">90</span>
+        </div>
+        <div class="bottom-nav-mock">
+          <div class="nav-item active">🏠<div>Inicio</div></div>
+          <div class="nav-item">🌙<div>Sueño</div></div>
+          <div class="nav-item">💪<div>Fit</div></div>
+          <div class="nav-item">🥗<div>Nutr</div></div>
+          <div class="nav-item">📊<div>Score</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Score + Lista</h3>
+      <p>Anillo de score compacto inline, módulos como lista con barra de progreso. Scroll rápido, todo visible sin abrir nada.</p>
+    </div>
+  </div>
+
+  <!-- Opción B: Hero card grande + grid 2x3 -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)" style="padding:0;background:transparent;border:none">
+    <div class="card-image" style="padding:12px 12px 0">
+      <div class="phone-frame" style="padding-bottom:60px">
+        <div class="phone-header">
+          <div>
+            <div class="phone-greeting">Buenos días, Claudio 👋</div>
+            <div class="phone-date">sábado 10 de mayo</div>
+          </div>
+        </div>
+        <!-- Hero card con anillo -->
+        <div class="hero-card">
+          <div>
+            <div style="font-size:9px;color:#94a3b8">Score del día</div>
+            <div style="font-size:22px;font-weight:800;color:#f8fafc">72<span style="font-size:11px;color:#94a3b8">/100</span></div>
+            <div style="font-size:9px;color:#6366f1">Ver historial →</div>
+          </div>
+          <div class="score-ring-sm">
+            <div class="score-ring-inner">72</div>
+          </div>
+        </div>
+        <!-- Grid 2x3 -->
+        <div class="section-label">Módulos</div>
+        <div class="grid-2">
+          <div class="mini-card"><div class="mini-card-icon">🌙</div><div class="mini-card-label">Sueño</div><div class="mini-card-val">80</div></div>
+          <div class="mini-card"><div class="mini-card-icon">💪</div><div class="mini-card-label">Fitness</div><div class="mini-card-val">65</div></div>
+          <div class="mini-card"><div class="mini-card-icon">🥗</div><div class="mini-card-label">Nutrición</div><div class="mini-card-val">55</div></div>
+          <div class="mini-card"><div class="mini-card-icon">📁</div><div class="mini-card-label">Proyectos</div><div class="mini-card-val">90</div></div>
+          <div class="mini-card"><div class="mini-card-icon">💡</div><div class="mini-card-label">Ideas</div><div class="mini-card-val">—</div></div>
+          <div class="mini-card"><div class="mini-card-icon">💰</div><div class="mini-card-label">Finanzas</div><div class="mini-card-val">—</div></div>
+        </div>
+        <div class="bottom-nav-mock">
+          <div class="nav-item active">🏠<div>Inicio</div></div>
+          <div class="nav-item">🌙<div>Sueño</div></div>
+          <div class="nav-item">💪<div>Fit</div></div>
+          <div class="nav-item">🥗<div>Nutr</div></div>
+          <div class="nav-item">📊<div>Score</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Hero + Grid (similar al actual)</h3>
+      <p>Hero card con score grande arriba, grid 2×3 de módulos abajo. Evolución del diseño actual, más compacto.</p>
+    </div>
+  </div>
+
+  <!-- Opción C: Scroll horizontal de módulos -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)" style="padding:0;background:transparent;border:none">
+    <div class="card-image" style="padding:12px 12px 0">
+      <div class="phone-frame" style="padding-bottom:60px">
+        <div class="phone-header">
+          <div>
+            <div class="phone-greeting">Buenos días, Claudio 👋</div>
+            <div class="phone-date">sábado 10 de mayo</div>
+          </div>
+        </div>
+        <!-- Score compacto top -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div>
+            <div style="font-size:18px;font-weight:800;color:#f8fafc">72<span style="font-size:10px;color:#6366f1">/100</span></div>
+            <div style="font-size:9px;color:#94a3b8">Score global hoy</div>
+          </div>
+          <div class="score-ring-sm" style="width:48px;height:48px">
+            <div class="score-ring-inner" style="width:36px;height:36px;font-size:10px">72</div>
+          </div>
+        </div>
+        <!-- Módulos: scroll horizontal (simulado) -->
+        <div class="section-label">Módulos — deslizá →</div>
+        <div style="display:flex;gap:6px;overflow:hidden;margin-bottom:10px">
+          <div style="background:#1e1b4b;border-radius:12px;padding:10px 8px;min-width:72px;text-align:center">
+            <div style="font-size:18px">🌙</div>
+            <div style="font-size:9px;color:#a78bfa;margin-top:3px">Sueño</div>
+            <div style="font-size:13px;font-weight:700;color:#f8fafc">80</div>
+            <div style="font-size:8px;color:#64748b">7h 40m</div>
+          </div>
+          <div style="background:#0c2929;border-radius:12px;padding:10px 8px;min-width:72px;text-align:center">
+            <div style="font-size:18px">💪</div>
+            <div style="font-size:9px;color:#22d3ee;margin-top:3px">Fitness</div>
+            <div style="font-size:13px;font-weight:700;color:#f8fafc">65</div>
+            <div style="font-size:8px;color:#64748b">Natación</div>
+          </div>
+          <div style="background:#0a2a1a;border-radius:12px;padding:10px 8px;min-width:72px;text-align:center;opacity:0.5">
+            <div style="font-size:18px">🥗</div>
+            <div style="font-size:9px;color:#34d399;margin-top:3px">Nutric.</div>
+            <div style="font-size:13px;font-weight:700;color:#f8fafc">55</div>
+            <div style="font-size:8px;color:#64748b">2 comidas</div>
+          </div>
+        </div>
+        <!-- Acciones rápidas -->
+        <div class="section-label">Acción rápida</div>
+        <div class="grid-2">
+          <div class="quick-action">🌙 Dormir ahora</div>
+          <div class="quick-action" style="background:#0e7490">💪 Registrar</div>
+        </div>
+        <div class="bottom-nav-mock">
+          <div class="nav-item active">🏠<div>Inicio</div></div>
+          <div class="nav-item">🌙<div>Sueño</div></div>
+          <div class="nav-item">💪<div>Fit</div></div>
+          <div class="nav-item">🥗<div>Nutr</div></div>
+          <div class="nav-item">📊<div>Score</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Scroll horizontal + Acciones</h3>
+      <p>Módulos en carrusel horizontal deslizable (como Apple Wallet). Score compacto arriba. Acciones rápidas directas debajo.</p>
+    </div>
+  </div>
+
+</div>

@@ -1,0 +1,42 @@
+<h2>¿Qué alcance tiene el mobile-first?</h2>
+<p class="subtitle">La app ya tiene navegación mobile básica (BottomNav, Header, safe areas). ¿Qué tan profundo vamos?</p>
+
+<div class="options">
+
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Layout & Navegación</h3>
+      <p>Solo refinar la estructura: mejorar el BottomNav, ajustar espaciados, tipografía y paddings para que se sienta más nativo en iPhone. Sin tocar los módulos por dentro.</p>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>Rápido de implementar</li><li>Sin riesgo de romper lógica</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Los módulos siguen sin estar optimizados</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Módulos completos (recomendado)</h3>
+      <p>Rediseñar layout de todos los módulos construidos (Dashboard, Sueño, Fitness) para mobile-first: cards apiladas, charts responsivos, botones de acción grandes, jerarquía visual pensada para pulgar.</p>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>App se siente nativa</li><li>UX real para iPhone</li><li>Base sólida para sesiones futuras</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Más archivos a tocar</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Full redesign visual</h3>
+      <p>Además de lo anterior, rediseñar también la estética: nueva paleta para dark mode, tipografía más grande, componentes tipo app nativa (bottom sheets, swipe actions, hero cards).</p>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>App premium</li><li>Se ve como app nativa iOS</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Más trabajo</li><li>Posible cambio de estética que podría no gustar</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>

@@ -1,0 +1,233 @@
+<h2>¿Cómo organizamos los módulos en mobile?</h2>
+<p class="subtitle">Módulo de Sueño como ejemplo. Actualmente tiene tabs: Gráficos / Historial</p>
+
+<style>
+  .phone-frame {
+    background: #0D0F14;
+    border-radius: 28px;
+    padding: 14px 11px 60px;
+    width: 210px;
+    min-height: 440px;
+    border: 2px solid #2a2d3a;
+    font-family: -apple-system, sans-serif;
+    position: relative;
+    overflow: hidden;
+  }
+  .module-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 12px;
+  }
+  .module-icon {
+    width: 30px; height: 30px; border-radius: 9px;
+    background: rgba(167,139,250,0.15);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+  }
+  .module-title { font-size: 16px; font-weight: 800; color: #f8fafc; }
+  .module-subtitle { font-size: 9px; color: #64748b; }
+  .stat-row {
+    display: flex; gap: 6px; margin-bottom: 8px;
+  }
+  .stat-chip {
+    background: #1a1d27; border-radius: 10px; padding: 8px 10px; flex: 1; text-align: center;
+  }
+  .stat-val { font-size: 14px; font-weight: 800; color: #f8fafc; }
+  .stat-label { font-size: 8px; color: #64748b; margin-top: 1px; }
+  .tab-bar {
+    display: flex; gap: 3px;
+    background: #1a1d27; border-radius: 12px; padding: 3px; margin-bottom: 10px;
+  }
+  .tab { flex: 1; text-align: center; padding: 6px; border-radius: 9px; font-size: 9px; color: #64748b; }
+  .tab.active { background: #0D0F14; color: #a78bfa; font-weight: 700; }
+  .chart-placeholder {
+    background: #1a1d27; border-radius: 12px; padding: 10px;
+    margin-bottom: 8px;
+  }
+  .chart-bar-row { display: flex; align-items: flex-end; gap: 4px; height: 40px; margin-bottom: 4px; }
+  .bar { background: #a78bfa; border-radius: 3px 3px 0 0; flex: 1; opacity: 0.7; }
+  .chart-label { font-size: 7px; color: #475569; text-align: center; }
+  .action-btn {
+    background: #a78bfa; border-radius: 12px; padding: 10px;
+    text-align: center; font-size: 10px; font-weight: 700; color: #fff;
+    margin-bottom: 6px;
+  }
+  .action-btn.secondary { background: #1a1d27; color: #a78bfa; }
+  .today-card {
+    background: #1a1d27; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px;
+    border-left: 3px solid #a78bfa;
+  }
+  .today-label { font-size: 9px; color: #64748b; margin-bottom: 4px; }
+  .today-val { font-size: 20px; font-weight: 800; color: #f8fafc; }
+  .today-detail { font-size: 8px; color: #94a3b8; margin-top: 2px; }
+  .bottom-nav-mock {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: #1a1d27; border-top: 1px solid #2a2d3a;
+    border-radius: 0 0 26px 26px;
+    display: flex; justify-content: space-around;
+    padding: 6px 4px 10px;
+  }
+  .nav-item { font-size: 7px; color: #475569; text-align: center; }
+  .nav-item.active { color: #a78bfa; }
+  .section-label { font-size: 8px; text-transform: uppercase; color: #475569; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .page-indicator { display: flex; justify-content: center; gap: 4px; margin-bottom: 8px; }
+  .dot { width: 5px; height: 5px; border-radius: 50%; background: #2a2d3a; }
+  .dot.active { background: #a78bfa; width: 14px; border-radius: 3px; }
+</style>
+
+<div class="cards" style="display:flex;flex-wrap:wrap;gap:24px;justify-content:center">
+
+  <!-- Opción A: Acción primaria arriba + tabs abajo -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)" style="padding:0;background:transparent;border:none">
+    <div class="card-image" style="padding:12px 12px 0">
+      <div class="phone-frame">
+        <div class="module-header">
+          <div class="module-icon">🌙</div>
+          <div><div class="module-title">Sueño</div><div class="module-subtitle">Registro y análisis</div></div>
+        </div>
+        <!-- Acción primaria prominente -->
+        <div class="action-btn">🛏 Registrar hora de dormir</div>
+        <!-- Card de hoy -->
+        <div class="today-card">
+          <div class="today-label">Anoche dormiste</div>
+          <div class="today-val">7h 40m</div>
+          <div class="today-detail">SpO2 97% · Score 80/100</div>
+        </div>
+        <!-- Stats rápidos -->
+        <div class="stat-row">
+          <div class="stat-chip"><div class="stat-val">7.6h</div><div class="stat-label">Promedio 7d</div></div>
+          <div class="stat-chip"><div class="stat-val">96%</div><div class="stat-label">Calidad med.</div></div>
+        </div>
+        <!-- Tabs -->
+        <div class="tab-bar">
+          <div class="tab active">📊 Gráficos</div>
+          <div class="tab">📋 Historial</div>
+        </div>
+        <!-- Chart -->
+        <div class="chart-placeholder">
+          <div class="section-label">Duración 7 días</div>
+          <div class="chart-bar-row">
+            <div class="bar" style="height:75%"></div>
+            <div class="bar" style="height:90%"></div>
+            <div class="bar" style="height:60%"></div>
+            <div class="bar" style="height:85%"></div>
+            <div class="bar" style="height:95%"></div>
+            <div class="bar" style="height:70%"></div>
+            <div class="bar" style="height:85%;opacity:1"></div>
+          </div>
+          <div class="chart-label">L  M  M  J  V  S  D</div>
+        </div>
+        <div class="bottom-nav-mock">
+          <div class="nav-item">🏠<div>Inicio</div></div>
+          <div class="nav-item active">🌙<div>Sueño</div></div>
+          <div class="nav-item">💪<div>Fit</div></div>
+          <div class="nav-item">🥗<div>Nutr</div></div>
+          <div class="nav-item">📊<div>Score</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Acción + Card hoy + Tabs (recomendado)</h3>
+      <p>Botón de acción principal grande arriba. Card del día prominente. Stats rápidos. Tabs para gráficos e historial.</p>
+    </div>
+  </div>
+
+  <!-- Opción B: Página única con scroll, sin tabs -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)" style="padding:0;background:transparent;border:none">
+    <div class="card-image" style="padding:12px 12px 0">
+      <div class="phone-frame">
+        <div class="module-header">
+          <div class="module-icon">🌙</div>
+          <div><div class="module-title">Sueño</div><div class="module-subtitle">Registro y análisis</div></div>
+        </div>
+        <!-- Todo en scroll continuo -->
+        <div class="today-card" style="margin-bottom:8px">
+          <div class="today-label">Esta noche / Anoche</div>
+          <div class="today-val">7h 40m</div>
+          <div class="today-detail">22:30 → 06:10 · Score 80/100</div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-chip"><div class="stat-val">7.6h</div><div class="stat-label">Prom 7d</div></div>
+          <div class="stat-chip"><div class="stat-val">4</div><div class="stat-label">Días objetivo</div></div>
+          <div class="stat-chip"><div class="stat-val">96%</div><div class="stat-label">SpO2</div></div>
+        </div>
+        <div class="chart-placeholder" style="margin-bottom:6px">
+          <div class="section-label">Duración 7 días</div>
+          <div class="chart-bar-row">
+            <div class="bar" style="height:75%"></div>
+            <div class="bar" style="height:90%"></div>
+            <div class="bar" style="height:60%"></div>
+            <div class="bar" style="height:85%"></div>
+            <div class="bar" style="height:95%"></div>
+            <div class="bar" style="height:70%"></div>
+            <div class="bar" style="height:85%;opacity:1"></div>
+          </div>
+          <div class="chart-label">L  M  M  J  V  S  D</div>
+        </div>
+        <div style="font-size:8px;color:#475569;text-align:center">↓ Scroll para historial</div>
+        <div class="bottom-nav-mock">
+          <div class="nav-item">🏠<div>Inicio</div></div>
+          <div class="nav-item active">🌙<div>Sueño</div></div>
+          <div class="nav-item">💪<div>Fit</div></div>
+          <div class="nav-item">🥗<div>Nutr</div></div>
+          <div class="nav-item">📊<div>Score</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Scroll continuo, sin tabs</h3>
+      <p>Todo en una sola página con scroll vertical. Sin tabs. Más simple pero requiere bajar mucho para ver el historial.</p>
+    </div>
+  </div>
+
+  <!-- Opción C: Swipe entre páginas (estilo iOS) -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)" style="padding:0;background:transparent;border:none">
+    <div class="card-image" style="padding:12px 12px 0">
+      <div class="phone-frame">
+        <div class="module-header">
+          <div class="module-icon">🌙</div>
+          <div><div class="module-title">Sueño</div><div class="module-subtitle">Hoy</div></div>
+        </div>
+        <!-- Dots de página -->
+        <div class="page-indicator">
+          <div class="dot active"></div>
+          <div class="dot"></div>
+          <div class="dot"></div>
+        </div>
+        <!-- Página 1: Hoy -->
+        <div class="action-btn">🛏 Registrar hora de dormir</div>
+        <div class="today-card">
+          <div class="today-label">Anoche</div>
+          <div class="today-val">7h 40m</div>
+          <div class="today-detail">Score 80/100 · SpO2 97%</div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-chip"><div class="stat-val">7.6h</div><div class="stat-label">Prom 7d</div></div>
+          <div class="stat-chip"><div class="stat-val">4/7</div><div class="stat-label">Días ok</div></div>
+        </div>
+        <div style="font-size:8px;color:#475569;text-align:center;margin-top:6px">← deslizá para Gráficos / Historial →</div>
+        <!-- Tab bar bottom (estilo segmented) -->
+        <div style="position:absolute;bottom:48px;left:11px;right:11px">
+          <div class="tab-bar">
+            <div class="tab active">Hoy</div>
+            <div class="tab">📊</div>
+            <div class="tab">📋</div>
+          </div>
+        </div>
+        <div class="bottom-nav-mock">
+          <div class="nav-item">🏠<div>Inicio</div></div>
+          <div class="nav-item active">🌙<div>Sueño</div></div>
+          <div class="nav-item">💪<div>Fit</div></div>
+          <div class="nav-item">🥗<div>Nutr</div></div>
+          <div class="nav-item">📊<div>Score</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — 3 sub-páginas (Hoy / Gráficos / Historial)</h3>
+      <p>Divide el módulo en 3 sub-páginas navegables por swipe. Cada vista limpia y enfocada. Más complejo pero muy nativo.</p>
+    </div>
+  </div>
+
+</div>
