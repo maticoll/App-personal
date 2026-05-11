@@ -1,11 +1,29 @@
 // ============================================================
-// Módulo de Proyectos — /projects
-// TODO: Sesión 6 — Kanban, timeline, Notion integration
+// Módulo de Proyectos — /projects — Sesión 6
+// Server Component: carga datos iniciales en paralelo
 // ============================================================
 
 import { FolderKanban } from "lucide-react";
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
+import { getAllProjects, getWeeklyStats } from "@/lib/projects";
+import ProjectsModuleClient from "@/components/projects/ProjectsModuleClient";
 
-export default function ProjectsPage() {
+export default async function ProjectsPage() {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
+
+  const userId = session.user.id;
+
+  const [projects, stats] = await Promise.all([
+    getAllProjects(userId).catch(() => []),
+    getWeeklyStats(userId).catch(() => ({
+      projectsAdvanced: 0,
+      tasksCompleted: 0,
+      activeProjects: 0,
+    })),
+  ]);
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
@@ -18,19 +36,7 @@ export default function ProjectsPage() {
         </p>
       </div>
 
-      {/* Placeholder — TODO: Sesión 6 */}
-      <div className="card text-center py-12">
-        <FolderKanban className="w-12 h-12 text-module-projects mx-auto mb-4 opacity-40" />
-        <p className="font-medium text-[var(--text-primary)]">Módulo en construcción</p>
-        <p className="text-sm text-[var(--text-muted)] mt-1">Se implementa en la Sesión 6</p>
-      </div>
-
-      {/* TODO: Sesión 6
-        - KanbanBoard: columnas Todo / In Progress / Done
-        - TimelineView: proyectos con deadline
-        - NotionSyncButton: pull tareas IT
-        - ProjectCard: tarjeta de proyecto con tareas
-      */}
+      <ProjectsModuleClient initialProjects={projects} initialStats={stats} />
     </div>
   );
 }
