@@ -1,36 +1,47 @@
 // ============================================================
 // Módulo de Ideas — /ideas
-// TODO: Sesión 5 — IA cleanup, Lumina sync
+// Server Component — carga datos iniciales en paralelo
+// Sesión 5 — implementado
 // ============================================================
 
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
 import { Lightbulb } from "lucide-react";
+import { getAllIdeas, getIdeasStats } from "@/lib/ideas";
+import IdeasModuleClient from "@/components/ideas/IdeasModuleClient";
 
-export default function IdeasPage() {
+export default async function IdeasPage() {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
+
+  const userId = session.user.id;
+
+  // Carga paralela de todos los datos iniciales
+  const [ideas, stats] = await Promise.all([
+    getAllIdeas(userId).catch(() => []),
+    getIdeasStats(userId).catch(() => ({
+      total: 0,
+      thisWeek: 0,
+      thisMonth: 0,
+      topTags: [],
+    })),
+  ]);
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Header */}
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Lightbulb className="w-5 h-5 text-module-ideas" />
           <h2 className="text-xl font-bold text-[var(--text-primary)]">Ideas</h2>
         </div>
         <p className="text-sm text-[var(--text-secondary)]">
-          Captura y desarrolla ideas con IA
+          Capturá y desarrollá ideas con IA
         </p>
       </div>
 
-      {/* Placeholder — TODO: Sesión 5 */}
-      <div className="card text-center py-12">
-        <Lightbulb className="w-12 h-12 text-module-ideas mx-auto mb-4 opacity-40" />
-        <p className="font-medium text-[var(--text-primary)]">Módulo en construcción</p>
-        <p className="text-sm text-[var(--text-muted)] mt-1">Se implementa en la Sesión 5</p>
-      </div>
-
-      {/* TODO: Sesión 5
-        - IdeaFeed: lista de ideas con raw + cleaned text
-        - QuickCaptureInput: captura rápida de idea
-        - LuminaSyncButton: sync con Lumina app
-        - IdeaCard: con tags y opción de desarrollar conversacionalmente
-      */}
+      {/* Client wrapper con toda la interactividad */}
+      <IdeasModuleClient initialIdeas={ideas} initialStats={stats} />
     </div>
   );
 }

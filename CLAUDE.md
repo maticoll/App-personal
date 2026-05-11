@@ -98,7 +98,7 @@ Cada sesión genera un `skill.md` propio y agrega su bloque a este `CLAUDE.md`.
 | 2 | Dashboard + Scoring | `skills/dashboard-scoring.md` | ✅ Completo |
 | 3 | Sueño | `skills/sleep.md` | ✅ Completo |
 | 4 | Fitness | `skills/fitness.md` | ✅ Completo |
-| 5 | Nutrición + Ideas | `skills/nutrition-ideas.md` | Pendiente |
+| 5 | Nutrición + Ideas | `skills/nutrition-ideas.md` | ✅ Completo |
 | 6 | Proyectos | `skills/projects.md` | Pendiente |
 | 7 | Integraciones | `skills/integrations.md` | Pendiente |
 | 8 | WhatsApp Orquestrador | `skills/whatsapp-orchestrator.md` | Pendiente |
@@ -124,6 +124,7 @@ Cada sesión genera un `skill.md` propio y agrega su bloque a este `CLAUDE.md`.
 | Dashboard + Scoring | `skills/dashboard-scoring.md` | Lógica de scoring, API routes, componentes (anillo, cards expandibles, gráfico Recharts), dashboard, historial |
 | Sueño | `skills/sleep.md` | Registro manual, Garmin API (SSO + wellness endpoint), scoring real, cron jobs, agente NLP completo |
 | Fitness | `skills/fitness.md` | Gym NLP, actividades cardio, rutinas CRUD, smart habits, Garmin activities, scoring, agente completo |
+| Nutrición + Ideas | `skills/nutrition-ideas.md` | Macros NLP, agua, dieta, alignment score, captura ideas con IA, stats, agentes completos |
 
 ---
 
@@ -230,4 +231,42 @@ Cada sesión genera un `skill.md` propio y agrega su bloque a este `CLAUDE.md`.
 
 ---
 
-*Última actualización: Mayo 2026 — Sesión 4 completa*
+## Bloque Sesión 5 — Nutrición + Ideas
+
+**Sin cambios al schema de Prisma** — Meal, WaterLog, UserDiet e Idea ya existían desde Sesión 1.
+
+**lib/nutrition.ts:** `getTodayNutritionSummary`, `getMealHistory`, `getUserDiet`, `updateUserDiet`, `logMealNLP` (Claude Haiku calcula macros + dietAlignmentScore), `logWater`, `deleteMeal`, `getWeeklyNutritionStats`, `getNutritionSummaryText`, `getWaterReminderText`. Normalización NFD para regex sin acentos en agentes.
+
+**lib/ideas.ts:** `getAllIdeas` (con filtros tag/search), `getRecentIdeas`, `getIdea`, `captureIdeaNLP` (Claude Haiku estructura: title + content expandido + tags), `updateIdea`, `deleteIdea`, `getIdeasStats`, `getIdeasActivityForDate` (informativo, no entra al score).
+
+**lib/scoring.ts (extensión):** +`calcNutritionScoreForDate` exportada, +`getIdeasActivityForDate` exportada. Ideas NO forma parte del score global.
+
+**API Routes — Nutrición (8 rutas):** `today`, `meal` (POST), `meal/[id]` (DELETE), `water` (POST), `diet` (GET/POST), `history`, `weekly-stats`. **Ideas (6 rutas):** `GET/POST /api/ideas`, `GET/PATCH/DELETE /api/ideas/[id]`, `GET /api/ideas/stats`.
+
+**Cron nuevo:** `water-reminder` (`0 12,17 * * *`) — recordatorio de hidratación a las 12 PM y 5 PM.
+
+**Componentes Nutrición (9):** `NutritionModuleClient` (tabs Hoy/Stats/Dieta), `MealLogCard`, `MacrosChart` (PieChart Recharts), `WaterTracker` (iconos + barra), `NutritionQuickActions` (selector tipo + textarea NLP + +1 Termo), `MealHistoryList`, `NutritionWeekStats`, `DietCard`, `AlignmentBadge`.
+
+**Componentes Ideas (7):** `IdeasModuleClient` (tabs Capturar/Explorar), `IdeaCaptureForm` (textarea → preview IA → confirmar), `IdeaCard`, `IdeasGrid`, `TagFilter`, `IdeaDetail` (modal), `IdeasStats`.
+
+**Páginas:** `/nutrition` y `/ideas` — Server Components con carga paralela, catch en cada query.
+
+**Agentes:** `processNutritionMessage` (4 intenciones: meal_log, water_log, query, diet_update) + `processIdeasMessage` (3 intenciones: capture, query, expand). Normalización NFD para regex sin acentos.
+
+**Variables de entorno nuevas:** Ninguna. Usa `ANTHROPIC_API_KEY` (ya estaba).
+
+**Próximo paso para correr:** `npm run dev` (sin migraciones necesarias — schema ya estaba).
+
+---
+
+## Estado de Deploy — Mayo 2026
+
+**Plataforma:** Vercel (plan Hobby)
+**Estado:** ✅ App levantada y funcionando
+- Auth con Google OAuth: ✅ activo
+- Base de datos Supabase + tablas: ✅ creadas y activas
+- Crons: configurados en vercel.json (limitación Hobby: 1 ejecución/día por cron)
+
+---
+
+*Última actualización: Mayo 2026 — Sesión 5 completa (Nutrición + Ideas)*

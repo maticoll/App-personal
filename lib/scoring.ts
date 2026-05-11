@@ -403,6 +403,16 @@ async function calcNutritionScore(
   return { score: Math.min(score, 100), met, missed };
 }
 
+/**
+ * Función exportada para que el agente de nutrición pueda calcular el score.
+ */
+export async function calcNutritionScoreForDate(
+  userId: string,
+  date: Date
+): Promise<ModuleScoreResult> {
+  return calcNutritionScore(userId, date);
+}
+
 // -------------------------------------------------------
 // Score de PROYECTOS
 // Criterios:
@@ -633,6 +643,26 @@ export async function getScoreHistory(
     nutrition: s.nutritionScore,
     projects: s.projectsScore,
   }));
+}
+
+// -------------------------------------------------------
+// Actividad de ideas para dashboard informativo (no entra al score global)
+// Retorna cuántas ideas se capturaron en la fecha dada
+// -------------------------------------------------------
+
+export async function getIdeasActivityForDate(
+  userId: string,
+  date: Date
+): Promise<number> {
+  return db.idea.count({
+    where: {
+      userId,
+      createdAt: {
+        gte: startOfDay(date),
+        lte: endOfDay(date),
+      },
+    },
+  });
 }
 
 // -------------------------------------------------------
