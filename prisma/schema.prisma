@@ -445,6 +445,10 @@ model UserSettings {
   garminSessionKey String?   // Cookie de sesión encriptada
   garminSessionExp DateTime? // Expiración de la sesión
 
+  // Integración Notion (Sesión 6)
+  notionToken String?   // Integration token de Notion por usuario
+  notionDbId  String?   // ID de la base de datos de Notion por usuario
+
   // WhatsApp
   whatsappNumber       String?
   notificationsEnabled Boolean @default(true)
