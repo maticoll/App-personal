@@ -2,23 +2,17 @@
 // GET /api/cron/sleep-sync
 // Cron diario — sync automático de sueño con Garmin
 // Schedule: 0 8 * * * (8:00 AM todos los días)
-//
-// PROTECCIÓN: header Authorization: Bearer $CRON_SECRET
-// Configurar CRON_SECRET en Vercel Environment Variables
-// y en vercel.json → crons → path
+// Protección: Authorization: Bearer $CRON_SECRET
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { syncGarminSleepRange } from "@/lib/garmin";
+import { verifyCronSecret } from "@/lib/cron";
 
 export async function GET(req: NextRequest) {
-  // Verificar CRON_SECRET para que solo Vercel Cron pueda llamar este endpoint
-  const authHeader = req.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  if (!verifyCronSecret(req)) {
+    return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
 
   const results: Array<{
@@ -29,7 +23,6 @@ export async function GET(req: NextRequest) {
   }> = [];
 
   try {
-    // Obtener todos los usuarios que tienen Garmin configurado
     const usersWithGarmin = await db.userSettings.findMany({
       where: {
         garminSessionKey: { not: null },
@@ -38,7 +31,6 @@ export async function GET(req: NextRequest) {
       select: { userId: true },
     });
 
-    // Sincronizar los últimos 2 días (para capturar cualquier dato retrasado)
     for (const { userId } of usersWithGarmin) {
       const to = new Date();
       const from = new Date();
@@ -55,14 +47,14 @@ export async function GET(req: NextRequest) {
 
     console.log("[sleep-sync cron] Completado:", results);
     return NextResponse.json({
-      success: true,
-      users: usersWithGarmin.length,
+      ok: true,
+      message: `Sync completado — ${usersWithGarmin.length} usuarios procesados`,
       results,
     });
   } catch (error) {
     console.error("[sleep-sync cron] Error general:", error);
     return NextResponse.json(
-      { error: "Error en cron de sleep sync" },
+      { ok: false, error: "Error en cron de sleep sync" },
       { status: 500 }
     );
   }

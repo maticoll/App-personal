@@ -1,24 +1,20 @@
 // ============================================================
 // GET /api/cron/sleep-notifications
-// Cron de notificaciones de sueño — recordatorios y alertas
-// Schedule: */30 20-23 * * * (cada 30min de 8 PM a 11:30 PM)
-//
-// Notificaciones enviadas:
-//   1. Recordatorio de hora de dormir (si settings.expectedSleepTime está configurado)
-//   2. Alerta de despertar no registrado (si hay bedTime sin wakeTime después de las 7 AM)
+// Cron diario — recordatorios y alertas de sueño
+// Schedule vercel.json: 0 22 * * * (22:00 hs todos los días)
+// Para mayor frecuencia configurar en cron-job.org (ver CRON_SETUP.md)
+// Protección: Authorization: Bearer $CRON_SECRET o x-cron-secret: $CRON_SECRET
 //
 // TODO: Sesión 8 — conectar con WhatsApp orquestrador para enviar los mensajes
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { verifyCronSecret } from "@/lib/cron";
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  if (!verifyCronSecret(req)) {
+    return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
 
   const now = new Date();
@@ -29,7 +25,6 @@ export async function GET(req: NextRequest) {
   }> = [];
 
   try {
-    // Obtener usuarios con notificaciones habilitadas
     const users = await db.userSettings.findMany({
       where: { notificationsEnabled: true },
       select: {
@@ -47,17 +42,10 @@ export async function GET(req: NextRequest) {
         const expectedTime = new Date(now);
         expectedTime.setHours(hours, minutes, 0, 0);
 
-        // Enviar si estamos dentro de los 15 min antes de la hora esperada
         const diffMs = expectedTime.getTime() - now.getTime();
         const diffMin = diffMs / (1000 * 60);
 
         if (diffMin >= 0 && diffMin <= 15) {
-          // Verificar que no se haya dormido ya hoy
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const tomorrow = new Date(today);
-          tomorrow.setDate(tomorrow.getDate() + 1);
-
           const hasTodaySleep = await db.sleepLog.findFirst({
             where: {
               userId: user.userId,
@@ -76,19 +64,16 @@ export async function GET(req: NextRequest) {
       }
 
       // --- Notificación 2: Despertar no registrado ---
-      // Si son pasadas las 7 AM y hay un bedTime sin wakeTime de la noche anterior
       if (now.getHours() >= 7) {
         const cutoff = new Date(now);
-        cutoff.setHours(0, 0, 0, 0); // inicio del día de hoy
+        cutoff.setHours(0, 0, 0, 0);
 
         const pendingSleep = await db.sleepLog.findFirst({
           where: {
             userId: user.userId,
             wakeTime: null,
             flexible: false,
-            bedTime: {
-              lt: cutoff, // bedTime fue antes de hoy (anoche)
-            },
+            bedTime: { lt: cutoff },
           },
           orderBy: { bedTime: "desc" },
         });
@@ -104,20 +89,17 @@ export async function GET(req: NextRequest) {
     }
 
     // TODO: Sesión 8 — iterar notifications y enviar via orquestrador WhatsApp
-    // for (const n of notifications) {
-    //   await orchestrator.sendNotification(n.userId, n.message);
-    // }
 
     console.log(`[sleep-notifications cron] ${notifications.length} notificaciones generadas`);
     return NextResponse.json({
-      success: true,
+      ok: true,
+      message: `${notifications.length} notificaciones generadas`,
       notifications,
-      note: "Las notificaciones están listas. Se conectarán al WhatsApp orquestrador en Sesión 8.",
     });
   } catch (error) {
     console.error("[sleep-notifications cron] Error:", error);
     return NextResponse.json(
-      { error: "Error en cron de notificaciones" },
+      { ok: false, error: "Error en cron de notificaciones" },
       { status: 500 }
     );
   }

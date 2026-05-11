@@ -1,27 +1,24 @@
+// ============================================================
 // GET /api/cron/fitness-sync
-// Cron job diario a las 6 AM — sincroniza actividades de Garmin de los últimos 2 días
-// Protegido con Authorization: Bearer $CRON_SECRET
-// Configurado en vercel.json: { "path": "/api/cron/fitness-sync", "schedule": "0 6 * * *" }
+// Cron diario — sincroniza actividades de Garmin
+// Schedule: 0 6 * * * (6:00 AM todos los días)
+// Protección: Authorization: Bearer $CRON_SECRET o x-cron-secret: $CRON_SECRET
+// ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { fetchGarminActivities } from "@/lib/garmin";
 import { upsertWorkoutFromGarmin } from "@/lib/fitness";
+import { verifyCronSecret } from "@/lib/cron";
 
 export async function GET(req: NextRequest) {
-  // Verificar CRON_SECRET
-  const auth = req.headers.get("authorization");
-  const secret = process.env.CRON_SECRET;
-  if (secret && auth !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  if (!verifyCronSecret(req)) {
+    return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
 
   try {
-    // Encontrar todos los usuarios con Garmin configurado
     const users = await db.userSettings.findMany({
-      where: {
-        garminSessionKey: { not: null },
-      },
+      where: { garminSessionKey: { not: null } },
       select: { userId: true },
     });
 
@@ -31,7 +28,6 @@ export async function GET(req: NextRequest) {
       let synced = 0;
       let errors = 0;
 
-      // Sincronizar los últimos 2 días
       for (let i = 1; i >= 0; i--) {
         const date = new Date();
         date.setDate(date.getDate() - i);
@@ -44,10 +40,7 @@ export async function GET(req: NextRequest) {
             synced++;
           }
         } catch (err) {
-          console.error(
-            `[fitness-sync] Error userId=${userId} date=${dateStr}:`,
-            err
-          );
+          console.error(`[fitness-sync] Error userId=${userId} date=${dateStr}:`, err);
           errors++;
         }
 
@@ -58,18 +51,15 @@ export async function GET(req: NextRequest) {
     }
 
     const totalSynced = results.reduce((sum, r) => sum + r.synced, 0);
-    console.log(
-      `[fitness-sync] Completado: ${totalSynced} actividades en ${users.length} usuarios`
-    );
+    console.log(`[fitness-sync] Completado: ${totalSynced} actividades en ${users.length} usuarios`);
 
     return NextResponse.json({
-      success: true,
-      users: users.length,
-      totalSynced,
+      ok: true,
+      message: `${totalSynced} actividades sincronizadas en ${users.length} usuarios`,
       results,
     });
   } catch (err) {
-    console.error("[/api/cron/fitness-sync]", err);
-    return NextResponse.json({ error: "Error en cron" }, { status: 500 });
+    console.error("[fitness-sync cron] Error:", err);
+    return NextResponse.json({ ok: false, error: "Error en cron de fitness sync" }, { status: 500 });
   }
 }

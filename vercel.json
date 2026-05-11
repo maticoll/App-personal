@@ -15,10 +15,6 @@
     {
       "path": "/api/cron/fitness-habits",
       "schedule": "10 7 * * *"
-    },
-    {
-      "path": "/api/cron/water-reminder",
-      "schedule": "0 12 * * *"
     }
   ]
 }

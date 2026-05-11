@@ -1,7 +1,11 @@
 // ============================================================
 // GET /api/cron/water-reminder
-// Recordatorio de hidratación — medio día y tarde
-// Schedule: 0 12,17 * * * (12 PM y 5 PM todos los días)
+// Recordatorio de hidratación — mediodía y tarde
+// NO está en vercel.json (necesita correr 2 veces/día)
+// Configurado en cron-job.org — ver CRON_SETUP.md
+//   - 12:00 hs: 0 12 * * *
+//   - 17:00 hs: 0 17 * * *
+// Protección: x-cron-secret: $CRON_SECRET
 //
 // TODO: Sesión 8 — conectar con WhatsApp orquestrador
 // ============================================================
@@ -9,13 +13,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getWaterReminderText } from "@/lib/nutrition";
+import { verifyCronSecret } from "@/lib/cron";
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  if (!verifyCronSecret(req)) {
+    return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
 
   const reminders: Array<{ userId: string; message: string }> = [];
@@ -31,18 +33,16 @@ export async function GET(req: NextRequest) {
       if (message) {
         reminders.push({ userId: user.userId, message });
         // TODO: Sesión 8 — enviar via orquestrador de WhatsApp
-        // await orchestrator.sendMessage(user.whatsappNumber, message)
       }
     }
 
     return NextResponse.json({
       ok: true,
-      checked: users.length,
-      remindersSent: reminders.length,
+      message: `${reminders.length} recordatorios generados de ${users.length} usuarios`,
       reminders,
     });
   } catch (err) {
-    console.error("[cron/water-reminder] Error:", err);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+    console.error("[water-reminder cron] Error:", err);
+    return NextResponse.json({ ok: false, error: "Error en cron de water reminder" }, { status: 500 });
   }
 }
