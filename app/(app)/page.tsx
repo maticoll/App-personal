@@ -164,7 +164,7 @@ export default async function DashboardPage() {
       {/* ─── Saludo ──────────────────────────────────────────── */}
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-[var(--text-primary)]">
+          <h2 className="text-xl md:text-2xl font-bold text-[var(--text-primary)]">
             {saludo}, {firstName} 👋
           </h2>
           <p className="text-[var(--text-secondary)] text-sm mt-1 capitalize">
@@ -208,7 +208,7 @@ export default async function DashboardPage() {
         <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-3">
           Módulos
         </h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
 
           <ModuleSummaryCard
             href="/sleep"

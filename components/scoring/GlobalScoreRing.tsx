@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 interface GlobalScoreRingProps {
   score: number | null;
-  size?: "md" | "lg";
+  size?: "sm" | "md" | "lg";
   className?: string;
 }
 
@@ -39,9 +39,10 @@ export function GlobalScoreRing({
   }, [value]);
 
   const isLg = size === "lg";
-  const svgSize = isLg ? 160 : 120;
-  const radius = isLg ? 68 : 50;
-  const strokeWidth = isLg ? 10 : 8;
+  const isSm = size === "sm";
+  const svgSize = isLg ? 160 : isSm ? 72 : 120;
+  const radius = isLg ? 68 : isSm ? 30 : 50;
+  const strokeWidth = isLg ? 10 : isSm ? 6 : 8;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (animatedScore / 100) * circumference;
   const color = getScoreColorHex(animatedScore);
@@ -86,7 +87,7 @@ export function GlobalScoreRing({
               <span
                 className={cn(
                   "font-bold leading-none",
-                  isLg ? "text-4xl" : "text-2xl"
+                  isLg ? "text-4xl" : isSm ? "text-lg" : "text-2xl"
                 )}
                 style={{ color }}
               >
@@ -97,15 +98,15 @@ export function GlobalScoreRing({
               </span>
             </>
           ) : (
-            <span className={cn("text-[var(--text-muted)]", isLg ? "text-2xl" : "text-xl")}>
+            <span className={cn("text-[var(--text-muted)]", isLg ? "text-2xl" : isSm ? "text-base" : "text-xl")}>
               —
             </span>
           )}
         </div>
       </div>
 
-      {/* Emoji + label */}
-      {score !== null && (
+      {/* Emoji + label — hidden for sm size */}
+      {score !== null && !isSm && (
         <div className="flex items-center gap-1.5 mt-2">
           <span className={isLg ? "text-xl" : "text-lg"}>
             {getScoreEmoji(value)}
@@ -115,7 +116,7 @@ export function GlobalScoreRing({
           </span>
         </div>
       )}
-      {score === null && (
+      {score === null && !isSm && (
         <span className="text-sm text-[var(--text-muted)] mt-2">
           Completá módulos para ver tu score
         </span>
