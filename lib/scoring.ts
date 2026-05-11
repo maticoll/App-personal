@@ -414,11 +414,18 @@ export async function calcNutritionScoreForDate(
 }
 
 // -------------------------------------------------------
-// Score de PROYECTOS
-// Criterios:
-//   +30  Tiene al menos 1 proyecto en IN_PROGRESS
-//   +40  Completó al menos 1 tarea hoy
-//   +30  Avanzó en algún proyecto hoy (updatedAt reciente)
+// Score de PROYECTOS — Criterios actualizados Sesión 6
+//
+// Actividad (60 pts):
+//   +40  Al menos 1 tarea completada hoy
+//   +20  2 o más tareas completadas hoy (bonus)
+//
+// Estado (40 pts):
+//   +20  Tiene al menos 1 proyecto IN_PROGRESS
+//   +20  Sin deadlines vencidos (proyectos no DONE/ARCHIVED con deadline < now)
+//
+// Null: sin proyectos creados
+// 0–40: hay proyectos pero sin actividad de tareas hoy (se evalúa igual el estado)
 // -------------------------------------------------------
 
 async function calcProjectsScore(
@@ -427,13 +434,11 @@ async function calcProjectsScore(
 ): Promise<ModuleScoreResult> {
   const met: string[] = [];
   const missed: string[] = [];
+  const now = new Date();
 
-  const [activeProjects, tasksCompletedToday, projectsUpdatedToday] =
+  const [totalProjects, tasksCompletedToday, activeProjects, overdueProjects] =
     await Promise.all([
-      db.project.findMany({
-        where: { userId, status: "IN_PROGRESS" },
-        select: { id: true, title: true },
-      }),
+      db.project.count({ where: { userId } }),
       db.projectTask.findMany({
         where: {
           done: true,
@@ -445,65 +450,95 @@ async function calcProjectsScore(
         },
         select: { id: true, title: true },
       }),
-      db.project.findMany({
+      db.project.count({
+        where: { userId, status: "IN_PROGRESS" },
+      }),
+      db.project.count({
         where: {
           userId,
-          updatedAt: {
-            gte: startOfDay(date),
-            lte: endOfDay(date),
-          },
+          deadline: { lt: now },
+          status: { notIn: ["DONE", "ARCHIVED"] },
         },
-        select: { id: true, title: true },
       }),
     ]);
 
-  if (
-    activeProjects.length === 0 &&
-    tasksCompletedToday.length === 0 &&
-    projectsUpdatedToday.length === 0
-  ) {
-    return {
-      score: null,
-      met: [],
-      missed: [
-        "Sin proyectos activos ni avances registrados",
-      ],
-    };
+  // Null si no hay ningún proyecto
+  if (totalProjects === 0) {
+    return { score: null, met: [], missed: ["Sin proyectos creados"] };
+  }
+
+  // Sin actividad de tareas hoy — evaluar solo estado (0-40 pts)
+  if (tasksCompletedToday.length === 0) {
+    const stateScore = activeProjects > 0 ? 20 : 0;
+    const deadlineScore = overdueProjects === 0 ? 20 : 0;
+
+    if (activeProjects > 0) {
+      met.push(
+        `${activeProjects} proyecto${activeProjects > 1 ? "s" : ""} en progreso`
+      );
+    } else {
+      missed.push("Sin proyectos en progreso");
+    }
+
+    if (overdueProjects === 0) {
+      met.push("Sin deadlines vencidos");
+    } else {
+      missed.push(
+        `${overdueProjects} proyecto${overdueProjects > 1 ? "s" : ""} con deadline vencido`
+      );
+    }
+
+    missed.push("Sin tareas completadas hoy");
+
+    return { score: stateScore + deadlineScore, met, missed };
   }
 
   let score = 0;
 
-  if (activeProjects.length > 0) {
-    score += 30;
+  // === Actividad (60 pts) ===
+  score += 40;
+  met.push(
+    `${tasksCompletedToday.length} tarea${tasksCompletedToday.length > 1 ? "s" : ""} completada${tasksCompletedToday.length > 1 ? "s" : ""} hoy`
+  );
+
+  if (tasksCompletedToday.length >= 2) {
+    score += 20;
+    met.push("Gran productividad: 2+ tareas ✓");
+  } else {
+    missed.push("Completá 2 o más tareas para el bonus de productividad");
+  }
+
+  // === Estado de proyectos (40 pts) ===
+  if (activeProjects > 0) {
+    score += 20;
     met.push(
-      `${activeProjects.length} proyecto${activeProjects.length > 1 ? "s" : ""} en progreso`
+      `${activeProjects} proyecto${activeProjects > 1 ? "s" : ""} en progreso`
     );
   } else {
     missed.push("Sin proyectos en progreso");
   }
 
-  if (tasksCompletedToday.length > 0) {
-    score += 40;
-    met.push(
-      `${tasksCompletedToday.length} tarea${tasksCompletedToday.length > 1 ? "s" : ""} completada${tasksCompletedToday.length > 1 ? "s" : ""} hoy`
-    );
+  if (overdueProjects === 0) {
+    score += 20;
+    met.push("Sin deadlines vencidos ✓");
   } else {
-    missed.push("Sin tareas completadas hoy");
-  }
-
-  if (projectsUpdatedToday.length > 0) {
-    score += 30;
-    met.push(
-      `Avance en: ${projectsUpdatedToday
-        .slice(0, 2)
-        .map((p) => p.title)
-        .join(", ")}`
+    missed.push(
+      `${overdueProjects} proyecto${overdueProjects > 1 ? "s" : ""} con deadline vencido`
     );
-  } else {
-    missed.push("Sin actualizaciones de proyectos hoy");
   }
 
   return { score: Math.min(score, 100), met, missed };
+}
+
+/**
+ * Función exportada para que el agente de proyectos pueda calcular el score
+ * sin cargar el módulo de scoring completo.
+ */
+export async function calcProjectsScoreForDate(
+  userId: string,
+  date: Date
+): Promise<ModuleScoreResult> {
+  return calcProjectsScore(userId, date);
 }
 
 // -------------------------------------------------------
