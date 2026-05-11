@@ -156,13 +156,6 @@ export function SleepModuleClient({
       {/* Stats semanales */}
       {stats.totalDays > 0 && <SleepWeekStats stats={stats} />}
 
-      {/* Garmin sync */}
-      <GarminSyncButton
-        isConnected={garminConnected}
-        lastSync={garminLastSync}
-        onSync={handleGarminSync}
-      />
-
       {/* Tabs: Gráficos | Historial */}
       <div className="flex rounded-xl border border-[var(--border)] overflow-hidden">
         {(
@@ -205,6 +198,11 @@ export function SleepModuleClient({
               <SleepDurationChart history={history} days={7} />
               <SleepQualityChart history={history} />
               <SleepTimingChart history={history} />
+              <GarminSyncButton
+                isConnected={garminConnected}
+                lastSync={garminLastSync}
+                onSync={handleGarminSync}
+              />
             </>
           )}
         </div>
