@@ -16,9 +16,10 @@ export default auth((req) => {
   const isPublicRoute = nextUrl.pathname.startsWith("/login");
   const isApiAuthRoute = nextUrl.pathname.startsWith("/api/auth");
   const isApiWebhook = nextUrl.pathname.startsWith("/api/webhooks");
+  const isWhatsAppWebhook = nextUrl.pathname.startsWith("/api/whatsapp/webhook");
 
   // Dejar pasar rutas de auth y webhooks públicos
-  if (isApiAuthRoute || isApiWebhook) {
+  if (isApiAuthRoute || isApiWebhook || isWhatsAppWebhook) {
     return undefined;
   }
 
