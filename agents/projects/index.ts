@@ -12,6 +12,7 @@ import {
 } from "@/lib/projects";
 import { syncNotionToProjects } from "@/lib/notion";
 import type { AgentInput, AgentOutput } from "@/lib/types";
+import { detectIntentAI } from "@/lib/nlp";
 
 // -------------------------------------------------------
 // Normalización de texto (sin acentos, igual que otros agentes)
@@ -41,26 +42,20 @@ type Intention =
   | "sync_notion"
   | "unknown";
 
-function detectIntention(text: string): Intention {
-  const n = normalize(text);
-
-  if (/sync notion|actualiza notion|traer tareas|importar notion/.test(n)) {
-    return "sync_notion";
-  }
-  if (/nuevo proyecto|crear proyecto|agregar proyecto|quiero hacer un proyecto/.test(n)) {
-    return "create";
-  }
-  if (/movi|cambie|pase a|complete el proyecto|termine el proyecto|marcar como/.test(n)) {
-    return "update_status";
-  }
-  if (/hice|termine la tarea|complete la tarea|check|listo la tarea|marque como hecho/.test(n)) {
-    return "task_done";
-  }
-  if (/mis proyectos|que tengo|como voy|cuantos proyectos|resumen proyectos/.test(n)) {
-    return "query";
-  }
-
-  return "unknown";
+async function detectIntention(text: string): Promise<Intention> {
+  const intent = await detectIntentAI(
+    "Eres el agente de proyectos de una app personal.",
+    {
+      create: "El usuario quiere crear un nuevo proyecto",
+      update_status: "El usuario quiere cambiar el estado de un proyecto (en progreso, hecho, archivado)",
+      task_done: "El usuario marco una tarea como completada o terminada",
+      query: "El usuario pregunta por sus proyectos, tareas pendientes o estado general",
+      sync_notion: "El usuario quiere sincronizar con Notion",
+      unknown: "Otro mensaje no relacionado a proyectos",
+    },
+    text
+  );
+  return intent as Intention;
 }
 
 // -------------------------------------------------------
@@ -244,7 +239,7 @@ export async function processProjectsMessage(
   userId: string,
   text: string
 ): Promise<string> {
-  const intention = detectIntention(text);
+  const intention = await detectIntention(text);
 
   switch (intention) {
     case "create":

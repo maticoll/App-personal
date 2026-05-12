@@ -4,6 +4,7 @@
 // ============================================================
 
 import type { AgentInput, AgentOutput } from "@/lib/types";
+import { detectIntentAI } from "@/lib/nlp";
 import {
   logMealNLP,
   logWater,
@@ -68,7 +69,7 @@ function extractMealDescription(text: string): string {
 }
 
 export async function processNutritionMessage(userId: string, text: string): Promise<string> {
-  const intent = detectIntent(text);
+  const intent = await detectNutritionIntent(text);
   try {
     if (intent === "meal_log") {
       const mealType = detectMealType(text);

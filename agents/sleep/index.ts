@@ -35,6 +35,7 @@ import {
   checkGarminStatus,
 } from "@/lib/garmin";
 import { formatDuration, formatTime } from "@/lib/utils";
+import { detectIntentAI, detectPeriod } from "@/lib/nlp";
 
 // --- Tipos de intención ---
 
@@ -57,29 +58,38 @@ export const sleepAgent = {
    * Detecta la intención y ejecuta la acción correspondiente.
    */
   async process(input: AgentInput): Promise<AgentOutput> {
-    const intent = detectSleepIntent(input.message);
+    const intentKey = await detectIntentAI(
+      "Eres el agente de registro de sueno de una app personal.",
+      {
+        bed: "El usuario indica que se va a dormir, que se durmio, o que es hora de dormir (puede incluir una hora)",
+        wake: "El usuario indica que se desperto o se levanto (puede incluir una hora)",
+        query: "El usuario pregunta por cuanto durmio, su calidad de sueno, estadisticas o historial",
+        sync: "El usuario quiere sincronizar datos con Garmin",
+        flexible: "El usuario avisa que hoy sale tarde, no hay hora fija, o que ya te avisa despues",
+        unknown: "Otro mensaje no relacionado al sueno",
+      },
+      input.message
+    );
 
-    switch (intent.type) {
-      case "bed":
-        return this.handleBedTime(input.userId, intent.time, intent.flexible);
-
-      case "wake":
-        return this.handleWakeTime(input.userId, intent.time);
-
-      case "query":
-        return this.handleQuery(input.userId, intent.period);
-
-      case "sync":
-        return this.handleSync(input.userId);
-
-      case "unknown":
-        return {
-          success: false,
-          message:
-            "No entendí tu mensaje sobre el sueño. Podés decirme: " +
-            '"me voy a dormir", "me desperté", "cuánto dormí", o "sync".',
-        };
+    if (intentKey === "bed" || intentKey === "flexible") {
+      const time = extractTime(input.message);
+      return this.handleBedTime(input.userId, time, intentKey === "flexible");
     }
+    if (intentKey === "wake") {
+      const time = extractTime(input.message);
+      return this.handleWakeTime(input.userId, time);
+    }
+    if (intentKey === "query") {
+      const period = detectPeriod(input.message);
+      return this.handleQuery(input.userId, period);
+    }
+    if (intentKey === "sync") {
+      return this.handleSync(input.userId);
+    }
+    return {
+      success: false,
+      message: "No entendi tu mensaje sobre el sueno. Podes decirme: me voy a dormir, me desperte, cuanto dormi, o sync.",
+    };
   },
 
   // --- Handlers ---

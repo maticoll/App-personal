@@ -10,6 +10,7 @@
 // ============================================================
 
 import type { AgentInput, AgentOutput, DailyScoreData } from "@/lib/types";
+import { detectIntentAI } from "@/lib/nlp";
 import {
   calculateFullScore,
   saveScore,
@@ -27,43 +28,58 @@ export const scoringAgent = {
   // -------------------------------------------------------
 
   async process(input: AgentInput): Promise<AgentOutput> {
-    const userId = input.userId;
+    const { userId, message } = input;
     const today = new Date();
 
-    // Si el mensaje es "score", "scoring" o "puntaje"
-    const msg = input.message.toLowerCase();
-    if (msg.includes("score") || msg.includes("scoring") || msg.includes("puntaje")) {
-      try {
-        const result = await calculateFullScore(userId, today);
-        await saveScore(userId, today, result);
+    const intent = await detectIntentAI(
+      "Eres el agente de scoring de una app personal.",
+      {
+        today: "El usuario pregunta por su score, puntaje o rendimiento de hoy",
+        yesterday: "El usuario pregunta por su score o puntaje de ayer",
+        week: "El usuario pregunta por su score o rendimiento de la semana",
+        recalculate: "El usuario quiere recalcular o actualizar el score",
+        unknown: "Otro mensaje no relacionado al scoring",
+      },
+      message
+    );
 
-        const lines = [
-          `📊 *Score de hoy: ${result.global}/100*`,
-          "",
-          result.sleep.score !== null ? `🌙 Sueño: ${result.sleep.score}/100` : "🌙 Sueño: sin datos",
-          result.fitness.score !== null ? `💪 Fitness: ${result.fitness.score}/100` : "💪 Fitness: sin datos",
-          result.nutrition.score !== null ? `🥗 Nutrición: ${result.nutrition.score}/100` : "🥗 Nutrición: sin datos",
-          result.projects.score !== null ? `📁 Proyectos: ${result.projects.score}/100` : "📁 Proyectos: sin datos",
-        ];
-
-        return {
-          success: true,
-          message: lines.join("\n"),
-          data: result,
-        };
-      } catch (error) {
-        return {
-          success: false,
-          message: "No pude calcular el score. Intentá de nuevo en un momento.",
-          error: String(error),
-        };
-      }
+    if (intent === "unknown") {
+      return { success: false, message: "No entendi tu consulta de scoring." };
     }
 
-    return {
-      success: false,
-      message: "No entendí tu consulta de scoring.",
-    };
+    try {
+      let targetDate = today;
+      if (intent === "yesterday") {
+        targetDate = new Date();
+        targetDate.setDate(targetDate.getDate() - 1);
+      }
+
+      const result = await calculateFullScore(userId, targetDate);
+      await saveScore(userId, targetDate, result);
+
+      const label = intent === "yesterday" ? "ayer" : "hoy";
+      const lines = [
+        "📊 Score de " + label + ": " + result.global + "/100",
+        "",
+        result.sleep.score !== null ? "🌙 Sueno: " + result.sleep.score + "/100" : "🌙 Sueno: sin datos",
+        result.fitness.score !== null ? "💪 Fitness: " + result.fitness.score + "/100" : "💪 Fitness: sin datos",
+        result.nutrition.score !== null ? "🥗 Nutricion: " + result.nutrition.score + "/100" : "🥗 Nutricion: sin datos",
+        result.projects.score !== null ? "📁 Proyectos: " + result.projects.score + "/100" : "📁 Proyectos: sin datos",
+      ];
+
+      if (intent === "week") {
+        const summaryText = await this.getSummaryText(userId, today);
+        return { success: true, message: summaryText, data: result };
+      }
+
+      return { success: true, message: lines.join("\n"), data: result };
+    } catch (error) {
+      return {
+        success: false,
+        message: "No pude calcular el score. Intenta de nuevo en un momento.",
+        error: String(error),
+      };
+    }
   },
 
   // -------------------------------------------------------

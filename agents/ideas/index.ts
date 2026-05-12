@@ -5,6 +5,7 @@
 
 import type { AgentInput, AgentOutput } from "@/lib/types";
 import { captureIdeaNLP, getRecentIdeas, getIdeasStats } from "@/lib/ideas";
+import { detectIntentAI } from "@/lib/nlp";
 
 function normalize(text: string): string {
   return text
@@ -20,12 +21,18 @@ function normalize(text: string): string {
 
 type IdeasIntent = "capture" | "query" | "expand" | "unknown";
 
-function detectIntent(text: string): IdeasIntent {
-  const n = normalize(text);
-  if (/\bidea:\s*|tengo una idea|se me ocurrio|idea nueva|anotar idea/.test(n)) return "capture";
-  if (/que ideas (tengo|guarde)|mostra mis ideas|lista mis ideas|cuantas ideas/.test(n)) return "query";
-  if (/desarrolla (la idea|eso de)|segui con|expandir la idea|profundiza/.test(n)) return "expand";
-  return "unknown";
+async function detectIntent(text: string): Promise<IdeasIntent> {
+  const intent = await detectIntentAI(
+    "Eres el agente de ideas de una app personal.",
+    {
+      capture: "El usuario quiere guardar, anotar o registrar una idea, pensamiento u ocurrencia",
+      query: "El usuario pregunta por sus ideas guardadas, quiere verlas o listarlas",
+      expand: "El usuario quiere desarrollar, profundizar o expandir una idea existente",
+      unknown: "Otro mensaje no relacionado a ideas",
+    },
+    text
+  );
+  return intent as IdeasIntent;
 }
 
 function extractIdeaText(text: string): string {
@@ -33,7 +40,7 @@ function extractIdeaText(text: string): string {
 }
 
 export async function processIdeasMessage(userId: string, text: string): Promise<string> {
-  const intent = detectIntent(text);
+  const intent = await detectIntent(text);
   try {
     if (intent === "capture") {
       const rawText = extractIdeaText(text);

@@ -21,6 +21,7 @@ import {
 } from "@/lib/fitness";
 import { checkGarminStatus, fetchGarminActivities } from "@/lib/garmin";
 import { calcFitnessScoreForDate } from "@/lib/scoring";
+import { detectIntentAI } from "@/lib/nlp";
 
 // ─── Tipos de intención ───────────────────────────────────────────────────────
 
@@ -145,7 +146,18 @@ export const fitnessAgent = {
 
   async process(input: AgentInput): Promise<AgentOutput> {
     const { userId, message: text } = input;
-    const intent = detectIntent(text);
+    const intent = await detectIntentAI(
+      "Eres el agente de fitness de una app personal.",
+      {
+        gym_start: "El usuario fue al gym, inicio una sesion de gym, o dice que va al gimnasio",
+        gym_log: "El usuario esta registrando ejercicios con pesos, series o repeticiones (ej: press plano, sentadilla, curl)",
+        cardio_log: "El usuario registro una actividad cardio: correr, nadar, andar en bici, caminar, trotar",
+        query: "El usuario pregunta por su resumen de fitness, cuanto entreno, estadisticas o historial",
+        sync_garmin: "El usuario quiere sincronizar datos con Garmin",
+        unknown: "Otro mensaje no relacionado al fitness",
+      },
+      text
+    );
 
     switch (intent) {
       // ── Iniciar sesión de gym ──
