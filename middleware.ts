@@ -1,6 +1,6 @@
 // ============================================================
-// Middleware — Edge-compatible, usa auth.config.ts (sin Prisma)
-// PrismaClient no puede correr en Edge Runtime — por eso se
+// Middleware - Edge-compatible, usa auth.config.ts (sin Prisma)
+// PrismaClient no puede correr en Edge Runtime - por eso se
 // separa la config base del auth completo con adapter.
 // ============================================================
 
@@ -18,17 +18,17 @@ export default auth((req) => {
   const isApiWebhook = nextUrl.pathname.startsWith("/api/webhooks");
   const isWhatsAppWebhook = nextUrl.pathname.startsWith("/api/whatsapp/webhook");
 
-  // Dejar pasar rutas de auth y webhooks públicos
+  // Dejar pasar rutas de auth y webhooks publicos
   if (isApiAuthRoute || isApiWebhook || isWhatsAppWebhook) {
     return undefined;
   }
 
-  // Redirigir a login si no está autenticado
+  // Redirigir a login si no esta autenticado
   if (!isLoggedIn && !isPublicRoute) {
     return Response.redirect(new URL("/login", nextUrl));
   }
 
-  // Si ya está autenticado y va a /login, redirigir al dashboard
+  // Si ya esta autenticado y va a /login, redirigir al dashboard
   if (isLoggedIn && isPublicRoute) {
     return Response.redirect(new URL("/", nextUrl));
   }
@@ -38,7 +38,6 @@ export default auth((req) => {
 
 export const config = {
   matcher: [
-    // Excluir archivos estáticos y PWA assets
     "/((?!_next/static|_next/image|favicon.ico|icons|manifest.json|sw.js|workbox-.*).*)",
   ],
 };
