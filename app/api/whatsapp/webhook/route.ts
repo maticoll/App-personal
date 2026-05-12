@@ -8,6 +8,7 @@
 //   https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/
 // ============================================================
 
+import { after } from "next/server";
 import { NextRequest, NextResponse } from "next/server";
 import {
   parseIncomingWebhook,
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = await req.json().catch(() => null);
 
   // Procesar en background sin bloquear la respuesta
-  void processIncomingMessage(body);
+  after(() => processIncomingMessage(body));
 
   return NextResponse.json({ ok: true }, { status: 200 });
 }
