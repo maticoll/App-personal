@@ -259,14 +259,41 @@ Cada sesión genera un `skill.md` propio y agrega su bloque a este `CLAUDE.md`.
 
 ---
 
+## Bloque Sesión 6 — Módulo de Proyectos
+
+**Schema Prisma:** +`notionToken` (String?) y +`notionDbId` (String?) en UserSettings. Aplicado directamente vía SQL en Supabase (problema de conectividad con `prisma db push` — workaround documentado). Project y ProjectTask ya existían desde Sesión 1.
+
+**lib/projects.ts:** `getAllProjects`, `getProjectsByStatus`, `getProject`, `createProject`, `updateProject`, `deleteProject`, `reorderProjects` (transacción atómica), `createTask`, `updateTask`, `deleteTask`, `getWeeklyStats`, `getTodayProjectsSummary`.
+
+**lib/notion.ts:** Integración READ-ONLY con `@notionhq/client` v5.20.0. `getNotionClient`, `fetchNotionTasks` (paginación con cursor), `syncNotionToProjects` (upsert por notionId). Credenciales por usuario en UserSettings, fallback a env vars. Proyectos de Notion se marcan con color amber-600. Sin cron — sync manual.
+
+**lib/scoring.ts (extensión):** +`calcProjectsScoreForDate` exportada. Criterios: actividad (40+20 pts por tareas completadas hoy), estado IN_PROGRESS (20 pts), deadlines sanos (20 pts). Null si no hay proyectos.
+
+**API Routes (11 rutas):** `GET/POST /api/projects`, `GET/PATCH/DELETE /api/projects/[id]`, `POST /api/projects/reorder`, `POST /api/projects/[id]/tasks`, `PATCH/DELETE /api/projects/tasks/[taskId]`, `GET /api/projects/weekly-stats`, `POST /api/projects/sync-notion`.
+
+**Componentes (8):** `ProjectsModuleClient` (tabs Kanban/Timeline + FAB), `KanbanBoard` (drag-and-drop con @hello-pangea/dnd, importado con `dynamic ssr:false`), `ProjectCard`, `ProjectDetail` (modal edición inline + CRUD tareas), `TimelineView`, `NotionSyncButton`, `ProjectsQuickActions`, `WeeklyProjectStats`.
+
+**Página `/projects`:** Server Component con carga paralela. KanbanBoard con SSR desactivado para evitar errores de hidratación con @hello-pangea/dnd.
+
+**Agente de proyectos:** 6 intenciones: create, update_status, task_done, query, sync_notion, unknown. Exporta `processProjectsMessage`, `getProjectsSummaryText` (para Morning Summary Sesión 8), `projectsAgent`.
+
+**Dependencias nuevas:** `@hello-pangea/dnd ^18.0.1`, `@notionhq/client ^5.20.0`.
+
+**Variables de entorno nuevas:** `NOTION_TOKEN`, `NOTION_DB_ID` (fallback global — valores reales van en UserSettings por usuario).
+
+**Nota Prisma:** Si `prisma db push` falla por conectividad, usar SQL directo en Supabase SQL Editor: `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS "notionToken" TEXT; ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS "notionDbId" TEXT;`
+
+---
+
 ## Estado de Deploy — Mayo 2026
 
 **Plataforma:** Vercel (plan Hobby)
 **Estado:** ✅ App levantada y funcionando
 - Auth con Google OAuth: ✅ activo
 - Base de datos Supabase + tablas: ✅ creadas y activas
-- Crons: configurados en vercel.json (limitación Hobby: 1 ejecución/día por cron)
+- Crons Vercel: sleep-sync (8AM), sleep-notifications (10PM), fitness-sync (6AM), fitness-habits (7:10AM) — 1x/día máximo (limitación Hobby)
+- Crons cron-job.org: sleep-notifications cada 30min 20-23hs, water-reminder 12hs y 17hs — configurados vía API, secret en query param
 
 ---
 
-*Última actualización: Mayo 2026 — Sesión 5 completa (Nutrición + Ideas)*
+*Última actualización: Mayo 2026 — Sesión 6 completa (Proyectos + Notion)*
