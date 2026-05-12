@@ -100,7 +100,7 @@ Cada sesión genera un `skill.md` propio y agrega su bloque a este `CLAUDE.md`.
 | 4 | ATLETA — Fitness | `skills/fitness.md` | ✅ Completo |
 | 5 | CHEF — Nutrición + Ideas | `skills/nutrition-ideas.md` | ✅ Completo |
 | 6 | DIRECTOR — Proyectos | `skills/projects.md` | ✅ Completo |
-| 7 | HERMES — WhatsApp Partes 1+2 | `skills/whatsapp-orchestrator.md` | ✅ Partes 1+2 — Parte 3 pendiente |
+| 7 | HERMES — WhatsApp Partes 1+2+3 | `skills/whatsapp-orchestrator.md` | ✅ Completo |
 | — | CONECTOR — Integraciones | `skills/integrations.md` | 🔲 Pendiente |
 | — | Settings Page | — | 🔲 Pendiente |
 
@@ -286,57 +286,49 @@ Cada sesión genera un `skill.md` propio y agrega su bloque a este `CLAUDE.md`.
 
 ---
 
-## Bloque Sesión 7 — HERMES (WhatsApp Orquestrador, Partes 1 y 2)
+---
 
-> Nota: la sesión llamada "CONECTOR" (Calendar, Gmail, Finanzas, Lumina) quedó pendiente. Se priorizó WhatsApp primero. HERMES es el nombre adoptado para el orquestrador.
+## Bloque Sesion 7 - HERMES (WhatsApp Orquestrador, Partes 1 y 2)
 
-**lib/whatsapp.ts:** Librería completa del canal WhatsApp. `parseIncomingWebhook` (parsea payload Meta), `sendTextMessage` (POST a graph.facebook.com/v21.0/{PHONE_ID}/messages), `markAsRead`, `downloadAudio` (descarga buffer de audio desde Meta), `transcribeAudio` (llama Whisper API de OpenAI con audio.ogg).
+> Nota: la sesion llamada "CONECTOR" (Calendar, Gmail, Finanzas, Lumina) quedo pendiente. Se priorizó WhatsApp primero. HERMES es el nombre adoptado para el orquestrador.
+
+**lib/whatsapp.ts:** Libreria completa del canal WhatsApp. `parseIncomingWebhook` (parsea payload Meta), `sendTextMessage` (POST a graph.facebook.com/v21.0/{PHONE_ID}/messages), `markAsRead`, `downloadAudio` (descarga buffer de audio desde Meta), `transcribeAudio` (llama Whisper API de OpenAI con audio.ogg).
 
 **app/api/whatsapp/webhook/route.ts:** Endpoint del webhook.
-- `GET`: verificación Meta challenge handshake (compara `hub.verify_token` con `WEBHOOK_VERIFY_TOKEN`).
-- `POST`: recibe mensajes, llama `after(() => processIncomingMessage(body))` y devuelve 200 inmediatamente. Clave: `after()` es la única forma de ejecutar lógica pesada en Vercel serverless sin que el runtime mate la función después del response.
-- `processIncomingMessage`: pipeline completo — parse → markAsRead → resolver userId (por whatsappNumber en UserSettings o fallback ALLOWED_EMAIL) → transcribir audio si aplica → guardar INBOUND en DB → `orchestrate()` → enviar respuesta → guardar OUTBOUND → marcar INBOUND como PROCESSED.
+- `GET`: verificacion Meta challenge handshake (compara `hub.verify_token` con `WEBHOOK_VERIFY_TOKEN`).
+- `POST`: recibe mensajes, llama `after(() => processIncomingMessage(body))` y devuelve 200 inmediatamente. `after()` es la unica forma de ejecutar logica pesada en Vercel serverless sin que el runtime mate la funcion despues del response.
+- `processIncomingMessage`: pipeline completo - parse - markAsRead - resolver userId (por whatsappNumber en UserSettings o fallback ALLOWED_EMAIL) - transcribir audio si aplica - guardar INBOUND en DB - `orchestrate()` - enviar respuesta - guardar OUTBOUND - marcar INBOUND como PROCESSED.
 
-**lib/orchestrator.ts:** Orquestrador central. Recibe `(userId, messageText)` y llama al agente correspondiente según la intención detectada por Claude Haiku. Devuelve string de respuesta.
+**lib/orchestrator.ts:** Orquestrador central. Recibe `(userId, messageText)` y llama al agente correspondiente segun la intencion detectada por Claude Haiku. Devuelve string de respuesta.
 
-**middleware.ts (actualización):** Agregada excepción para el webhook:
-```typescript
-const isWhatsAppWebhook = nextUrl.pathname.startsWith("/api/whatsapp/webhook");
-if (isApiAuthRoute || isApiWebhook || isWhatsAppWebhook) return undefined;
-```
+**middleware.ts:** Excepcion agregada para el webhook (`/api/whatsapp/webhook` bypass de auth).
 
-**lib/cron.ts (actualización):** `verifyCronSecret` ahora acepta secret como query param `?secret=` además de headers (requerido para cron-job.org que no soporta headers custom en plan free).
-
-**Meta / WhatsApp setup completado:**
-- App Meta: creada en developers.facebook.com
+**Meta / WhatsApp setup:**
 - WABA ID: `1291248383180052`
-- Phone Number ID (producción): `1175554135632045` (número eSIM)
-- Número WhatsApp: `+59892182606`
-- Sistema de token: System User en Meta Business Manager con permiso `whatsapp_business_messaging` — token permanente (no expira)
-- Número registrado con `POST /v21.0/{phone_id}/register` con pin `000000`
+- Phone Number ID: `1175554135632045` (numero eSIM)
+- Numero WhatsApp: `+59892182606`
+- Token: System User permanente en Meta Business Manager
 - Webhook suscripto a `messages`
 
-**Estado al cerrar sesión:** ✅ HERMES recibe mensajes de WhatsApp y responde. Confirmado en producción.
+**Estado:** WhatsApp recibe mensajes y responde. Confirmado en produccion.
 
-**Pendiente HERMES Parte 3:** Morning Summary cron (`/api/cron/morning-summary`) — versículo bíblico + score de ayer + resumen de sueño + reminder de agua + agenda. Horario: `30 10 * * *` en vercel.json (10:30 UTC = 7:30 AM Uruguay).
+**Variables de entorno:** `WHATSAPP_PHONE_ID`, `WHATSAPP_TOKEN`, `WEBHOOK_VERIFY_TOKEN`, `OPENAI_API_KEY`.
 
-**Variables de entorno nuevas:** `WHATSAPP_PHONE_ID` (`1175554135632045`), `WHATSAPP_TOKEN` (System User token permanente), `WEBHOOK_VERIFY_TOKEN` (string arbitrario — debe coincidir con el configurado en Meta dashboard), `OPENAI_API_KEY` (para Whisper).
-
-**DB:** Columna `whatsappNumber` en `user_settings` seteada a `+59892182606` para el usuario principal.
+**DB:** Columna `whatsappNumber` en `user_settings` seteada a `+59892182606`.
 
 ---
 
-## Estado de Deploy — Mayo 2026
+## Estado de Deploy - Mayo 2026
 
 **Plataforma:** Vercel (plan Hobby)
-**URL producción:** `app-personal-ten.vercel.app`
+**URL produccion:** `app-personal-ten.vercel.app`
 **Repo GitHub:** `github.com/maticoll/App-personal` (branch: **master**)
-**Estado:** ✅ App levantada y funcionando — WhatsApp activo y respondiendo
+**Estado:** App levantada y funcionando - WhatsApp activo y respondiendo
 
 **Infraestructura:**
-- Auth con Google OAuth: ✅ activo
-- Base de datos Supabase + tablas: ✅ creadas y activas
-- HERMES WhatsApp: ✅ recibe y responde mensajes
+- Auth con Google OAuth: activo
+- Base de datos Supabase + tablas: creadas y activas
+- HERMES WhatsApp: recibe y responde mensajes
 
 **Crons activos:**
 | Job | Plataforma | Horario | Ruta |
@@ -347,9 +339,38 @@ if (isApiAuthRoute || isApiWebhook || isWhatsAppWebhook) return undefined;
 | fitness-sync | Vercel | 6 AM UTC | `/api/cron/fitness-sync` |
 | fitness-habits | Vercel | 7:10 AM UTC | `/api/cron/fitness-habits` |
 | water-reminder | cron-job.org | 12 PM y 5 PM UTC | `/api/cron/water-reminder?secret=...` |
+| morning-summary | Vercel | 10:30 AM UTC (7:30 UY) | `/api/cron/morning-summary` |
 
-**Nota crons:** Vercel Hobby = 1 ejecución/día por cron. Los crons más frecuentes van en cron-job.org (secret como query param `?secret=`).
+**Nota crons:** Vercel Hobby = 1 ejecucion/dia por cron. Los crons mas frecuentes van en cron-job.org (`?secret=` como query param).
 
 ---
 
-*Última actualización: Mayo 2026 — HERMES Partes 1 y 2 completas (WhatsApp activo)*
+## Bloque Sesion 8 - HERMES Parte 3 (Morning Summary)
+
+**Cron creado:** `GET /api/cron/morning-summary` - horario `30 10 * * *` (7:30 AM Uruguay, UTC-3). Protegido con `verifyCronSecret`. Agregado a `vercel.json`.
+
+**Pipeline del summary:**
+1. Resolver usuario por `ALLOWED_EMAIL` -> `UserSettings.whatsappNumber`
+2. Fetch versiculo aleatorio de `bible-api.com/?random=verse&translation=rv1960`
+3. Score de ayer: `scoringAgent.getSummaryText(userId, yesterday)` con limpieza de asteriscos
+4. Sueno de anoche: `sleepAgent.getSleepSummaryText(userId)`
+5. Nutricion / agua de ayer: `getNutritionSummaryText(userId, yesterday)` (fecha explicita para datos de ayer)
+6. Cierre motivacional: Claude Haiku (max 60 tokens, 1 linea, sin markdown)
+7. `Promise.allSettled` para todas las secciones - si alguna falla se omite silenciosamente
+
+**Formato del mensaje WhatsApp:**
+- Sin `**` ni `_` (se limpian del output del scoringAgent)
+- Secciones omitidas si no hay datos (score null, sin sueno registrado, etc.)
+- Maximo ~20 lineas
+
+**lib/orchestrator.ts:** `orchestrate(userId, text)` - Claude Haiku clasifica en 7 modulos y deriva al agente correcto.
+
+**lib/whatsapp.ts (Parte 1):** 5 funciones - `parseIncomingWebhook`, `sendTextMessage`, `markAsRead`, `downloadAudio`, `transcribeAudio`.
+
+**app/api/whatsapp/webhook/route.ts (completo):** GET (challenge), POST con `after()` - lookup userId - guardar INBOUND - audio/Whisper - `orchestrate()` - responder - OUTBOUND + PROCESSED.
+
+**Variables de entorno** (en `.env.local.example`): `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_WABA_ID`, `WEBHOOK_VERIFY_TOKEN`, `OPENAI_API_KEY`.
+
+---
+
+*Ultima actualizacion: Mayo 2026 - HERMES completo (Partes 1, 2 y 3). WhatsApp activo y Morning Summary configurado.*
