@@ -449,6 +449,9 @@ model UserSettings {
   notionToken String?   // Integration token de Notion por usuario
   notionDbId  String?   // ID de la base de datos de Notion por usuario
 
+  // Integración Finanzas (CONECTOR)
+  financesApiKey String?  // Bearer token para la app de finanzas (fin_xxx...)
+
   // WhatsApp
   whatsappNumber       String?
   notificationsEnabled Boolean @default(true)

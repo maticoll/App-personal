@@ -14,7 +14,15 @@ export const authConfig = {
       clientSecret: process.env.AUTH_GOOGLE_SECRET!,
       authorization: {
         params: {
-          scope: ["openid", "email", "profile"].join(" "),
+          scope: [
+            "openid",
+            "email",
+            "profile",
+            "https://www.googleapis.com/auth/calendar.readonly",
+            "https://www.googleapis.com/auth/calendar.events",
+          ].join(" "),
+          access_type: "offline",  // Necesario para obtener refresh_token
+          prompt: "consent",       // Fuerza el consent para siempre recibir refresh_token
         },
       },
     }),

@@ -1,0 +1,728 @@
+"use client";
+
+// ============================================================
+// SettingsClient — Página de configuración completa
+// Secciones:
+//   - Perfil (foto, nombre, email, logout)
+//   - Hábitos (hora de dormir, días de gym, hora de gym)
+//   - Notificaciones (toggle WhatsApp)
+//   - WhatsApp (número de teléfono)
+//   - Tema (dark/light mode)
+//   - Notion (token + dbId)
+//   - Google Calendar (estado de conexión)
+//   - DangerZone (borrar datos del día)
+// ============================================================
+
+import { useState, useTransition } from "react";
+import { useTheme } from "next-themes";
+import { signOut } from "next-auth/react";
+import {
+  User,
+  Bell,
+  MessageCircle,
+  Moon,
+  Sun,
+  Dumbbell,
+  Database,
+  CalendarDays,
+  Wallet,
+  Trash2,
+  LogOut,
+  Check,
+  X,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle,
+  Loader2,
+  ExternalLink,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+// ─── Tipos ───────────────────────────────────────────────────────────────────
+
+type UserSettings = {
+  expectedSleepTime: string | null;
+  expectedWakeTime: string | null;
+  expectedGymTime: string | null;
+  gymDays: string[];
+  dailyWaterGoalThermos: number;
+  notificationsEnabled: boolean;
+  whatsappNumber: string | null;
+  prefersDarkMode: boolean;
+  language: string;
+  notionToken: string | null;
+  notionDbId: string | null;
+  garminConnected: boolean;
+  financesApiKey?: string | null;
+};
+
+type SessionUser = {
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+};
+
+type CalendarStatus = {
+  connected: boolean;
+  hasCalendarScope: boolean;
+};
+
+type Props = {
+  user: SessionUser;
+  settings: UserSettings;
+  calendarStatus: CalendarStatus;
+};
+
+// ─── Constantes ───────────────────────────────────────────────────────────────
+
+const DAYS_OF_WEEK = [
+  { value: "MONDAY",    label: "L" },
+  { value: "TUESDAY",   label: "M" },
+  { value: "WEDNESDAY", label: "X" },
+  { value: "THURSDAY",  label: "J" },
+  { value: "FRIDAY",    label: "V" },
+  { value: "SATURDAY",  label: "S" },
+  { value: "SUNDAY",    label: "D" },
+];
+
+// ─── Sub-componente: Section Card ────────────────────────────────────────────
+
+function SectionCard({
+  title,
+  icon: Icon,
+  children,
+  defaultOpen = true,
+}: {
+  title: string;
+  icon: React.ElementType;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div className="card overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between p-4 text-left hover:bg-[var(--surface-hover)] transition-colors"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
+            <Icon className="w-4 h-4 text-accent" />
+          </div>
+          <span className="font-semibold text-[var(--text-primary)]">{title}</span>
+        </div>
+        {open ? (
+          <ChevronUp className="w-4 h-4 text-[var(--text-muted)]" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
+        )}
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 border-t border-[var(--border)]">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Sub-componente: Input Field ─────────────────────────────────────────────
+
+function Field({
+  label,
+  children,
+  hint,
+}: {
+  label: string;
+  children: React.ReactNode;
+  hint?: string;
+}) {
+  return (
+    <div className="mt-4">
+      <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+        {label}
+      </label>
+      {children}
+      {hint && (
+        <p className="text-xs text-[var(--text-muted)] mt-1">{hint}</p>
+      )}
+    </div>
+  );
+}
+
+// ─── Sub-componente: Save Button ─────────────────────────────────────────────
+
+function SaveButton({
+  onClick,
+  pending,
+  saved,
+}: {
+  onClick: () => void;
+  pending: boolean;
+  saved: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={pending}
+      className={cn(
+        "mt-4 w-full py-2 rounded-xl text-sm font-medium transition-all",
+        saved
+          ? "bg-green-500/10 text-green-500"
+          : "bg-accent text-white hover:bg-accent/90",
+        pending && "opacity-60 cursor-not-allowed"
+      )}
+    >
+      {pending ? (
+        <span className="flex items-center justify-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Guardando...
+        </span>
+      ) : saved ? (
+        <span className="flex items-center justify-center gap-2">
+          <Check className="w-4 h-4" />
+          Guardado
+        </span>
+      ) : (
+        "Guardar"
+      )}
+    </button>
+  );
+}
+
+// ─── Componente principal ────────────────────────────────────────────────────
+
+export function SettingsClient({ user, settings: initial, calendarStatus }: Props) {
+  const { theme, setTheme } = useTheme();
+  const [isPending, startTransition] = useTransition();
+
+  // ─ Estado de cada sección ─
+  const [sleepTime, setSleepTime] = useState(initial.expectedSleepTime ?? "23:00");
+  const [wakeTime, setWakeTime] = useState(initial.expectedWakeTime ?? "07:00");
+  const [gymTime, setGymTime] = useState(initial.expectedGymTime ?? "06:00");
+  const [gymDays, setGymDays] = useState<string[]>(initial.gymDays);
+  const [waterGoal, setWaterGoal] = useState(initial.dailyWaterGoalThermos);
+
+  const [notificationsEnabled, setNotificationsEnabled] = useState(
+    initial.notificationsEnabled
+  );
+  const [whatsappNumber, setWhatsappNumber] = useState(initial.whatsappNumber ?? "");
+
+  const [notionToken, setNotionToken] = useState(initial.notionToken ?? "");
+  const [notionDbId, setNotionDbId] = useState(initial.notionDbId ?? "");
+
+  const [financesApiKey, setFinancesApiKey] = useState(initial.financesApiKey ?? "");
+
+  // ─ Estados de guardado ─
+  const [habitsSaved, setHabitsSaved] = useState(false);
+  const [notifSaved, setNotifSaved] = useState(false);
+  const [whatsappSaved, setWhatsappSaved] = useState(false);
+  const [notionSaved, setNotionSaved] = useState(false);
+  const [financesSaved, setFinancesSaved] = useState(false);
+
+  // ─ Danger zone ─
+  const [showDangerConfirm, setShowDangerConfirm] = useState(false);
+  const [dangerPending, startDangerTransition] = useTransition();
+  const [dangerDone, setDangerDone] = useState(false);
+  const [dangerError, setDangerError] = useState("");
+
+  // ─── Helper para guardar settings ─────────────────────────────────────────
+
+  async function saveSettings(
+    data: Record<string, unknown>,
+    setSaved: (v: boolean) => void
+  ) {
+    const res = await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    }
+  }
+
+  // ─── Handlers ────────────────────────────────────────────────────────────
+
+  function toggleGymDay(day: string) {
+    setGymDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
+  }
+
+  function handleSaveHabits() {
+    startTransition(async () => {
+      await saveSettings(
+        {
+          expectedSleepTime: sleepTime || null,
+          expectedWakeTime: wakeTime || null,
+          expectedGymTime: gymTime || null,
+          gymDays,
+          dailyWaterGoalThermos: waterGoal,
+        },
+        setHabitsSaved
+      );
+    });
+  }
+
+  function handleSaveNotifications() {
+    startTransition(async () => {
+      await saveSettings({ notificationsEnabled }, setNotifSaved);
+    });
+  }
+
+  function handleSaveWhatsApp() {
+    startTransition(async () => {
+      await saveSettings(
+        { whatsappNumber: whatsappNumber.trim() || null },
+        setWhatsappSaved
+      );
+    });
+  }
+
+  function handleSaveNotion() {
+    startTransition(async () => {
+      await saveSettings(
+        {
+          notionToken: notionToken.trim() || null,
+          notionDbId: notionDbId.trim() || null,
+        },
+        setNotionSaved
+      );
+    });
+  }
+
+  function handleSaveFinances() {
+    startTransition(async () => {
+      await saveSettings(
+        { financesApiKey: financesApiKey.trim() || null },
+        setFinancesSaved
+      );
+    });
+  }
+
+  function handleDeleteDayData() {
+    setDangerError("");
+    startDangerTransition(async () => {
+      const res = await fetch("/api/settings/day-data", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      if (res.ok) {
+        setDangerDone(true);
+        setShowDangerConfirm(false);
+      } else {
+        const err = (await res.json()) as { error?: string };
+        setDangerError(err.error ?? "Error desconocido");
+      }
+    });
+  }
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+
+  return (
+    <div className="space-y-4">
+
+      {/* ── Perfil ── */}
+      <SectionCard title="Perfil" icon={User}>
+        <div className="mt-4 flex items-center gap-4">
+          {user.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={user.image}
+              alt={user.name ?? "Avatar"}
+              className="w-14 h-14 rounded-full object-cover border-2 border-[var(--border)]"
+            />
+          ) : (
+            <div className="w-14 h-14 rounded-full bg-accent/10 flex items-center justify-center">
+              <User className="w-7 h-7 text-accent" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-[var(--text-primary)] truncate">
+              {user.name ?? "Sin nombre"}
+            </p>
+            <p className="text-sm text-[var(--text-secondary)] truncate">
+              {user.email ?? ""}
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => signOut({ callbackUrl: "/login" })}
+          className="mt-4 w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-[var(--border)] text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+          Cerrar sesión
+        </button>
+      </SectionCard>
+
+      {/* ── Hábitos ── */}
+      <SectionCard title="Hábitos esperados" icon={Dumbbell}>
+        <Field label="Hora habitual de dormir" hint="Se usa para recordatorios y scoring de sueño">
+          <input
+            type="time"
+            value={sleepTime}
+            onChange={(e) => setSleepTime(e.target.value)}
+            className="input w-full"
+          />
+        </Field>
+
+        <Field label="Hora habitual de despertar">
+          <input
+            type="time"
+            value={wakeTime}
+            onChange={(e) => setWakeTime(e.target.value)}
+            className="input w-full"
+          />
+        </Field>
+
+        <Field label="Hora habitual de gym" hint="El cron de smart habits verifica esta hora">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-[var(--text-muted)]" />
+            <input
+              type="time"
+              value={gymTime}
+              onChange={(e) => setGymTime(e.target.value)}
+              className="input flex-1"
+            />
+          </div>
+        </Field>
+
+        <Field label="Días de gym" hint="Los días marcados activan el smart habit de fitness">
+          <div className="flex gap-2 mt-1">
+            {DAYS_OF_WEEK.map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => toggleGymDay(value)}
+                className={cn(
+                  "w-9 h-9 rounded-lg text-sm font-medium transition-all border",
+                  gymDays.includes(value)
+                    ? "bg-accent text-white border-accent"
+                    : "border-[var(--border)] text-[var(--text-secondary)] hover:border-accent/50"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        <Field label="Meta de agua diaria (termos de 2L)">
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={0.5}
+              max={3}
+              step={0.5}
+              value={waterGoal}
+              onChange={(e) => setWaterGoal(parseFloat(e.target.value))}
+              className="flex-1"
+            />
+            <span className="text-sm font-semibold text-[var(--text-primary)] w-12 text-right">
+              {waterGoal} T
+            </span>
+          </div>
+        </Field>
+
+        <SaveButton
+          onClick={handleSaveHabits}
+          pending={isPending}
+          saved={habitsSaved}
+        />
+      </SectionCard>
+
+      {/* ── Notificaciones ── */}
+      <SectionCard title="Notificaciones" icon={Bell}>
+        <div className="mt-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-[var(--text-primary)]">
+              Notificaciones por WhatsApp
+            </p>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+              Recordatorios de gym, sueño e hidratación
+            </p>
+          </div>
+          <button
+            onClick={() => setNotificationsEnabled((v) => !v)}
+            className={cn(
+              "w-12 h-6 rounded-full transition-all relative",
+              notificationsEnabled ? "bg-accent" : "bg-[var(--border)]"
+            )}
+            role="switch"
+            aria-checked={notificationsEnabled}
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform",
+                notificationsEnabled ? "translate-x-6" : "translate-x-0.5"
+              )}
+            />
+          </button>
+        </div>
+
+        <SaveButton
+          onClick={handleSaveNotifications}
+          pending={isPending}
+          saved={notifSaved}
+        />
+      </SectionCard>
+
+      {/* ── WhatsApp ── */}
+      <SectionCard title="WhatsApp" icon={MessageCircle}>
+        <Field
+          label="Número de WhatsApp"
+          hint="Formato internacional, ej: +59892182606"
+        >
+          <input
+            type="tel"
+            value={whatsappNumber}
+            onChange={(e) => setWhatsappNumber(e.target.value)}
+            placeholder="+598..."
+            className="input w-full"
+          />
+        </Field>
+
+        <SaveButton
+          onClick={handleSaveWhatsApp}
+          pending={isPending}
+          saved={whatsappSaved}
+        />
+      </SectionCard>
+
+      {/* ── Tema ── */}
+      <SectionCard title="Apariencia" icon={Moon}>
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setTheme("dark")}
+            className={cn(
+              "flex flex-col items-center gap-2 p-4 rounded-xl border transition-all",
+              theme === "dark"
+                ? "border-accent bg-accent/10"
+                : "border-[var(--border)] hover:border-accent/40"
+            )}
+          >
+            <Moon className="w-5 h-5 text-[var(--text-primary)]" />
+            <span className="text-sm font-medium text-[var(--text-primary)]">
+              Oscuro
+            </span>
+            {theme === "dark" && (
+              <Check className="w-4 h-4 text-accent" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setTheme("light")}
+            className={cn(
+              "flex flex-col items-center gap-2 p-4 rounded-xl border transition-all",
+              theme === "light"
+                ? "border-accent bg-accent/10"
+                : "border-[var(--border)] hover:border-accent/40"
+            )}
+          >
+            <Sun className="w-5 h-5 text-[var(--text-primary)]" />
+            <span className="text-sm font-medium text-[var(--text-primary)]">
+              Claro
+            </span>
+            {theme === "light" && (
+              <Check className="w-4 h-4 text-accent" />
+            )}
+          </button>
+        </div>
+      </SectionCard>
+
+      {/* ── Notion ── */}
+      <SectionCard title="Notion" icon={Database} defaultOpen={false}>
+        <Field
+          label="Integration Token"
+          hint="Empieza con secret_ — se obtiene en notion.so/my-integrations"
+        >
+          <input
+            type="password"
+            value={notionToken}
+            onChange={(e) => setNotionToken(e.target.value)}
+            placeholder="secret_..."
+            className="input w-full font-mono text-sm"
+          />
+        </Field>
+
+        <Field
+          label="Database ID"
+          hint="ID de la base de datos de Notion (32 caracteres)"
+        >
+          <input
+            type="text"
+            value={notionDbId}
+            onChange={(e) => setNotionDbId(e.target.value)}
+            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            className="input w-full font-mono text-sm"
+          />
+        </Field>
+
+        <SaveButton
+          onClick={handleSaveNotion}
+          pending={isPending}
+          saved={notionSaved}
+        />
+      </SectionCard>
+
+      {/* ── Finanzas ── */}
+      <SectionCard title="Finanzas" icon={Wallet} defaultOpen={false}>
+        <div className="mt-4 space-y-3">
+          <div className="text-xs text-[var(--text-muted)] space-y-1">
+            <p>Conecta tu app de finanzas para ver el resumen en el dashboard.</p>
+            <a
+              href="https://finanzas-lemon.vercel.app/settings"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent inline-flex items-center gap-1 hover:underline"
+            >
+              Generar API key en finanzas-lemon.vercel.app
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+          <Field
+            label="API Key"
+            hint="Empieza con fin_ — se genera desde /settings en la app de finanzas"
+          >
+            <input
+              type="password"
+              value={financesApiKey}
+              onChange={(e) => setFinancesApiKey(e.target.value)}
+              placeholder="fin_..."
+              className="input w-full font-mono text-sm"
+            />
+          </Field>
+          <SaveButton
+            onClick={handleSaveFinances}
+            pending={isPending}
+            saved={financesSaved}
+          />
+        </div>
+      </SectionCard>
+
+      {/* ── Google Calendar ── */}
+      <SectionCard title="Google Calendar" icon={CalendarDays} defaultOpen={false}>
+        <div className="mt-4 space-y-3">
+          {/* Estado de conexión */}
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--surface-hover)]">
+            <div
+              className={cn(
+                "w-3 h-3 rounded-full",
+                calendarStatus.connected && calendarStatus.hasCalendarScope
+                  ? "bg-green-500"
+                  : calendarStatus.connected
+                  ? "bg-yellow-500"
+                  : "bg-red-500"
+              )}
+            />
+            <div>
+              <p className="text-sm font-medium text-[var(--text-primary)]">
+                {calendarStatus.connected && calendarStatus.hasCalendarScope
+                  ? "Conectado y activo"
+                  : calendarStatus.connected
+                  ? "Conectado sin permisos de Calendar"
+                  : "No conectado"}
+              </p>
+              <p className="text-xs text-[var(--text-muted)]">
+                {calendarStatus.connected && calendarStatus.hasCalendarScope
+                  ? "La app puede leer y crear eventos en tu Google Calendar"
+                  : calendarStatus.connected
+                  ? "Cerrá sesión y volvé a entrar para otorgar permisos de Calendar"
+                  : "Cerrá sesión y volvé a entrar para conectar Google Calendar"}
+              </p>
+            </div>
+          </div>
+
+          {/* Info adicional */}
+          {calendarStatus.connected && calendarStatus.hasCalendarScope && (
+            <div className="text-xs text-[var(--text-muted)] space-y-1">
+              <p>✓ El Morning Summary incluye tu agenda del día</p>
+              <p>✓ Smart habits de gym buscan huecos libres automáticamente</p>
+              <p>✓ Podés pedirle a HERMES que te agende eventos por WhatsApp</p>
+            </div>
+          )}
+
+          {(!calendarStatus.connected || !calendarStatus.hasCalendarScope) && (
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="w-full py-2 rounded-xl bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
+            >
+              Reconectar con Google
+            </button>
+          )}
+        </div>
+      </SectionCard>
+
+      {/* ── Danger Zone ── */}
+      <div className="card border border-red-500/20">
+        <button
+          className="w-full flex items-center justify-between p-4 text-left"
+          onClick={() => setShowDangerConfirm((v) => !v)}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
+              <AlertTriangle className="w-4 h-4 text-red-500" />
+            </div>
+            <span className="font-semibold text-red-500">Zona peligrosa</span>
+          </div>
+          {showDangerConfirm ? (
+            <ChevronUp className="w-4 h-4 text-[var(--text-muted)]" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
+          )}
+        </button>
+
+        {showDangerConfirm && (
+          <div className="px-4 pb-4 border-t border-red-500/20">
+            {dangerDone ? (
+              <div className="mt-4 flex items-center gap-2 text-green-500 text-sm">
+                <Check className="w-4 h-4" />
+                Datos del día borrados correctamente
+              </div>
+            ) : (
+              <>
+                <p className="mt-4 text-sm text-[var(--text-secondary)]">
+                  Esta acción borra todos los datos de{" "}
+                  <strong>hoy</strong>: sueño, workouts, comidas, agua y score.
+                  No se puede deshacer.
+                </p>
+
+                {dangerError && (
+                  <p className="mt-2 text-sm text-red-500">{dangerError}</p>
+                )}
+
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => setShowDangerConfirm(false)}
+                    className="flex-1 py-2 rounded-xl border border-[var(--border)] text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors flex items-center justify-center gap-1"
+                  >
+                    <X className="w-4 h-4" />
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleDeleteDayData}
+                    disabled={dangerPending}
+                    className="flex-1 py-2 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors flex items-center justify-center gap-1 disabled:opacity-60"
+                  >
+                    {dangerPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                    Borrar datos de hoy
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

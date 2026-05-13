@@ -20,6 +20,7 @@ import { db } from "@/lib/db";
 import { scoringAgent } from "@/agents/scoring";
 import { sleepAgent } from "@/agents/sleep";
 import { getNutritionSummaryText } from "@/lib/nutrition";
+import { getTodayEventsText } from "@/lib/calendar";
 
 // -------------------------------------------------------
 // Tipos para la Bible API
@@ -116,6 +117,7 @@ type MessageParts = {
   globalScore: number | null;
   sleepText: string | null;
   nutritionText: string | null;
+  agendaText: string | null;
   motivation: string;
 };
 
@@ -151,8 +153,14 @@ function buildMessage(parts: MessageParts): string {
     lines.push(parts.nutritionText);
   }
 
+  // 6. Agenda de hoy
+  if (parts.agendaText) {
+    lines.push("");
+    lines.push(parts.agendaText);
+  }
+
   // Separador antes del cierre si hay contenido antes
-  if (parts.sleepText || parts.nutritionText) {
+  if (parts.sleepText || parts.nutritionText || parts.agendaText) {
     lines.push("");
   }
 
@@ -213,12 +221,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     yesterday.setHours(0, 0, 0, 0);
 
     // --- 3. Recopilar todas las secciones en paralelo ---
-    const [verse, scoreText, sleepText, nutritionText] = await Promise.allSettled([
-      fetchVerse(),
-      scoringAgent.getSummaryText(user.id, yesterday),
-      sleepAgent.getSleepSummaryText(user.id),
-      getNutritionSummaryText(user.id, yesterday),
-    ]);
+    const [verse, scoreText, sleepText, nutritionText, agendaText] =
+      await Promise.allSettled([
+        fetchVerse(),
+        scoringAgent.getSummaryText(user.id, yesterday),
+        sleepAgent.getSleepSummaryText(user.id),
+        getNutritionSummaryText(user.id, yesterday),
+        getTodayEventsText(user.id),
+      ]);
 
     // Extraer valores con fallback null en caso de rechazo
     const verseValue =
@@ -229,6 +239,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       sleepText.status === "fulfilled" ? sleepText.value : null;
     const nutritionValue =
       nutritionText.status === "fulfilled" ? nutritionText.value : null;
+    const agendaValue =
+      agendaText.status === "fulfilled" ? agendaText.value : null;
 
     // Extraer score global del texto para pasar a la motivacion
     let globalScore: number | null = null;
@@ -247,6 +259,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       globalScore,
       sleepText: sleepValue,
       nutritionText: nutritionValue,
+      agendaText: agendaValue,
       motivation,
     });
 

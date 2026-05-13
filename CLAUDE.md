@@ -101,8 +101,8 @@ Cada sesión genera un `skill.md` propio y agrega su bloque a este `CLAUDE.md`.
 | 5 | CHEF — Nutrición + Ideas | `skills/nutrition-ideas.md` | ✅ Completo |
 | 6 | DIRECTOR — Proyectos | `skills/projects.md` | ✅ Completo |
 | 7 | HERMES — WhatsApp Partes 1+2+3 | `skills/whatsapp-orchestrator.md` | ✅ Completo |
-| — | CONECTOR — Integraciones | `skills/integrations.md` | 🔲 Pendiente |
-| — | Settings Page | — | 🔲 Pendiente |
+| — | CONECTOR — Integraciones | `skills/integrations.md` | ✅ Parcial (Calendar + Settings) |
+| — | Settings Page | — | ✅ Completo |
 
 ---
 
@@ -374,3 +374,91 @@ Cada sesión genera un `skill.md` propio y agrega su bloque a este `CLAUDE.md`.
 ---
 
 *Ultima actualizacion: Mayo 2026 - HERMES completo (Partes 1, 2 y 3). WhatsApp activo y Morning Summary configurado.*
+
+---
+
+## Bloque CONECTOR — Google Calendar + Settings Page
+
+> Sesion: Mayo 2026 — Agente CONECTOR (integraciones)
+
+### 1. Google Calendar
+
+**auth.config.ts:** Scopes agregados: `https://www.googleapis.com/auth/calendar.readonly` + `https://www.googleapis.com/auth/calendar.events`. Params: `access_type: "offline"`, `prompt: "consent"` para garantizar refresh_token siempre. IMPORTANTE: el usuario debe cerrar sesion y volver a entrar para que Google otorgue los nuevos scopes.
+
+**lib/calendar.ts:** Módulo completo de Google Calendar sin dependencias externas (fetch REST directo). Funciones: `getCalendarStatus` (verifica conexion y scopes), `getTodayEvents`, `getWeekEvents`, `createEvent`, `findFreeSlots` (busca huecos libres 6–22hs para smart habits de gym, max 3 slots de duracion configurable), `getTodayEventsText` (string para Morning Summary). Manejo automático de token refresh: lee tokens de la tabla `accounts` (guardados por NextAuth PrismaAdapter), refresca si expira en <60s, persiste nuevo token en DB.
+
+**agents/calendar/index.ts:** Reemplaza el stub vacio. Detecta 4 intenciones: `query_today`, `query_week`, `create_event`, `status`. `create_event`: usa Claude Haiku para parsear título + fecha + hora desde texto libre. Exporta `calendarAgent.getTodayEventsText()`, `calendarAgent.findFreeSlots()`, `calendarAgent.createEvent()` para uso de otros agentes.
+
+**API Routes (3):** `GET /api/calendar/today`, `GET /api/calendar/week`, `POST /api/calendar/event`.
+
+**lib/orchestrator.ts:** Módulo `calendar` agregado al clasificador y al switch de routing. Descripción: "El usuario habla de agenda, calendario, eventos, reuniones, o quiere agendar algo".
+
+**Morning Summary actualizado:** `getTodayEventsText(userId)` ahora incluido en el `Promise.allSettled`. Sección "📅 Agenda de hoy:" se muestra si hay eventos. Se omite silenciosamente si no hay eventos o Calendar no está conectado.
+
+**fitness-habits cron actualizado:** Cuando detecta desvío de gym, consulta `findFreeSlots(userId, today, 90)` para obtener un hueco libre de 90 min. Si hay hueco, propone al usuario por WhatsApp: "Tenés libre a las HH:MM-HH:MM. ¿Querés que te lo agendo?". Envía la notificación directamente via `sendTextMessage`. Si Calendar no está conectado, envía igualmente la notificación base sin sugerencia.
+
+**Variable de entorno:** `GOOGLE_CALENDAR_ID` (default: "primary"). No requiere variables nuevas — usa `AUTH_GOOGLE_ID` y `AUTH_GOOGLE_SECRET` ya existentes para refresh de tokens.
+
+**Sin cambios al schema de Prisma** — los tokens ya se guardan en la tabla `accounts` por NextAuth PrismaAdapter.
+
+---
+
+### 2. Settings Page
+
+**app/(app)/settings/page.tsx:** Reemplaza el stub. Server Component que carga en paralelo `UserSettings` de la DB y `getCalendarStatus(userId)`. Pasa datos iniciales a `SettingsClient`.
+
+**components/settings/SettingsClient.tsx:** Client Component con 7 secciones colapsables:
+
+| Sección | Campos | Comportamiento |
+|---------|--------|----------------|
+| Perfil | Foto (imagen Google), nombre, email | Read-only desde NextAuth + botón logout |
+| Hábitos | `expectedSleepTime`, `expectedWakeTime`, `expectedGymTime`, `gymDays` (toggles L-D), `dailyWaterGoalThermos` (slider) | `PATCH /api/settings` |
+| Notificaciones | `notificationsEnabled` (toggle) | `PATCH /api/settings` |
+| WhatsApp | `whatsappNumber` | `PATCH /api/settings` |
+| Apariencia | Dark / Light mode | `useTheme` de next-themes (instantáneo, sin API) |
+| Notion | `notionToken`, `notionDbId` | `PATCH /api/settings`, tipo password oculto |
+| Google Calendar | Estado de conexión (verde/amarillo/rojo) + info de scopes | Botón "Reconectar" si falta scope |
+| Danger Zone | Borrar datos del día | Confirmación explícita, `DELETE /api/settings/day-data` |
+
+**API Routes (2):** `GET+PATCH /api/settings` (upsert de UserSettings, solo campos permitidos por whitelist), `DELETE /api/settings/day-data` (requiere `{ confirm: true }` en body, borra SleepLog+Workouts+Meals+WaterLog+DailyScore del día).
+
+**Sin cambios al schema de Prisma** — todos los campos ya existian en UserSettings desde Sesion 1.
+
+---
+
+### 3. Integración Finanzas
+
+**API:** `finanzas-lemon.vercel.app` — Bearer token `fin_xxx...` guardado en `UserSettings.financesApiKey`. CORS ya habilitado para `app-personal-ten.vercel.app`. La API key nunca viaja al cliente — todos los calls son server-side vía proxy routes.
+
+**lib/finances.ts:** Cliente completo. Funciones: `getFinancesApiKey` (lee de UserSettings, fallback a env `FINANCES_API_KEY`), `getMonthlyReport`, `getRecentTransactions`, `createTransaction`, `getCards`, `getBalances`, `getCategories`, `getFinancesDashboard` (batch compuesto para la página), `getFinancesSummaryText` (para WhatsApp/Morning Summary).
+
+**agents/finances/index.ts:** Reemplaza el stub. Detecta 5 intenciones: `query_spending`, `query_balance`, `query_report`, `create_expense`, `create_income`. Parseo de transacciones en lenguaje natural via Claude Haiku. `checkSpendingAlerts`: alerta si los gastos subieron >20% vs mes anterior.
+
+**API Proxy Routes (2):** `GET /api/finances/summary` (dashboard completo), `GET+POST /api/finances/transactions`.
+
+**Componentes:** `FinancesModuleClient` — balance del mes (ingresos/gastos/balance con trend vs mes anterior), balances por tarjeta, últimas 8 transacciones, historial 6 meses con mini barras. Botón refresh + link directo a `finanzas-lemon.vercel.app`.
+
+**Página `/finances`:** Server Component con carga inicial de `getFinancesDashboard`. Estado vacío si no hay API key — con link a Ajustes.
+
+**lib/orchestrator.ts:** Módulo `finances` agregado. Descripción: "El usuario habla de dinero, gastos, ingresos, balance, plata, compras, pagos o finanzas".
+
+**Settings:** Sección "Finanzas" agregada al SettingsClient con campo API key (tipo password). `PATCH /api/settings` actualizado para aceptar `financesApiKey`.
+
+**Schema Prisma:** +`financesApiKey String?` en UserSettings. SQL para aplicar en Supabase:
+```sql
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS "financesApiKey" TEXT;
+```
+
+**Variables de entorno:** `FINANCES_APP_URL` (default: `https://finanzas-lemon.vercel.app`), `FINANCES_API_KEY` (fallback global, recomendado configurar por usuario en Settings).
+
+---
+
+### Pendiente
+
+| Integración | Estado | Nota |
+|-------------|--------|------|
+| Lumina | 🔲 Pendiente | Sin API disponible aún — dejar para sesión futura |
+
+---
+
+*Ultima actualizacion: Mayo 2026 - CONECTOR: Google Calendar + Settings Page + Finanzas completados. Lumina pendiente.*

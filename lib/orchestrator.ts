@@ -13,6 +13,8 @@
 //   projects   — proyectos personales, tareas, Notion
 //   ideas      — captura y exploración de ideas
 //   scoring    — score diario por módulo
+//   calendar   — agenda, eventos, Google Calendar
+//   finances   — gastos, ingresos, balance, transacciones
 //   general    — ayuda, saludos, preguntas generales
 
 import { sleepAgent } from "@/agents/sleep";
@@ -21,6 +23,8 @@ import { processNutritionMessage } from "@/agents/nutrition";
 import { processProjectsMessage } from "@/agents/projects";
 import { processIdeasMessage } from "@/agents/ideas";
 import { scoringAgent } from "@/agents/scoring";
+import { calendarAgent } from "@/agents/calendar";
+import { financesAgent } from "@/agents/finances";
 
 type Module =
   | "sleep"
@@ -29,6 +33,8 @@ type Module =
   | "projects"
   | "ideas"
   | "scoring"
+  | "calendar"
+  | "finances"
   | "general";
 
 const MODULE_DESCRIPTIONS: Record<Module, string> = {
@@ -38,6 +44,8 @@ const MODULE_DESCRIPTIONS: Record<Module, string> = {
   projects:  "El usuario habla de proyectos, tareas, trabajo, Notion, pendientes o deadlines",
   ideas:     "El usuario quiere capturar, anotar o explorar una idea, pensamiento u ocurrencia",
   scoring:   "El usuario pregunta por su score, puntaje, rendimiento o estadísticas del día",
+  calendar:  "El usuario habla de agenda, calendario, eventos, reuniones, o quiere agendar algo",
+  finances:  "El usuario habla de dinero, gastos, ingresos, balance, plata, compras, pagos o finanzas",
   general:   "Saludos, preguntas generales, ayuda, o mensajes que no encajan en otro módulo",
 };
 
@@ -147,6 +155,14 @@ export async function orchestrate(userId: string, text: string): Promise<string>
       }
       case "scoring": {
         const result = await scoringAgent.process(input);
+        return result.message;
+      }
+      case "calendar": {
+        const result = await calendarAgent.process(input);
+        return result.message;
+      }
+      case "finances": {
+        const result = await financesAgent.process(input);
         return result.message;
       }
       case "general":
