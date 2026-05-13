@@ -23,51 +23,6 @@ import { checkGarminStatus, fetchGarminActivities } from "@/lib/garmin";
 import { calcFitnessScoreForDate } from "@/lib/scoring";
 import { detectIntentAI } from "@/lib/nlp";
 
-// ─── Tipos de intención ───────────────────────────────────────────────────────
-
-type FitnessIntent =
-  | "gym_start"       // "fui al gym", "hice gym"
-  | "gym_log"         // "press plano 100kg 4x3", "hice curl 12kg 3 series"
-  | "cardio_log"      // "corrí 5km 30min", "nadé 40 min"
-  | "query"           // "¿cuánto hice esta semana?", "¿mi score?"
-  | "sync_garmin"     // "sincronizar garmin"
-  | "unknown";
-
-function detectIntent(text: string): FitnessIntent {
-  const lower = text.toLowerCase();
-
-  // Garmin sync
-  if (/garmin|sincroniz|sync/i.test(lower)) return "sync_garmin";
-
-  // Query
-  if (/cuánto|cuanto|score|historial|semana|esta semana|resumen|qué hice|que hice/i.test(lower))
-    return "query";
-
-  // Cardio patterns
-  if (
-    /corr[íi]|run|running|nadar|nadé|natación|bici|ciclismo|caminé|caminata|trote/i.test(lower)
-  )
-    return "cardio_log";
-
-  // Gym start (no specific exercise)
-  if (/fui al gym|hice gym|empecé gym|empecé el gym|fui a gym/i.test(lower))
-    return "gym_start";
-
-  // Gym log — has numbers + exercise terms
-  if (
-    /\d/.test(lower) &&
-    /(kg|rep|serie|press|curl|sentadil|squat|peso|barra|mancuerna|pull|push|bench|rdl|hip thrust|deadlift|extension|elevacion|remo)/i.test(
-      lower
-    )
-  )
-    return "gym_log";
-
-  // Fallback — if mentions gym
-  if (/gym|gimnasio/i.test(lower)) return "gym_start";
-
-  return "unknown";
-}
-
 // ─── Parser de actividad cardio desde texto ──────────────────────────────────
 
 function parseCardioFromText(text: string): {

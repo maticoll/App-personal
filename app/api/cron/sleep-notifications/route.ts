@@ -1,16 +1,15 @@
 // ============================================================
 // GET /api/cron/sleep-notifications
-// Cron diario — recordatorios y alertas de sueño
+// Cron diario — recordatorios y alertas de sueño vía WhatsApp
 // Schedule vercel.json: 0 22 * * * (22:00 hs todos los días)
-// Para mayor frecuencia configurar en cron-job.org (ver CRON_SETUP.md)
-// Protección: Authorization: Bearer $CRON_SECRET o x-cron-secret: $CRON_SECRET
-//
-// TODO: Sesión 8 — conectar con WhatsApp orquestrador para enviar los mensajes
+// Para mayor frecuencia configurar en cron-job.org
+// Protección: Authorization: Bearer $CRON_SECRET o ?secret=$CRON_SECRET
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyCronSecret } from "@/lib/cron";
+import { sendTextMessage } from "@/lib/whatsapp";
 
 export async function GET(req: NextRequest) {
   if (!verifyCronSecret(req)) {
@@ -18,11 +17,8 @@ export async function GET(req: NextRequest) {
   }
 
   const now = new Date();
-  const notifications: Array<{
-    userId: string;
-    type: string;
-    message: string;
-  }> = [];
+  const sent: string[] = [];
+  const errors: string[] = [];
 
   try {
     const users = await db.userSettings.findMany({
@@ -36,6 +32,10 @@ export async function GET(req: NextRequest) {
     });
 
     for (const user of users) {
+      if (!user.whatsappNumber) continue;
+
+      const notifications: Array<{ type: string; message: string }> = [];
+
       // --- Notificación 1: Recordatorio de dormir ---
       if (user.expectedSleepTime) {
         const [hours, minutes] = user.expectedSleepTime.split(":").map(Number);
@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
         const diffMs = expectedTime.getTime() - now.getTime();
         const diffMin = diffMs / (1000 * 60);
 
+        // Avisar en la ventana de 0–15 min antes de la hora esperada
         if (diffMin >= 0 && diffMin <= 15) {
           const hasTodaySleep = await db.sleepLog.findFirst({
             where: {
@@ -55,7 +56,6 @@ export async function GET(req: NextRequest) {
 
           if (!hasTodaySleep) {
             notifications.push({
-              userId: user.userId,
               type: "bedtime_reminder",
               message: `🌙 Es casi hora de dormir (${user.expectedSleepTime}). Que descanses bien!`,
             });
@@ -80,21 +80,40 @@ export async function GET(req: NextRequest) {
 
         if (pendingSleep) {
           notifications.push({
-            userId: user.userId,
             type: "wake_reminder",
-            message: `☀️ Buenos días! No olvidés registrar que te despertaste para completar tu sueño de anoche.`,
+            message: `☀️ Buenos dias! No olvides registrar que te despertaste para completar tu sueno de anoche.`,
           });
+        }
+      }
+
+      // --- Enviar notificaciones por WhatsApp ---
+      for (const notification of notifications) {
+        try {
+          await sendTextMessage(user.whatsappNumber, notification.message);
+          sent.push(`${user.userId}:${notification.type}`);
+          console.log(
+            `[sleep-notifications] Enviado ${notification.type} a userId=${user.userId}`
+          );
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          errors.push(`${user.userId}:${notification.type} → ${errMsg}`);
+          console.error(
+            `[sleep-notifications] Error enviando ${notification.type} a userId=${user.userId}:`,
+            err
+          );
         }
       }
     }
 
-    // TODO: Sesión 8 — iterar notifications y enviar via orquestrador WhatsApp
+    console.log(
+      `[sleep-notifications] Resumen: ${sent.length} enviadas, ${errors.length} errores`
+    );
 
-    console.log(`[sleep-notifications cron] ${notifications.length} notificaciones generadas`);
     return NextResponse.json({
       ok: true,
-      message: `${notifications.length} notificaciones generadas`,
-      notifications,
+      sent: sent.length,
+      errors: errors.length > 0 ? errors : undefined,
+      detail: sent,
     });
   } catch (error) {
     console.error("[sleep-notifications cron] Error:", error);

@@ -37,15 +37,6 @@ import {
 import { formatDuration, formatTime } from "@/lib/utils";
 import { detectIntentAI, detectPeriod } from "@/lib/nlp";
 
-// --- Tipos de intención ---
-
-type SleepIntent =
-  | { type: "bed"; time?: Date; flexible?: boolean }
-  | { type: "wake"; time?: Date }
-  | { type: "query"; period: "today" | "yesterday" | "week" }
-  | { type: "sync" }
-  | { type: "unknown" };
-
 // --- Agente principal ---
 
 export const sleepAgent = {
@@ -345,88 +336,6 @@ export const sleepAgent = {
     return `🌙 Son las ${settings.expectedSleepTime}, hora de dormir! No te olvides de registrarlo cuando vayas a la cama.`;
   },
 };
-
-// --- Detección de intención ---
-
-/**
- * Analiza el texto del mensaje y detecta la intención de sueño.
- * Parsing básico basado en keywords — el orquestrador ya pre-filtró
- * que este mensaje es sobre sueño.
- */
-function detectSleepIntent(message: string): SleepIntent {
-  const msg = message.toLowerCase().trim();
-
-  // --- Flexible / salida ---
-  if (
-    msg.includes("salgo") ||
-    msg.includes("no hay hora fija") ||
-    msg.includes("te aviso") ||
-    msg.includes("hoy no duermo") ||
-    msg.includes("flexible")
-  ) {
-    return { type: "bed", flexible: true };
-  }
-
-  // --- Hora de despertar ---
-  if (
-    msg.includes("desperté") ||
-    msg.includes("desperte") ||
-    msg.includes("me levanté") ||
-    msg.includes("me levante") ||
-    msg.includes("buenos días") ||
-    msg.includes("buen dia") ||
-    msg.includes("ya estoy despierto") ||
-    msg.includes("me desperté")
-  ) {
-    const time = extractTime(msg);
-    return { type: "wake", time };
-  }
-
-  // --- Hora de dormir ---
-  if (
-    msg.includes("voy a dormir") ||
-    msg.includes("me voy a dormir") ||
-    msg.includes("me duermo") ||
-    msg.includes("buenas noches") ||
-    msg.includes("a dormir") ||
-    msg.includes("me dormí") ||
-    msg.includes("me dormi") ||
-    msg.includes("hora de dormir")
-  ) {
-    const time = extractTime(msg);
-    return { type: "bed", time };
-  }
-
-  // --- Sync ---
-  if (
-    msg === "sync" ||
-    msg.includes("sincronizar") ||
-    msg.includes("sincronizá") ||
-    msg.includes("sync garmin") ||
-    msg.includes("actualizar garmin")
-  ) {
-    return { type: "sync" };
-  }
-
-  // --- Consultas ---
-  if (msg.includes("cuánto dormí") || msg.includes("cuanto dormi")) {
-    if (msg.includes("semana") || msg.includes("esta semana")) {
-      return { type: "query", period: "week" };
-    }
-    if (msg.includes("ayer") || msg.includes("anoche")) {
-      return { type: "query", period: "yesterday" };
-    }
-    return { type: "query", period: "today" };
-  }
-
-  if (msg.includes("mi sueño") || msg.includes("sueño de")) {
-    if (msg.includes("semana")) return { type: "query", period: "week" };
-    if (msg.includes("ayer")) return { type: "query", period: "yesterday" };
-    return { type: "query", period: "today" };
-  }
-
-  return { type: "unknown" };
-}
 
 /**
  * Extraer hora de un mensaje de texto.
