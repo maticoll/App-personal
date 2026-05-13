@@ -17,9 +17,10 @@ export default auth((req) => {
   const isApiAuthRoute = nextUrl.pathname.startsWith("/api/auth");
   const isApiWebhook = nextUrl.pathname.startsWith("/api/webhooks");
   const isWhatsAppWebhook = nextUrl.pathname.startsWith("/api/whatsapp/webhook");
+  const isCronRoute = nextUrl.pathname.startsWith("/api/cron");
 
-  // Dejar pasar rutas de auth y webhooks publicos
-  if (isApiAuthRoute || isApiWebhook || isWhatsAppWebhook) {
+  // Dejar pasar rutas de auth, webhooks publicos y crons
+  if (isApiAuthRoute || isApiWebhook || isWhatsAppWebhook || isCronRoute) {
     return undefined;
   }
 
