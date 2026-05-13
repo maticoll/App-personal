@@ -73,6 +73,7 @@ type PatchBody = Partial<{
   language: string;
   notionToken: string | null;
   notionDbId: string | null;
+  financesApiKey: string | null;
 }>;
 
 export async function PATCH(req: NextRequest) {
@@ -101,6 +102,7 @@ export async function PATCH(req: NextRequest) {
     "language",
     "notionToken",
     "notionDbId",
+    "financesApiKey",
   ];
 
   const data: Record<string, unknown> = {};
