@@ -21,6 +21,8 @@ export default async function IdeasPage() {
     getAllIdeas(userId).catch(() => []),
     getIdeasStats(userId).catch(() => ({
       total: 0,
+      active: 0,
+      done: 0,
       thisWeek: 0,
       thisMonth: 0,
       topTags: [],

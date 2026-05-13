@@ -1,12 +1,12 @@
 // ============================================================
 // GET    /api/ideas/[id]
-// PATCH  /api/ideas/[id]  { title?, content?, tags? }
+// PATCH  /api/ideas/[id]  { title?, content?, tags?, priority?, status?, cycleStatus? }
 // DELETE /api/ideas/[id]
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getIdea, updateIdea, deleteIdea } from "@/lib/ideas";
+import { getIdea, updateIdea, deleteIdea, cycleIdeaStatus } from "@/lib/ideas";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -34,17 +34,29 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const { id } = await params;
   const body = await req.json();
-  const { title, content, tags } = body;
-
-  if (!title && !content && !tags) {
-    return NextResponse.json(
-      { error: "Se requiere al menos uno: title, content, tags" },
-      { status: 400 }
-    );
-  }
+  const { title, content, tags, priority, status, cycleStatus } = body;
 
   try {
-    const updated = await updateIdea(session.user.id, id, { title, content, tags });
+    // Cycling rápido: solo avanza al siguiente estado
+    if (cycleStatus === true) {
+      const updated = await cycleIdeaStatus(session.user.id, id);
+      return NextResponse.json(updated);
+    }
+
+    if (!title && !content && !tags && !priority && !status) {
+      return NextResponse.json(
+        { error: "Se requiere al menos un campo para actualizar" },
+        { status: 400 }
+      );
+    }
+
+    const updated = await updateIdea(session.user.id, id, {
+      title,
+      content,
+      tags,
+      priority,
+      status,
+    });
     return NextResponse.json(updated);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido";

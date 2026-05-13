@@ -54,8 +54,12 @@ export async function processIdeasMessage(userId: string, text: string): Promise
     if (intent === "query") {
       const [recent, stats] = await Promise.all([getRecentIdeas(userId, 5), getIdeasStats(userId)]);
       if (stats.total === 0) return "Todavia no tenes ideas guardadas. Cuando se te ocurra algo, escribi idea: y lo capturo.";
-      const lines = [`Tenes ${stats.total} ideas (${stats.thisWeek} esta semana)`, "", "Las 5 mas recientes:"];
-      recent.forEach(idea => lines.push(`- ${idea.title ?? "Sin titulo"}`));
+      const lines = [
+        `Tenes ${stats.total} ideas: ${stats.active ?? stats.total} activas, ${stats.done ?? 0} hechas`,
+        "",
+        "Las 5 mas recientes:",
+      ];
+      recent.forEach(idea => lines.push(`- ${idea.title ?? "Sin titulo"} (${idea.status})`));
       if (stats.topTags.length > 0) lines.push(`\nTop tags: ${stats.topTags.map((t: string) => "#" + t).join(" ")}`);
       return lines.join("\n");
     }

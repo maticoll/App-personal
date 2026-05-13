@@ -457,8 +457,40 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS "financesApiKey" TEXT;
 
 | Integración | Estado | Nota |
 |-------------|--------|------|
-| Lumina | 🔲 Pendiente | Sin API disponible aún — dejar para sesión futura |
+| Lumina (API externa) | 🔲 Pendiente | Sin API disponible — Ideas ya reemplaza funcionalmente a Lumina en la app |
 
 ---
 
-*Ultima actualizacion: Mayo 2026 - CONECTOR: Google Calendar + Settings Page + Finanzas completados. Lumina pendiente.*
+*Ultima actualizacion: Mayo 2026 - CONECTOR: Google Calendar + Settings Page + Finanzas completados. Ideas refactorizado estilo Lumina.*
+
+---
+
+## Bloque IDEAS — Refactor Lumina-style
+
+> Sesion: Mayo 2026 — Reemplazo de Lumina por módulo de Ideas nativo con UX equivalente
+
+**Motivación:** La app de Lumina usaba localStorage en HTML standalone. Se replicó su UX dentro del módulo `/ideas` de la app, conectado a Supabase, conservando el agente de WhatsApp existente.
+
+**Schema Prisma (cambios):** +`priority String @default("media")` y +`status String @default("idea")` en modelo `Idea`. SQL para aplicar en Supabase:
+```sql
+ALTER TABLE ideas ADD COLUMN IF NOT EXISTS "priority" TEXT NOT NULL DEFAULT 'media';
+ALTER TABLE ideas ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'idea';
+```
+
+**lib/ideas.ts (actualización):** Nuevos tipos: `IdeaPriority` ("baja" | "media" | "alta" | "urgente"), `IdeaStatus` ("idea" | "progreso" | "hecha"). `IdeasStats` ahora incluye `active` y `done`. Nueva función `cycleIdeaStatus`. `captureIdeaNLP` acepta `options.priority`. `getAllIdeas` filtra por `status`. `updateIdea` acepta `priority` y `status`.
+
+**API Routes (actualizaciones):** `GET /api/ideas` acepta `?status=` como filtro adicional. `POST /api/ideas` acepta `priority` en el body. `PATCH /api/ideas/[id]` acepta `priority`, `status`, y `cycleStatus: true` para ciclar automáticamente (idea → progreso → hecha → idea).
+
+**components/ideas/IdeasModuleClient.tsx (reescritura completa):** Vista única sin tabs. Estructura: stats row (3 pills: Total/Activas/Hechas) + capture form con selector de prioridad + filter tabs (Todas/Ideas/En progreso/Hechas) + search + tag pills + lista de cards. Cada card muestra: dot de prioridad (colores: gris/amber/naranja/rojo), título, tags clickeables, badge de status, badge de prioridad. Al expandir: texto completo + botón de cyclear status (con spinner) + fecha + editar inline + borrar. Optimistic updates en todas las acciones.
+
+**Colores de prioridad:** baja → slate, media → amber, alta → orange, urgente → red.
+
+**Agente de ideas (actualización):** Respuesta a `query` ahora muestra `active` y `done` stats, e incluye el `status` de cada idea reciente.
+
+**Sin cambios al orquestrador** — el módulo `ideas` ya estaba registrado.
+
+**Archivos old (no importados, dead code):** `components/ideas/IdeaCaptureForm.tsx`, `IdeaCard.tsx`, `IdeaDetail.tsx`, `IdeasGrid.tsx`, `IdeasStats.tsx`, `TagFilter.tsx` — pueden borrarse en cleanup futuro.
+
+---
+
+*Ultima actualizacion: Mayo 2026 - Ideas refactorizado con UX estilo Lumina. priority + status nativos en DB.*

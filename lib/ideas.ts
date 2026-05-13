@@ -1,6 +1,5 @@
 // ============================================================
-// lib/ideas.ts — Módulo de Ideas
-// Sesión 5 — Nutrición + Ideas
+// lib/ideas.ts — Módulo de Ideas (con priority + status)
 // ============================================================
 
 import { db } from "@/lib/db";
@@ -9,12 +8,17 @@ import { db } from "@/lib/db";
 // Tipos
 // -------------------------------------------------------
 
+export type IdeaPriority = "baja" | "media" | "alta" | "urgente";
+export type IdeaStatus = "idea" | "progreso" | "hecha";
+
 export type IdeaWithMeta = {
   id: string;
   rawText: string;
-  cleanedText: string | null; // texto estructurado por IA
+  cleanedText: string | null;
   title: string | null;
   tags: string[];
+  priority: IdeaPriority;
+  status: IdeaStatus;
   luminaId: string | null;
   wordCount: number;
   createdAt: Date;
@@ -23,6 +27,8 @@ export type IdeaWithMeta = {
 
 export type IdeasStats = {
   total: number;
+  active: number;    // idea + progreso
+  done: number;      // hecha
   thisWeek: number;
   thisMonth: number;
   topTags: string[];
@@ -30,9 +36,23 @@ export type IdeasStats = {
 
 export type CapturedIdea = {
   title: string;
-  content: string; // texto expandido por IA (mapea a cleanedText en DB)
+  content: string;
   tags: string[];
 };
+
+// -------------------------------------------------------
+// Status cycling
+// -------------------------------------------------------
+
+const STATUS_CYCLE: Record<IdeaStatus, IdeaStatus> = {
+  idea: "progreso",
+  progreso: "hecha",
+  hecha: "idea",
+};
+
+export function nextStatus(current: IdeaStatus): IdeaStatus {
+  return STATUS_CYCLE[current] ?? "idea";
+}
 
 // -------------------------------------------------------
 // Helpers
@@ -44,13 +64,20 @@ function toIdeaWithMeta(idea: {
   cleanedText: string | null;
   title: string | null;
   tags: string[];
+  priority: string;
+  status: string;
   luminaId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): IdeaWithMeta {
   const text = idea.cleanedText ?? idea.rawText;
   const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
-  return { ...idea, wordCount };
+  return {
+    ...idea,
+    priority: (idea.priority as IdeaPriority) ?? "media",
+    status: (idea.status as IdeaStatus) ?? "idea",
+    wordCount,
+  };
 }
 
 // -------------------------------------------------------
@@ -59,14 +86,13 @@ function toIdeaWithMeta(idea: {
 
 export async function getAllIdeas(
   userId: string,
-  options?: { tag?: string; search?: string }
+  options?: { tag?: string; search?: string; status?: IdeaStatus }
 ): Promise<IdeaWithMeta[]> {
   const ideas = await db.idea.findMany({
     where: {
       userId,
-      ...(options?.tag
-        ? { tags: { has: options.tag } }
-        : {}),
+      ...(options?.tag ? { tags: { has: options.tag } } : {}),
+      ...(options?.status ? { status: options.status } : {}),
       ...(options?.search
         ? {
             OR: [
@@ -77,7 +103,10 @@ export async function getAllIdeas(
           }
         : {}),
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [
+      // urgente primero, luego por createdAt
+      { createdAt: "desc" },
+    ],
   });
 
   return ideas.map(toIdeaWithMeta);
@@ -163,7 +192,8 @@ Estructurá esta idea. Devolvé ÚNICAMENTE un objeto JSON con exactamente estas
 
 export async function captureIdeaNLP(
   userId: string,
-  rawText: string
+  rawText: string,
+  options?: { priority?: IdeaPriority }
 ): Promise<IdeaWithMeta> {
   let structured: CapturedIdea = {
     title: rawText.slice(0, 80),
@@ -175,7 +205,6 @@ export async function captureIdeaNLP(
     structured = await callClaudeForIdea(rawText);
   } catch (err) {
     console.error("[ideas] Error estructurando idea con Claude:", err);
-    // Guardar igual con el texto original si falla Claude
   }
 
   const idea = await db.idea.create({
@@ -185,8 +214,8 @@ export async function captureIdeaNLP(
       cleanedText: structured.content,
       title: structured.title,
       tags: structured.tags,
-      // TODO: Sesión 7 — sync con Lumina API
-      // luminaId: await syncToLumina(structured)
+      priority: options?.priority ?? "media",
+      status: "idea",
     },
   });
 
@@ -200,7 +229,13 @@ export async function captureIdeaNLP(
 export async function updateIdea(
   userId: string,
   ideaId: string,
-  data: { title?: string; content?: string; tags?: string[] }
+  data: {
+    title?: string;
+    content?: string;
+    tags?: string[];
+    priority?: IdeaPriority;
+    status?: IdeaStatus;
+  }
 ): Promise<IdeaWithMeta> {
   const idea = await db.idea.findUnique({ where: { id: ideaId } });
   if (!idea || idea.userId !== userId) {
@@ -213,7 +248,33 @@ export async function updateIdea(
       ...(data.title !== undefined ? { title: data.title } : {}),
       ...(data.content !== undefined ? { cleanedText: data.content } : {}),
       ...(data.tags !== undefined ? { tags: data.tags } : {}),
+      ...(data.priority !== undefined ? { priority: data.priority } : {}),
+      ...(data.status !== undefined ? { status: data.status } : {}),
     },
+  });
+
+  return toIdeaWithMeta(updated);
+}
+
+// -------------------------------------------------------
+// Ciclar estado (idea → progreso → hecha → idea)
+// -------------------------------------------------------
+
+export async function cycleIdeaStatus(
+  userId: string,
+  ideaId: string
+): Promise<IdeaWithMeta> {
+  const idea = await db.idea.findUnique({ where: { id: ideaId } });
+  if (!idea || idea.userId !== userId) {
+    throw new Error("Idea no encontrada o sin permiso");
+  }
+
+  const currentStatus = (idea.status as IdeaStatus) ?? "idea";
+  const newStatus = nextStatus(currentStatus);
+
+  const updated = await db.idea.update({
+    where: { id: ideaId },
+    data: { status: newStatus },
   });
 
   return toIdeaWithMeta(updated);
@@ -240,17 +301,16 @@ export async function getIdeasStats(userId: string): Promise<IdeasStats> {
   const startOfWeek = new Date(now);
   startOfWeek.setDate(now.getDate() - now.getDay());
   startOfWeek.setHours(0, 0, 0, 0);
-
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [total, thisWeek, thisMonth, allIdeas] = await Promise.all([
+  const [total, done, thisWeek, thisMonth, allIdeas] = await Promise.all([
     db.idea.count({ where: { userId } }),
+    db.idea.count({ where: { userId, status: "hecha" } }),
     db.idea.count({ where: { userId, createdAt: { gte: startOfWeek } } }),
     db.idea.count({ where: { userId, createdAt: { gte: startOfMonth } } }),
     db.idea.findMany({ where: { userId }, select: { tags: true } }),
   ]);
 
-  // Top tags: contar frecuencia
   const tagCount = new Map<string, number>();
   for (const idea of allIdeas) {
     for (const tag of idea.tags) {
@@ -262,7 +322,14 @@ export async function getIdeasStats(userId: string): Promise<IdeasStats> {
     .slice(0, 5)
     .map(([tag]) => tag);
 
-  return { total, thisWeek, thisMonth, topTags };
+  return {
+    total,
+    active: total - done,
+    done,
+    thisWeek,
+    thisMonth,
+    topTags,
+  };
 }
 
 // -------------------------------------------------------
@@ -279,9 +346,6 @@ export async function getIdeasActivityForDate(
   end.setHours(23, 59, 59, 999);
 
   return db.idea.count({
-    where: {
-      userId,
-      createdAt: { gte: d, lte: end },
-    },
+    where: { userId, createdAt: { gte: d, lte: end } },
   });
 }

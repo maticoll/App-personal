@@ -373,11 +373,17 @@ model Idea {
   id          String   @id @default(cuid())
   userId      String
   rawText     String   // Texto original tal como llegó
-  cleanedText String?  // Texto limpiado/estructurado por IA (TODO: Sesión 5)
+  cleanedText String?  // Texto limpiado/estructurado por IA
   title       String?  // Título generado por IA
   tags        String[] // Tags generados por IA
 
-  // Integración Lumina (TODO: Sesión 5)
+  // Prioridad: "baja" | "media" | "alta" | "urgente"
+  priority    String   @default("media")
+
+  // Estado: "idea" | "progreso" | "hecha"
+  status      String   @default("idea")
+
+  // Integración Lumina (pendiente)
   luminaId String? @unique
 
   createdAt DateTime @default(now())
