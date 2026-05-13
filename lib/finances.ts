@@ -88,7 +88,6 @@ export async function getFinancesApiKey(userId: string): Promise<string | null> 
     select: { financesApiKey: true } as { financesApiKey: true },
   }).catch(() => null);
 
-  // @ts-expect-error — campo agregado vía SQL, puede no estar en los tipos generados todavía
   const userKey = settings?.financesApiKey as string | null | undefined;
   return userKey ?? process.env.FINANCES_API_KEY ?? null;
 }
