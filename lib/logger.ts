@@ -38,7 +38,7 @@ function log(level: LogLevel, source: string, data: Record<string, unknown>): vo
   const client = getClient();
   if (client) {
     const dataset = process.env.AXIOM_DATASET!;
-    void client.ingest(dataset, [payload]).catch(() => {
+    void Promise.resolve().then(() => client.ingest(dataset, [payload])).catch(() => {
       // Silencioso — nunca romper la app por un fallo de logging
     });
   }
