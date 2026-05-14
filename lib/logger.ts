@@ -1,41 +1,25 @@
 // ============================================================
-// Logger — Axiom via REST API
+// Logger — Axiom via @axiomhq/js (SDK oficial)
 // Fire-and-forget: nunca bloquea el flujo principal
 // Uso: logger.info('whatsapp', { event: 'message_received', from })
 // ============================================================
 
-type LogLevel = "info" | "warn" | "error";
+import { Axiom } from "@axiomhq/js";
 
-interface LogEvent {
-  _time: string;
-  level: LogLevel;
-  source: string;
-  env: string;
-  [key: string]: unknown;
-}
+let axiomClient: Axiom | null = null;
 
-async function send(events: LogEvent[]): Promise<void> {
-  const token = process.env.AXIOM_TOKEN;
-  const dataset = process.env.AXIOM_DATASET;
-
-  if (!token || !dataset) return; // Sin config → silencioso
-
-  try {
-    await fetch(`https://api.axiom.co/v1/datasets/${dataset}/ingest`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(events),
-    });
-  } catch {
-    // No propagar errores del logger — nunca romper la app por logs
+function getClient(): Axiom | null {
+  if (!process.env.AXIOM_TOKEN || !process.env.AXIOM_DATASET) return null;
+  if (!axiomClient) {
+    axiomClient = new Axiom({ token: process.env.AXIOM_TOKEN });
   }
+  return axiomClient;
 }
+
+type LogLevel = "debug" | "info" | "warn" | "error";
 
 function log(level: LogLevel, source: string, data: Record<string, unknown>): void {
-  const event: LogEvent = {
+  const payload = {
     _time: new Date().toISOString(),
     level,
     source,
@@ -43,16 +27,26 @@ function log(level: LogLevel, source: string, data: Record<string, unknown>): vo
     ...data,
   };
 
-  // Console local siempre (Vercel también los captura)
-  const consoleFn = level === "error" ? console.error : level === "warn" ? console.warn : console.log;
+  // Console local siempre (Vercel también los muestra en su dashboard)
+  const consoleFn =
+    level === "error" ? console.error
+    : level === "warn" ? console.warn
+    : console.log;
   consoleFn(`[${source}]`, data);
 
-  // Axiom async — no await, no bloquea
-  void send([event]);
+  // Axiom async — ingest sin bloquear
+  const client = getClient();
+  if (client) {
+    const dataset = process.env.AXIOM_DATASET!;
+    void client.ingest(dataset, [payload]).catch(() => {
+      // Silencioso — nunca romper la app por un fallo de logging
+    });
+  }
 }
 
 export const logger = {
-  info: (source: string, data: Record<string, unknown>) => log("info", source, data),
-  warn: (source: string, data: Record<string, unknown>) => log("warn", source, data),
+  debug: (source: string, data: Record<string, unknown>) => log("debug", source, data),
+  info:  (source: string, data: Record<string, unknown>) => log("info",  source, data),
+  warn:  (source: string, data: Record<string, unknown>) => log("warn",  source, data),
   error: (source: string, data: Record<string, unknown>) => log("error", source, data),
 };

@@ -17,42 +17,32 @@ import {
   getCalendarStatus,
   type CalendarEvent,
 } from "@/lib/calendar";
+import { detectIntentAI } from "@/lib/nlp";
 
 // ─── Tipos de intención ───────────────────────────────────────────────────────
 
 type CalendarIntent =
-  | "query_today"    // "¿qué tengo hoy?", "qué hay en mi agenda"
-  | "query_week"     // "¿qué tengo esta semana?", "agenda de la semana"
-  | "create_event"   // "agendame X para el viernes a las 6pm"
-  | "status"         // "¿está conectado el calendar?"
+  | "query_today"    // consultar agenda de hoy
+  | "query_week"     // consultar agenda de la semana
+  | "create_event"   // crear un evento en el calendario
+  | "status"         // verificar estado de conexión
   | "unknown";
 
-// ─── Detección de intención ───────────────────────────────────────────────────
+// ─── Detección de intención con LLM ──────────────────────────────────────────
 
-function detectIntent(text: string): CalendarIntent {
-  const lower = text.toLowerCase();
-
-  if (
-    /estado|conectado|calendar.*conectado|conectado.*calendar|link|vincular/i.test(lower)
-  )
-    return "status";
-
-  if (
-    /semana|esta semana|próximos días|proximos dias|7 días|siete dias/i.test(lower)
-  )
-    return "query_week";
-
-  if (
-    /qué tengo|que tengo|agenda|hoy|reunión hoy|reuniones|eventos/i.test(lower)
-  )
-    return "query_today";
-
-  if (
-    /agendame|agenda.*para|crear.*evento|nuevo.*evento|poneme|meteme|agregar/i.test(lower)
-  )
-    return "create_event";
-
-  return "unknown";
+async function detectIntent(text: string): Promise<CalendarIntent> {
+  const intent = await detectIntentAI(
+    "Eres el agente de Google Calendar de una app personal.",
+    {
+      query_today:  "El usuario quiere saber qué tiene hoy en su agenda o calendario",
+      query_week:   "El usuario quiere saber qué tiene esta semana o los próximos días",
+      create_event: "El usuario quiere crear, agendar o agregar un evento al calendario",
+      status:       "El usuario pregunta si el calendario está conectado o vinculado",
+      unknown:      "Otro mensaje no relacionado al calendario",
+    },
+    text
+  );
+  return intent as CalendarIntent;
 }
 
 // ─── Parseo de evento desde texto ─────────────────────────────────────────────
@@ -171,7 +161,7 @@ export const calendarAgent = {
 
   async process(input: AgentInput): Promise<AgentOutput> {
     const { userId, message } = input;
-    const intent = detectIntent(message);
+    const intent = await detectIntent(message);
 
     switch (intent) {
       case "status": {
