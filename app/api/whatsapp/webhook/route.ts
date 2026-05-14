@@ -14,6 +14,7 @@ import {
 } from "@/lib/whatsapp";
 import { orchestrate } from "@/lib/orchestrator";
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
 
 // ----------------------------------------------------------------
 // GET - Verificacion del webhook (Meta challenge)
@@ -27,11 +28,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const verifyToken = process.env.WEBHOOK_VERIFY_TOKEN;
 
   if (mode === "subscribe" && token === verifyToken && challenge) {
-    console.log("[whatsapp/webhook] Verificacion de webhook exitosa");
+    logger.info("whatsapp/webhook", { event: "verification_ok" });
     return new NextResponse(challenge, { status: 200 });
   }
 
-  console.warn("[whatsapp/webhook] Verificacion fallida", { mode, token });
+  logger.warn("whatsapp/webhook", { event: "verification_failed", mode, token });
   return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 }
 
@@ -61,7 +62,7 @@ async function processIncomingMessage(body: any): Promise<void> {
     if (!parsed) return; // status update u otro evento no relevante
 
     const { from, messageId, type, text, audioId, timestamp } = parsed;
-    console.log("[whatsapp/webhook] Mensaje entrante:", { from, messageId, type, timestamp });
+    logger.info("whatsapp/webhook", { event: "message_received", from, messageId, type, timestamp });
 
     // 2. Marcar como leido (best-effort)
     void markAsRead(messageId);
@@ -90,7 +91,7 @@ async function processIncomingMessage(body: any): Promise<void> {
     }
 
     if (!userId) {
-      console.warn("[whatsapp/webhook] No se encontro userId para from=" + from);
+      logger.warn("whatsapp/webhook", { event: "user_not_found", from });
       await sendTextMessage(from, "Lo siento, tu numero no esta vinculado a ninguna cuenta.");
       return;
     }
@@ -101,12 +102,12 @@ async function processIncomingMessage(body: any): Promise<void> {
 
     if (isAudio && audioId) {
       try {
-        console.log("[whatsapp/webhook] Transcribiendo audio:", audioId);
+        logger.info("whatsapp/webhook", { event: "audio_transcription_start", audioId });
         const audioBuffer = await downloadAudio(audioId);
         messageText = await transcribeAudio(audioBuffer);
-        console.log("[whatsapp/webhook] Transcripcion:", messageText);
+        logger.info("whatsapp/webhook", { event: "audio_transcription_ok", text: messageText });
       } catch (err) {
-        console.error("[whatsapp/webhook] Error transcribiendo audio:", err);
+        logger.error("whatsapp/webhook", { event: "audio_transcription_error", error: String(err) });
         await sendTextMessage(from, "No pude procesar el audio. Podes escribirlo?");
         return;
       }
@@ -130,8 +131,14 @@ async function processIncomingMessage(body: any): Promise<void> {
     });
 
     // 6. Orquestar: detectar modulo y derivar al agente
+    const orchestrateStart = Date.now();
     const response = await orchestrate(userId, messageText);
-    console.log("[whatsapp/webhook] Respuesta del orquestrador:", response);
+    logger.info("whatsapp/webhook", {
+      event: "orchestrate_ok",
+      userId,
+      durationMs: Date.now() - orchestrateStart,
+      responseLength: response.length,
+    });
 
     // 7. Enviar respuesta al usuario
     await sendTextMessage(from, response);
@@ -157,9 +164,9 @@ async function processIncomingMessage(body: any): Promise<void> {
       },
     });
 
-    console.log("[whatsapp/webhook] Procesado OK, msgId=" + waMsg.id);
+    logger.info("whatsapp/webhook", { event: "message_processed_ok", msgId: waMsg.id });
   } catch (err) {
-    console.error("[whatsapp/webhook] Error general:", err);
+    logger.error("whatsapp/webhook", { event: "message_processing_error", error: String(err) });
     // No lanzar - el 200 ya fue enviado a Meta
   }
 }
