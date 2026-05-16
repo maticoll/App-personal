@@ -24,7 +24,7 @@ export async function AppLayout({ children }: AppLayoutProps) {
         />
 
         {/* Página */}
-        <main className="flex-1 pb-32 md:pb-8">
+        <main className="flex-1 px-4 pt-4 pb-32 md:px-6 md:pt-6 md:pb-8 max-w-lg mx-auto w-full md:max-w-none">
           {children}
         </main>
       </div>

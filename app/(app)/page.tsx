@@ -1,29 +1,68 @@
 // ============================================================
 // Dashboard Principal — /
-// Sesión 2 — Score global, barras por módulo, resúmenes
+// Diseño Stitch: score ring + bento grid 2×3 de módulos
 // ============================================================
 
 import { auth } from "@/auth";
-import { Moon, Dumbbell, Salad, FolderKanban, Lightbulb, Wallet, BarChart3, RefreshCw } from "lucide-react";
 import Link from "next/link";
-import { ScoringDashboard } from "@/components/scoring/ScoringDashboard";
-import { ModuleSummaryCard } from "@/components/dashboard/ModuleSummaryCard";
+import { GlobalScoreRing } from "@/components/scoring/GlobalScoreRing";
 import { db } from "@/lib/db";
 import { calculateFullScore, saveScore, getStoredScore } from "@/lib/scoring";
 import type { DailyScoreData } from "@/lib/types";
 
-// -------------------------------------------------------
-// Cargar el score del día (calcula si no existe)
-// -------------------------------------------------------
+// ── Módulos del bento grid ────────────────────────────────────────────────────
+
+const MODULES = [
+  {
+    href: "/sleep",
+    label: "Sleep",
+    icon: "bedtime",
+    color: "#d0bcff",
+    key: "sleep" as const,
+  },
+  {
+    href: "/fitness",
+    label: "Fitness",
+    icon: "fitness_center",
+    color: "#22d3ee",
+    key: "fitness" as const,
+  },
+  {
+    href: "/nutrition",
+    label: "Nutrition",
+    icon: "restaurant",
+    color: "#10b981",
+    key: "nutrition" as const,
+  },
+  {
+    href: "/projects",
+    label: "Projects",
+    icon: "list_alt",
+    color: "#fbbf24",
+    key: "projects" as const,
+  },
+  {
+    href: "/ideas",
+    label: "Ideas",
+    icon: "psychology",
+    color: "#fb7185",
+    key: "ideas" as const,
+  },
+  {
+    href: "/finances",
+    label: "Finances",
+    icon: "payments",
+    color: "#60a5fa",
+    key: "finances" as const,
+  },
+] as const;
+
+// ── Carga de datos ────────────────────────────────────────────────────────────
 
 async function loadTodayScore(userId: string): Promise<DailyScoreData | null> {
   const today = new Date();
-
-  // Intentar leer el guardado primero (más rápido)
   const stored = await getStoredScore(userId, today);
   if (stored) return stored;
-
-  // Calcular y guardar
   try {
     const result = await calculateFullScore(userId, today);
     await saveScore(userId, today, result);
@@ -46,11 +85,7 @@ async function loadTodayScore(userId: string): Promise<DailyScoreData | null> {
   }
 }
 
-// -------------------------------------------------------
-// Cargar resúmenes rápidos de módulos (mock + real mixto)
-// -------------------------------------------------------
-
-async function loadModuleSummaries(userId: string) {
+async function loadSummaries(userId: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const endToday = new Date(today);
@@ -58,221 +93,125 @@ async function loadModuleSummaries(userId: string) {
 
   const [sleepLog, workouts, meals, waterLogs, activeProjects, recentIdeas] =
     await Promise.all([
-      db.sleepLog
-        .findUnique({ where: { userId_date: { userId, date: today } } })
-        .catch(() => null),
-      db.workout
-        .findMany({ where: { userId, date: { gte: today, lte: endToday } } })
-        .catch(() => []),
-      db.meal
-        .findMany({ where: { userId, date: today } })
-        .catch(() => []),
-      db.waterLog
-        .findMany({ where: { userId, date: today } })
-        .catch(() => []),
-      db.project
-        .findMany({ where: { userId, status: "IN_PROGRESS" }, take: 3 })
-        .catch(() => []),
-      db.idea
-        .findMany({
-          where: { userId },
-          orderBy: { createdAt: "desc" },
-          take: 3,
-        })
-        .catch(() => []),
+      db.sleepLog.findUnique({ where: { userId_date: { userId, date: today } } }).catch(() => null),
+      db.workout.findMany({ where: { userId, date: { gte: today, lte: endToday } } }).catch(() => []),
+      db.meal.findMany({ where: { userId, date: today } }).catch(() => []),
+      db.waterLog.findMany({ where: { userId, date: today } }).catch(() => []),
+      db.project.findMany({ where: { userId, status: "IN_PROGRESS" }, take: 3 }).catch(() => []),
+      db.idea.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 3 }).catch(() => []),
     ]);
 
-  // Sleep summary
-  const sleepSummary = sleepLog
-    ? sleepLog.durationMinutes
-      ? `${Math.floor(sleepLog.durationMinutes / 60)}h ${sleepLog.durationMinutes % 60}min`
-      : "Registrado · sin despertar"
-    : "Sin datos hoy";
-
-  // Fitness summary
-  const fitnessSummary =
-    workouts.length > 0
-      ? workouts.map((w) => w.type).join(" · ")
-      : "Sin actividad registrada";
-
-  const fitnessBadge =
-    workouts.length > 0
-      ? workouts.some((w) => w.type === "GYM")
-        ? "🏋️ Gym"
-        : "✅ Activo"
-      : undefined;
-
-  // Nutrition summary
-  const mealCount = meals.length;
   const waterTotal = waterLogs.reduce((acc, w) => acc + w.thermos, 0);
-  const nutritionSummary =
-    mealCount > 0
-      ? `${mealCount} comida${mealCount > 1 ? "s" : ""} · 💧 ${waterTotal.toFixed(1)} termos`
-      : "Sin comidas registradas";
-
-  // Projects summary
-  const projectsSummary =
-    activeProjects.length > 0
-      ? `${activeProjects.length} en progreso`
-      : "Sin proyectos activos";
-
-  // Ideas summary
-  const ideasSummary =
-    recentIdeas.length > 0
-      ? `${recentIdeas.length} idea${recentIdeas.length > 1 ? "s" : ""} reciente${recentIdeas.length > 1 ? "s" : ""}`
-      : "Sin ideas registradas";
 
   return {
-    sleep: sleepSummary,
-    fitness: fitnessSummary,
-    fitnessBadge,
-    nutrition: nutritionSummary,
-    projects: projectsSummary,
-    ideas: ideasSummary,
+    sleep: sleepLog?.durationMinutes
+      ? `${Math.floor(sleepLog.durationMinutes / 60)}h ${sleepLog.durationMinutes % 60}min`
+      : "Sin datos",
+    fitness: workouts.length > 0 ? `${workouts.length} actividad${workouts.length > 1 ? "es" : ""}` : "Sin actividad",
+    nutrition: meals.length > 0 ? `${meals.length} comidas · ${waterTotal.toFixed(1)}L` : "Sin comidas",
+    projects: activeProjects.length > 0 ? `${activeProjects.length} en progreso` : "Sin proyectos",
+    ideas: recentIdeas.length > 0 ? `${recentIdeas.length} recientes` : "Sin ideas",
+    finances: "Ver resumen →",
   };
 }
 
-// -------------------------------------------------------
-// Página principal
-// -------------------------------------------------------
+// ── Página ────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage() {
   const session = await auth();
   const userId = session?.user?.id;
   const firstName = session?.user?.name?.split(" ")[0] ?? "Corea";
 
-  // Cargar datos en paralelo
   const [todayScore, summaries] = await Promise.all([
     userId ? loadTodayScore(userId) : Promise.resolve(null),
-    userId ? loadModuleSummaries(userId) : Promise.resolve(null),
+    userId ? loadSummaries(userId) : Promise.resolve(null),
   ]);
 
-  const now = new Date();
-  const hora = now.getHours();
-  const saludo =
-    hora < 12 ? "Buenos días" : hora < 19 ? "Buenas tardes" : "Buenas noches";
+  const hora = new Date().getHours();
+  const saludo = hora < 12 ? "Buenos días" : hora < 19 ? "Buenas tardes" : "Buenas noches";
+  const emoji = hora < 12 ? "☀️" : hora < 19 ? "🌤️" : "🌙";
 
-  const dateLabel = now.toLocaleDateString("es-AR", {
+  const dateLabel = new Date().toLocaleDateString("es-UY", {
     weekday: "long",
     day: "numeric",
     month: "long",
   });
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="animate-fade-in">
 
-      {/* ─── Saludo ──────────────────────────────────────────── */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-xl md:text-2xl font-bold text-on-surface">
-            {saludo}, {firstName} 👋
-          </h2>
-          <p className="text-on-surface-variant text-sm mt-1 capitalize">
-            {dateLabel}
-          </p>
-        </div>
+      {/* ── Saludo ─────────────────────────────────────────────── */}
+      <section className="mb-10">
+        <h1 className="text-2xl font-bold text-on-surface tracking-tight">
+          {saludo}, {firstName} {emoji}
+        </h1>
+        <p className="text-sm text-on-surface-variant mt-0.5 capitalize">{dateLabel}</p>
+      </section>
 
-        {/* Botón recalcular score */}
-        <Link
-          href="/api/scoring/calculate"
-          className="flex items-center gap-1.5 text-xs text-outline hover:text-on-surface-variant transition-colors pt-1"
-          title="Recalcular score"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-        </Link>
-      </div>
+      {/* ── Score Ring ─────────────────────────────────────────── */}
+      <section className="flex flex-col items-center mb-10">
+        <GlobalScoreRing score={todayScore?.global ?? null} size="lg" />
+      </section>
 
-      {/* ─── Score del día ────────────────────────────────────── */}
-      <div className="card space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-primary" />
-            <span className="font-semibold text-on-surface">
-              Score del día
-            </span>
-          </div>
-          <Link
-            href="/scoring"
-            className="text-xs text-outline hover:text-primary transition-colors"
-          >
-            Ver historial →
-          </Link>
-        </div>
+      {/* ── Bento Grid 2×3 ─────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-3 mb-10">
+        {MODULES.map(({ href, label, icon, color, key }) => {
+          const score =
+            key === "sleep" ? todayScore?.sleep :
+            key === "fitness" ? todayScore?.fitness :
+            key === "nutrition" ? todayScore?.nutrition :
+            key === "projects" ? todayScore?.projects :
+            null;
 
-        {/* Scoring dashboard: anillo + cards expandibles */}
-        <ScoringDashboard todayScore={todayScore} />
-      </div>
+          const summary = summaries?.[key as keyof typeof summaries] ?? "—";
 
-      {/* ─── Resúmenes rápidos de módulos ────────────────────── */}
-      <div>
-        <h3 className="text-sm font-medium text-on-surface-variant mb-3">
-          Módulos
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-
-          <ModuleSummaryCard
-            href="/sleep"
-            label="Sueño"
-            icon={<Moon className="w-5 h-5 text-module-sleep" />}
-            bgColor="bg-purple-500/10"
-            score={todayScore?.sleep ?? null}
-            summary={summaries?.sleep ?? "Sin datos hoy"}
-          />
-
-          <ModuleSummaryCard
-            href="/fitness"
-            label="Fitness"
-            icon={<Dumbbell className="w-5 h-5 text-module-fitness" />}
-            bgColor="bg-cyan-500/10"
-            score={todayScore?.fitness ?? null}
-            summary={summaries?.fitness ?? "Sin actividad registrada"}
-            badge={summaries?.fitnessBadge}
-          />
-
-          <ModuleSummaryCard
-            href="/nutrition"
-            label="Nutrición"
-            icon={<Salad className="w-5 h-5 text-module-nutrition" />}
-            bgColor="bg-emerald-500/10"
-            score={todayScore?.nutrition ?? null}
-            summary={summaries?.nutrition ?? "Sin comidas registradas"}
-          />
-
-          <ModuleSummaryCard
-            href="/projects"
-            label="Proyectos"
-            icon={<FolderKanban className="w-5 h-5 text-module-projects" />}
-            bgColor="bg-amber-500/10"
-            score={todayScore?.projects ?? null}
-            summary={summaries?.projects ?? "Sin proyectos activos"}
-          />
-
-          <ModuleSummaryCard
-            href="/ideas"
-            label="Ideas"
-            icon={<Lightbulb className="w-5 h-5 text-module-ideas" />}
-            bgColor="bg-pink-500/10"
-            score={null}
-            summary={summaries?.ideas ?? "Sin ideas registradas"}
-          />
-
-          {/* Finanzas — sin score */}
-          <Link
-            href="/finances"
-            className="card hover:bg-surface-container-high active:scale-[0.98] transition-all duration-150 block"
-          >
-            <div className="space-y-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/10">
-                <Wallet className="w-5 h-5 text-module-finances" />
+          return (
+            <Link
+              key={href}
+              href={href}
+              className="glass-card rounded-2xl p-4 flex flex-col justify-between aspect-square active:scale-[0.97] transition-all duration-150"
+            >
+              <div className="flex justify-between items-start">
+                <span
+                  className="text-[11px] font-bold uppercase tracking-widest"
+                  style={{ color }}
+                >
+                  {label}
+                </span>
+                <span
+                  className="material-symbols-outlined text-[22px]"
+                  style={{ color }}
+                >
+                  {icon}
+                </span>
               </div>
               <div>
-                <p className="font-medium text-on-surface text-sm">Finanzas</p>
-                <p className="text-xs text-outline mt-0.5">Ver app →</p>
+                {score !== null ? (
+                  <h3 className="text-2xl font-bold text-on-surface leading-none">
+                    {score}
+                    <span className="text-sm font-normal text-on-surface-variant ml-1">/100</span>
+                  </h3>
+                ) : (
+                  <h3 className="text-xl font-semibold text-on-surface leading-none">—</h3>
+                )}
+                <p className="text-[11px] text-on-surface-variant mt-1.5 leading-snug line-clamp-2">
+                  {summary}
+                </p>
               </div>
-            </div>
-          </Link>
+            </Link>
+          );
+        })}
+      </div>
 
-        </div>
+      {/* ── Garmin Sync ────────────────────────────────────────── */}
+      <div className="flex justify-center">
+        <Link
+          href="/sleep"
+          className="bg-surface-container-highest px-6 py-3 rounded-full flex items-center gap-2 border border-outline-variant/20 hover:bg-surface-bright transition-colors active:scale-95 duration-150"
+        >
+          <span className="material-symbols-outlined text-primary text-[20px]">sync</span>
+          <span className="text-sm font-medium text-on-surface">Sync con Garmin</span>
+        </Link>
       </div>
 
     </div>
