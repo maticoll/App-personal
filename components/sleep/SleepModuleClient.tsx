@@ -146,6 +146,7 @@ export function SleepModuleClient({
         onBedTime={handleBedTime}
         onWakeTime={handleWakeTime}
         loading={loading}
+        onLogged={refreshData}
       />
 
       {/* Card de hoy (si hay datos) */}
