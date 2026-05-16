@@ -606,8 +606,12 @@ Ejemplos de entrada → salida:
   };
   const raw = data.content[0]?.text ?? "{}";
 
+  // Extraer JSON aunque venga envuelto en ```json ... ```
+  const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/) ?? raw.match(/(\{[\s\S]*\})/);
+  const jsonStr = jsonMatch ? jsonMatch[1].trim() : raw.trim();
+
   try {
-    const parsed = JSON.parse(raw) as { exercises?: ParsedExercise[] };
+    const parsed = JSON.parse(jsonStr) as { exercises?: ParsedExercise[] };
     return parsed.exercises ?? [];
   } catch {
     throw new Error(`No se pudo interpretar la respuesta del parser: ${raw}`);
