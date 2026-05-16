@@ -19,7 +19,7 @@ export default function WeeklyProjectStats({ stats }: Props) {
         <div key={card.label} className="card p-3 text-center">
           <div className="text-2xl mb-1">{card.icon}</div>
           <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
-          <div className="text-xs text-[var(--text-muted)] mt-0.5 leading-tight">{card.label}</div>
+          <div className="text-xs text-outline mt-0.5 leading-tight">{card.label}</div>
         </div>
       ))}
     </div>

@@ -33,11 +33,11 @@ export default async function SleepPage() {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Moon className="w-5 h-5 text-module-sleep" />
-          <h2 className="text-xl font-bold text-[var(--text-primary)]">
+          <h2 className="text-xl font-bold text-on-surface">
             Sueño
           </h2>
         </div>
-        <p className="text-sm text-[var(--text-secondary)]">
+        <p className="text-sm text-on-surface-variant">
           Registro y análisis de tu descanso
         </p>
       </div>

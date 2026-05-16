@@ -104,24 +104,24 @@ function SectionCard({
   return (
     <div className="card overflow-hidden">
       <button
-        className="w-full flex items-center justify-between p-4 text-left hover:bg-[var(--surface-hover)] transition-colors"
+        className="w-full flex items-center justify-between p-4 text-left hover:bg-surface-container-high transition-colors"
         onClick={() => setOpen((v) => !v)}
       >
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
             <Icon className="w-4 h-4 text-accent" />
           </div>
-          <span className="font-semibold text-[var(--text-primary)]">{title}</span>
+          <span className="font-semibold text-on-surface">{title}</span>
         </div>
         {open ? (
-          <ChevronUp className="w-4 h-4 text-[var(--text-muted)]" />
+          <ChevronUp className="w-4 h-4 text-outline" />
         ) : (
-          <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
+          <ChevronDown className="w-4 h-4 text-outline" />
         )}
       </button>
 
       {open && (
-        <div className="px-4 pb-4 border-t border-[var(--border)]">
+        <div className="px-4 pb-4 border-t border-outline-variant/20">
           {children}
         </div>
       )}
@@ -142,12 +142,12 @@ function Field({
 }) {
   return (
     <div className="mt-4">
-      <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+      <label className="block text-sm font-medium text-on-surface-variant mb-1.5">
         {label}
       </label>
       {children}
       {hint && (
-        <p className="text-xs text-[var(--text-muted)] mt-1">{hint}</p>
+        <p className="text-xs text-outline mt-1">{hint}</p>
       )}
     </div>
   );
@@ -336,7 +336,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
             <img
               src={user.image}
               alt={user.name ?? "Avatar"}
-              className="w-14 h-14 rounded-full object-cover border-2 border-[var(--border)]"
+              className="w-14 h-14 rounded-full object-cover border-2 border-outline-variant/20"
             />
           ) : (
             <div className="w-14 h-14 rounded-full bg-accent/10 flex items-center justify-center">
@@ -344,10 +344,10 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-[var(--text-primary)] truncate">
+            <p className="font-semibold text-on-surface truncate">
               {user.name ?? "Sin nombre"}
             </p>
-            <p className="text-sm text-[var(--text-secondary)] truncate">
+            <p className="text-sm text-on-surface-variant truncate">
               {user.email ?? ""}
             </p>
           </div>
@@ -355,7 +355,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
 
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
-          className="mt-4 w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-[var(--border)] text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors"
+          className="mt-4 w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-outline-variant/20 text-sm text-on-surface-variant hover:bg-surface-container-high transition-colors"
         >
           <LogOut className="w-4 h-4" />
           Cerrar sesión
@@ -384,7 +384,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
 
         <Field label="Hora habitual de gym" hint="El cron de smart habits verifica esta hora">
           <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-[var(--text-muted)]" />
+            <Clock className="w-4 h-4 text-outline" />
             <input
               type="time"
               value={gymTime}
@@ -404,7 +404,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
                   "w-9 h-9 rounded-lg text-sm font-medium transition-all border",
                   gymDays.includes(value)
                     ? "bg-accent text-white border-accent"
-                    : "border-[var(--border)] text-[var(--text-secondary)] hover:border-accent/50"
+                    : "border-outline-variant/20 text-on-surface-variant hover:border-accent/50"
                 )}
               >
                 {label}
@@ -424,7 +424,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
               onChange={(e) => setWaterGoal(parseFloat(e.target.value))}
               className="flex-1"
             />
-            <span className="text-sm font-semibold text-[var(--text-primary)] w-12 text-right">
+            <span className="text-sm font-semibold text-on-surface w-12 text-right">
               {waterGoal} T
             </span>
           </div>
@@ -441,10 +441,10 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
       <SectionCard title="Notificaciones" icon={Bell}>
         <div className="mt-4 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-[var(--text-primary)]">
+            <p className="text-sm font-medium text-on-surface">
               Notificaciones por WhatsApp
             </p>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            <p className="text-xs text-outline mt-0.5">
               Recordatorios de gym, sueño e hidratación
             </p>
           </div>
@@ -452,7 +452,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
             onClick={() => setNotificationsEnabled((v) => !v)}
             className={cn(
               "w-12 h-6 rounded-full transition-all relative",
-              notificationsEnabled ? "bg-accent" : "bg-[var(--border)]"
+              notificationsEnabled ? "bg-accent" : "bg-outline-variant/30"
             )}
             role="switch"
             aria-checked={notificationsEnabled}
@@ -504,11 +504,11 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
               "flex flex-col items-center gap-2 p-4 rounded-xl border transition-all",
               theme === "dark"
                 ? "border-accent bg-accent/10"
-                : "border-[var(--border)] hover:border-accent/40"
+                : "border-outline-variant/20 hover:border-accent/40"
             )}
           >
-            <Moon className="w-5 h-5 text-[var(--text-primary)]" />
-            <span className="text-sm font-medium text-[var(--text-primary)]">
+            <Moon className="w-5 h-5 text-on-surface" />
+            <span className="text-sm font-medium text-on-surface">
               Oscuro
             </span>
             {theme === "dark" && (
@@ -522,11 +522,11 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
               "flex flex-col items-center gap-2 p-4 rounded-xl border transition-all",
               theme === "light"
                 ? "border-accent bg-accent/10"
-                : "border-[var(--border)] hover:border-accent/40"
+                : "border-outline-variant/20 hover:border-accent/40"
             )}
           >
-            <Sun className="w-5 h-5 text-[var(--text-primary)]" />
-            <span className="text-sm font-medium text-[var(--text-primary)]">
+            <Sun className="w-5 h-5 text-on-surface" />
+            <span className="text-sm font-medium text-on-surface">
               Claro
             </span>
             {theme === "light" && (
@@ -574,7 +574,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
       {/* ── Finanzas ── */}
       <SectionCard title="Finanzas" icon={Wallet} defaultOpen={false}>
         <div className="mt-4 space-y-3">
-          <div className="text-xs text-[var(--text-muted)] space-y-1">
+          <div className="text-xs text-outline space-y-1">
             <p>Conecta tu app de finanzas para ver el resumen en el dashboard.</p>
             <a
               href="https://finanzas-lemon.vercel.app/settings"
@@ -610,7 +610,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
       <SectionCard title="Google Calendar" icon={CalendarDays} defaultOpen={false}>
         <div className="mt-4 space-y-3">
           {/* Estado de conexión */}
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--surface-hover)]">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-surface-container-high">
             <div
               className={cn(
                 "w-3 h-3 rounded-full",
@@ -622,14 +622,14 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
               )}
             />
             <div>
-              <p className="text-sm font-medium text-[var(--text-primary)]">
+              <p className="text-sm font-medium text-on-surface">
                 {calendarStatus.connected && calendarStatus.hasCalendarScope
                   ? "Conectado y activo"
                   : calendarStatus.connected
                   ? "Conectado sin permisos de Calendar"
                   : "No conectado"}
               </p>
-              <p className="text-xs text-[var(--text-muted)]">
+              <p className="text-xs text-outline">
                 {calendarStatus.connected && calendarStatus.hasCalendarScope
                   ? "La app puede leer y crear eventos en tu Google Calendar"
                   : calendarStatus.connected
@@ -641,7 +641,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
 
           {/* Info adicional */}
           {calendarStatus.connected && calendarStatus.hasCalendarScope && (
-            <div className="text-xs text-[var(--text-muted)] space-y-1">
+            <div className="text-xs text-outline space-y-1">
               <p>✓ El Morning Summary incluye tu agenda del día</p>
               <p>✓ Smart habits de gym buscan huecos libres automáticamente</p>
               <p>✓ Podés pedirle a HERMES que te agende eventos por WhatsApp</p>
@@ -672,9 +672,9 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
             <span className="font-semibold text-red-500">Zona peligrosa</span>
           </div>
           {showDangerConfirm ? (
-            <ChevronUp className="w-4 h-4 text-[var(--text-muted)]" />
+            <ChevronUp className="w-4 h-4 text-outline" />
           ) : (
-            <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
+            <ChevronDown className="w-4 h-4 text-outline" />
           )}
         </button>
 
@@ -687,7 +687,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
               </div>
             ) : (
               <>
-                <p className="mt-4 text-sm text-[var(--text-secondary)]">
+                <p className="mt-4 text-sm text-on-surface-variant">
                   Esta acción borra todos los datos de{" "}
                   <strong>hoy</strong>: sueño, workouts, comidas, agua y score.
                   No se puede deshacer.
@@ -700,7 +700,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
                 <div className="mt-3 flex gap-2">
                   <button
                     onClick={() => setShowDangerConfirm(false)}
-                    className="flex-1 py-2 rounded-xl border border-[var(--border)] text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors flex items-center justify-center gap-1"
+                    className="flex-1 py-2 rounded-xl border border-outline-variant/20 text-sm text-on-surface-variant hover:bg-surface-container-high transition-colors flex items-center justify-center gap-1"
                   >
                     <X className="w-4 h-4" />
                     Cancelar

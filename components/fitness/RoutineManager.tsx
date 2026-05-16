@@ -194,7 +194,7 @@ export default function RoutineManager({ onChanged }: Props) {
   return (
     <div className="card space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-[var(--text-primary)]">Mis rutinas</h3>
+        <h3 className="font-semibold text-on-surface">Mis rutinas</h3>
         {!showForm && (
           <button
             onClick={openCreate}
@@ -210,16 +210,16 @@ export default function RoutineManager({ onChanged }: Props) {
       {showForm && (
         <form
           onSubmit={handleSubmit}
-          className="space-y-4 border border-[var(--border)] rounded-xl p-4 bg-[var(--surface-hover)]"
+          className="space-y-4 border border-outline-variant/20 rounded-xl p-4 bg-surface-container-high"
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-sm font-medium text-[var(--text-primary)]">
+            <span className="text-sm font-medium text-on-surface">
               {editingId ? "Editar rutina" : "Nueva rutina"}
             </span>
             <button
               type="button"
               onClick={closeForm}
-              className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+              className="p-1 rounded-lg text-outline hover:text-on-surface-variant"
             >
               <X className="w-4 h-4" />
             </button>
@@ -227,7 +227,7 @@ export default function RoutineManager({ onChanged }: Props) {
 
           {/* Nombre */}
           <div>
-            <label className="text-xs text-[var(--text-secondary)] mb-1 block">
+            <label className="text-xs text-on-surface-variant mb-1 block">
               Nombre de la rutina
             </label>
             <input
@@ -242,7 +242,7 @@ export default function RoutineManager({ onChanged }: Props) {
 
           {/* Días */}
           <div>
-            <label className="text-xs text-[var(--text-secondary)] mb-2 block">
+            <label className="text-xs text-on-surface-variant mb-2 block">
               Días de la semana
             </label>
             <div className="flex gap-1.5 flex-wrap">
@@ -254,7 +254,7 @@ export default function RoutineManager({ onChanged }: Props) {
                   className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
                     form.days.includes(d.value)
                       ? "bg-[#06B6D4]/20 text-module-fitness border border-[#06B6D4]/40"
-                      : "bg-[var(--surface)] text-[var(--text-muted)] border border-[var(--border)]"
+                      : "bg-surface-container text-outline border border-outline-variant/30"
                   }`}
                 >
                   {d.label}
@@ -265,13 +265,13 @@ export default function RoutineManager({ onChanged }: Props) {
 
           {/* Ejercicios */}
           <div>
-            <label className="text-xs text-[var(--text-secondary)] mb-2 block">
+            <label className="text-xs text-on-surface-variant mb-2 block">
               Ejercicios
             </label>
             <div className="space-y-2">
               {form.exercises.map((ex, idx) => (
                 <div key={idx} className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[var(--surface)] flex items-center justify-center text-xs text-[var(--text-muted)] flex-shrink-0">
+                  <span className="w-5 h-5 rounded-full bg-surface-container flex items-center justify-center text-xs text-outline flex-shrink-0">
                     {idx + 1}
                   </span>
                   <input
@@ -304,7 +304,7 @@ export default function RoutineManager({ onChanged }: Props) {
                     <button
                       type="button"
                       onClick={() => removeExercise(idx)}
-                      className="p-1 text-[var(--text-muted)] hover:text-red-400 flex-shrink-0"
+                      className="p-1 text-outline hover:text-red-400 flex-shrink-0"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -315,7 +315,7 @@ export default function RoutineManager({ onChanged }: Props) {
             <button
               type="button"
               onClick={addExercise}
-              className="mt-2 text-xs text-[var(--text-muted)] hover:text-module-fitness flex items-center gap-1 transition-colors"
+              className="mt-2 text-xs text-outline hover:text-module-fitness flex items-center gap-1 transition-colors"
             >
               <Plus className="w-3 h-3" />
               Agregar ejercicio
@@ -334,7 +334,7 @@ export default function RoutineManager({ onChanged }: Props) {
             <button
               type="button"
               onClick={closeForm}
-              className="px-4 py-2 rounded-xl text-sm text-[var(--text-muted)] border border-[var(--border)] hover:bg-[var(--surface-hover)] transition-colors"
+              className="px-4 py-2 rounded-xl text-sm text-outline border border-outline-variant/30 hover:bg-surface-container-high transition-colors"
             >
               Cancelar
             </button>
@@ -344,11 +344,11 @@ export default function RoutineManager({ onChanged }: Props) {
 
       {/* Lista de rutinas */}
       {loading ? (
-        <div className="text-sm text-[var(--text-muted)] text-center py-4">
+        <div className="text-sm text-outline text-center py-4">
           Cargando rutinas...
         </div>
       ) : routines.length === 0 && !showForm ? (
-        <div className="text-sm text-[var(--text-muted)] text-center py-6 space-y-2">
+        <div className="text-sm text-outline text-center py-6 space-y-2">
           <p>Sin rutinas configuradas</p>
           <button
             onClick={openCreate}
@@ -369,14 +369,14 @@ export default function RoutineManager({ onChanged }: Props) {
             return (
               <div
                 key={routine.id}
-                className="border border-[var(--border)] rounded-xl overflow-hidden"
+                className="border border-outline-variant/20 rounded-xl overflow-hidden"
               >
                 <div className="flex items-center gap-3 p-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[var(--text-primary)]">
+                    <p className="text-sm font-medium text-on-surface">
                       {routine.name}
                     </p>
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                    <p className="text-xs text-outline mt-0.5">
                       {dayLabels || "Sin días asignados"} ·{" "}
                       {routine.exercises.length} ejercicios
                     </p>
@@ -384,7 +384,7 @@ export default function RoutineManager({ onChanged }: Props) {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => toggleExpand(routine.id)}
-                      className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-muted)]"
+                      className="p-1.5 rounded-lg hover:bg-surface-container-high text-outline"
                     >
                       {isExpanded ? (
                         <ChevronUp className="w-3.5 h-3.5" />
@@ -394,14 +394,14 @@ export default function RoutineManager({ onChanged }: Props) {
                     </button>
                     <button
                       onClick={() => openEdit(routine)}
-                      className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-muted)] hover:text-module-fitness transition-colors"
+                      className="p-1.5 rounded-lg hover:bg-surface-container-high text-outline hover:text-module-fitness transition-colors"
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => handleDelete(routine.id)}
                       disabled={deletingId === routine.id}
-                      className="p-1.5 rounded-lg hover:bg-red-500/10 text-[var(--text-muted)] hover:text-red-400 transition-colors disabled:opacity-40"
+                      className="p-1.5 rounded-lg hover:bg-red-500/10 text-outline hover:text-red-400 transition-colors disabled:opacity-40"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -409,16 +409,16 @@ export default function RoutineManager({ onChanged }: Props) {
                 </div>
 
                 {isExpanded && routine.exercises.length > 0 && (
-                  <div className="px-3 pb-3 pt-2 border-t border-[var(--border)] space-y-1.5">
+                  <div className="px-3 pb-3 pt-2 border-t border-outline-variant/20 space-y-1.5">
                     {routine.exercises.map((ex, idx) => (
                       <div key={ex.id} className="flex items-center gap-2 text-xs">
-                        <span className="w-4 h-4 rounded-full bg-[var(--surface-hover)] flex items-center justify-center text-[var(--text-muted)] flex-shrink-0">
+                        <span className="w-4 h-4 rounded-full bg-surface-container-high flex items-center justify-center text-outline flex-shrink-0">
                           {idx + 1}
                         </span>
-                        <span className="text-[var(--text-secondary)] flex-1">
+                        <span className="text-on-surface-variant flex-1">
                           {ex.name}
                         </span>
-                        <span className="text-[var(--text-muted)]">
+                        <span className="text-outline">
                           {ex.sets} × {ex.repsRange ?? "—"}
                         </span>
                       </div>

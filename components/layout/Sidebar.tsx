@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard, color: "text-accent" },
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, color: "text-primary" },
   { href: "/sleep", label: "Sueño", icon: Moon, color: "text-module-sleep" },
   { href: "/fitness", label: "Fitness", icon: Dumbbell, color: "text-module-fitness" },
   { href: "/nutrition", label: "Nutrición", icon: Salad, color: "text-module-nutrition" },
@@ -36,13 +36,13 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-[var(--border)] bg-[var(--surface)] px-4 py-6 shrink-0">
+    <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-outline-variant/20 bg-surface-container-low px-4 py-6 shrink-0">
       {/* Logo */}
       <div className="flex items-center gap-3 px-2 mb-8">
-        <div className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center text-white font-bold text-sm">
-          A
+        <div className="w-8 h-8 rounded-xl bg-primary-container flex items-center justify-center text-on-primary font-bold text-sm">
+          C
         </div>
-        <span className="font-semibold text-[var(--text-primary)]">App Personal</span>
+        <span className="font-semibold text-on-surface">CLAUDIO</span>
       </div>
 
       {/* Navegación */}
@@ -56,14 +56,14 @@ export function Sidebar() {
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-sm font-medium",
                 isActive
-                  ? "bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--accent)]"
-                  : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                  ? "bg-primary-container/20 text-primary"
+                  : "text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface"
               )}
             >
               <Icon
                 className={cn(
                   "w-5 h-5 shrink-0",
-                  isActive ? "text-[var(--accent)]" : color
+                  isActive ? "text-primary" : color
                 )}
               />
               {label}
@@ -73,14 +73,14 @@ export function Sidebar() {
       </nav>
 
       {/* Footer del sidebar */}
-      <div className="flex items-center justify-between pt-4 border-t border-[var(--border)]">
+      <div className="flex items-center justify-between pt-4 border-t border-outline-variant/20">
         <Link
           href="/settings"
           className={cn(
             "flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
             pathname.startsWith("/settings")
-              ? "text-[var(--accent)]"
-              : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+              ? "text-primary"
+              : "text-on-surface-variant hover:bg-surface-container-highest"
           )}
         >
           <Settings className="w-4.5 h-4.5" />

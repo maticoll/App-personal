@@ -38,8 +38,8 @@ function SleepLogRow({
   return (
     <div
       className={cn(
-        "border border-[var(--border)] rounded-xl overflow-hidden transition-all",
-        "bg-[var(--surface)]"
+        "border border-outline-variant/20 rounded-xl overflow-hidden transition-all",
+        "bg-surface-container"
       )}
     >
       {/* Row principal */}
@@ -54,7 +54,7 @@ function SleepLogRow({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-[var(--text-primary)]">
+            <span className="text-sm font-semibold text-on-surface">
               {formatDate(log.date)}
             </span>
             {hasGarmin && (
@@ -63,7 +63,7 @@ function SleepLogRow({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
+          <div className="flex items-center gap-1 text-xs text-outline">
             {formatTime(log.bedTime)}
             {log.wakeTime && (
               <>
@@ -90,23 +90,23 @@ function SleepLogRow({
               {formatDuration(log.durationMinutes)}
             </span>
           ) : (
-            <span className="text-xs text-[var(--text-muted)]">Incompleto</span>
+            <span className="text-xs text-outline">Incompleto</span>
           )}
         </div>
 
         {/* Expand icon */}
         {(hasGarmin || hasPhases || log.notes) ? (
           expanded ? (
-            <ChevronUp className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />
+            <ChevronUp className="w-4 h-4 text-outline flex-shrink-0" />
           ) : (
-            <ChevronDown className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />
+            <ChevronDown className="w-4 h-4 text-outline flex-shrink-0" />
           )
         ) : null}
       </div>
 
       {/* Expanded detail */}
       {expanded && (
-        <div className="px-3 pb-3 pt-1 border-t border-[var(--border)] space-y-2">
+        <div className="px-3 pb-3 pt-1 border-t border-outline-variant/20 space-y-2">
           {/* Fases */}
           {hasPhases && (
             <div className="grid grid-cols-4 gap-2 text-center">
@@ -138,7 +138,7 @@ function SleepLogRow({
                       ? formatDuration(log[phase.key]!)
                       : "–"}
                   </div>
-                  <div className="text-xs text-[var(--text-muted)]">
+                  <div className="text-xs text-outline">
                     {phase.label}
                   </div>
                 </div>
@@ -149,15 +149,15 @@ function SleepLogRow({
           {/* Extra stats */}
           <div className="flex flex-wrap gap-3 text-xs">
             {log.spo2Avg !== null && (
-              <span className="text-[var(--text-muted)]">
+              <span className="text-outline">
                 SpO2:{" "}
-                <span className="font-medium text-[var(--text-primary)]">
+                <span className="font-medium text-on-surface">
                   {log.spo2Avg.toFixed(0)}%
                 </span>
               </span>
             )}
             {log.bodyBatteryChange !== null && (
-              <span className="text-[var(--text-muted)]">
+              <span className="text-outline">
                 Body Battery:{" "}
                 <span
                   className={cn(
@@ -173,9 +173,9 @@ function SleepLogRow({
               </span>
             )}
             {log.stressScore !== null && (
-              <span className="text-[var(--text-muted)]">
+              <span className="text-outline">
                 Estrés:{" "}
-                <span className="font-medium text-[var(--text-primary)]">
+                <span className="font-medium text-on-surface">
                   {log.stressScore}
                 </span>
               </span>
@@ -183,7 +183,7 @@ function SleepLogRow({
           </div>
 
           {log.notes && (
-            <p className="text-xs text-[var(--text-muted)] italic">
+            <p className="text-xs text-outline italic">
               {log.notes}
             </p>
           )}
@@ -213,7 +213,7 @@ export function SleepHistoryList({ history, onDelete }: Props) {
     return (
       <div className="card text-center py-8">
         <Moon className="w-8 h-8 text-module-sleep mx-auto mb-2 opacity-30" />
-        <p className="text-sm text-[var(--text-muted)]">Sin registros de sueño aún</p>
+        <p className="text-sm text-outline">Sin registros de sueño aún</p>
       </div>
     );
   }

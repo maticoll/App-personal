@@ -164,10 +164,10 @@ export default async function DashboardPage() {
       {/* ─── Saludo ──────────────────────────────────────────── */}
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-[var(--text-primary)]">
+          <h2 className="text-xl md:text-2xl font-bold text-on-surface">
             {saludo}, {firstName} 👋
           </h2>
-          <p className="text-[var(--text-secondary)] text-sm mt-1 capitalize">
+          <p className="text-on-surface-variant text-sm mt-1 capitalize">
             {dateLabel}
           </p>
         </div>
@@ -175,7 +175,7 @@ export default async function DashboardPage() {
         {/* Botón recalcular score */}
         <Link
           href="/api/scoring/calculate"
-          className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors pt-1"
+          className="flex items-center gap-1.5 text-xs text-outline hover:text-on-surface-variant transition-colors pt-1"
           title="Recalcular score"
         >
           <RefreshCw className="w-3.5 h-3.5" />
@@ -186,14 +186,14 @@ export default async function DashboardPage() {
       <div className="card space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-accent" />
-            <span className="font-semibold text-[var(--text-primary)]">
+            <BarChart3 className="w-5 h-5 text-primary" />
+            <span className="font-semibold text-on-surface">
               Score del día
             </span>
           </div>
           <Link
             href="/scoring"
-            className="text-xs text-[var(--text-muted)] hover:text-accent transition-colors"
+            className="text-xs text-outline hover:text-primary transition-colors"
           >
             Ver historial →
           </Link>
@@ -205,7 +205,7 @@ export default async function DashboardPage() {
 
       {/* ─── Resúmenes rápidos de módulos ────────────────────── */}
       <div>
-        <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-3">
+        <h3 className="text-sm font-medium text-on-surface-variant mb-3">
           Módulos
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -259,15 +259,15 @@ export default async function DashboardPage() {
           {/* Finanzas — sin score */}
           <Link
             href="/finances"
-            className="card hover:bg-[var(--surface-hover)] active:scale-[0.98] transition-all duration-150 block"
+            className="card hover:bg-surface-container-high active:scale-[0.98] transition-all duration-150 block"
           >
             <div className="space-y-3">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/10">
                 <Wallet className="w-5 h-5 text-module-finances" />
               </div>
               <div>
-                <p className="font-medium text-[var(--text-primary)] text-sm">Finanzas</p>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">Ver app →</p>
+                <p className="font-medium text-on-surface text-sm">Finanzas</p>
+                <p className="text-xs text-outline mt-0.5">Ver app →</p>
               </div>
             </div>
           </Link>

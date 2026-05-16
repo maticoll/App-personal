@@ -10,7 +10,7 @@ const TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color:
   SWIMMING: { label: "Natación", icon: <Droplets className="w-3.5 h-3.5" />, color: "text-blue-400" },
   WALKING: { label: "Caminata", icon: <MapPin className="w-3.5 h-3.5" />, color: "text-green-400" },
   CYCLING: { label: "Ciclismo", icon: <Bike className="w-3.5 h-3.5" />, color: "text-purple-400" },
-  OTHER: { label: "Actividad", icon: <Activity className="w-3.5 h-3.5" />, color: "text-[var(--text-secondary)]" },
+  OTHER: { label: "Actividad", icon: <Activity className="w-3.5 h-3.5" />, color: "text-on-surface-variant" },
 };
 
 function formatDate(date: Date): string {
@@ -62,10 +62,10 @@ function HistoryItem({ workout, onDeleted }: HistoryItemProps) {
   };
 
   return (
-    <div className="border border-[var(--border)] rounded-xl overflow-hidden">
+    <div className="border border-outline-variant/20 rounded-xl overflow-hidden">
       <div className="flex items-center gap-3 p-3">
         <div
-          className={`w-7 h-7 rounded-lg flex items-center justify-center bg-[var(--surface-hover)] flex-shrink-0 ${config.color}`}
+          className={`w-7 h-7 rounded-lg flex items-center justify-center bg-surface-container-high flex-shrink-0 ${config.color}`}
         >
           {config.icon}
         </div>
@@ -75,24 +75,24 @@ function HistoryItem({ workout, onDeleted }: HistoryItemProps) {
               {workout.title ?? config.label}
             </span>
             {workout.source === "GARMIN" && (
-              <span className="text-xs bg-[var(--surface-hover)] text-[var(--text-muted)] px-1.5 rounded-full">
+              <span className="text-xs bg-surface-container-high text-outline px-1.5 rounded-full">
                 Garmin
               </span>
             )}
           </div>
           <div className="flex items-center gap-2 mt-0.5">
             {workout.durationMinutes && (
-              <span className="text-xs text-[var(--text-muted)]">
+              <span className="text-xs text-outline">
                 {formatDuration(workout.durationMinutes)}
               </span>
             )}
             {workout.distanceKm && (
-              <span className="text-xs text-[var(--text-muted)]">
+              <span className="text-xs text-outline">
                 · {workout.distanceKm.toFixed(1)} km
               </span>
             )}
             {workout.exercises.length > 0 && (
-              <span className="text-xs text-[var(--text-muted)]">
+              <span className="text-xs text-outline">
                 · {workout.exercises.length} ejercicios
               </span>
             )}
@@ -102,7 +102,7 @@ function HistoryItem({ workout, onDeleted }: HistoryItemProps) {
           {workout.exercises.length > 0 && (
             <button
               onClick={() => setExpanded(!expanded)}
-              className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-muted)] transition-colors"
+              className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-surface-container-high text-outline transition-colors"
             >
               {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
@@ -110,7 +110,7 @@ function HistoryItem({ workout, onDeleted }: HistoryItemProps) {
           <button
             onClick={handleDelete}
             disabled={deleting}
-            className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-red-500/10 text-[var(--text-muted)] hover:text-red-400 transition-colors disabled:opacity-40"
+            className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-red-500/10 text-outline hover:text-red-400 transition-colors disabled:opacity-40"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -118,15 +118,15 @@ function HistoryItem({ workout, onDeleted }: HistoryItemProps) {
       </div>
 
       {expanded && workout.exercises.length > 0 && (
-        <div className="px-3 pb-3 pt-2 border-t border-[var(--border)] space-y-2">
+        <div className="px-3 pb-3 pt-2 border-t border-outline-variant/20 space-y-2">
           {workout.exercises.map((ex) => (
             <div key={ex.id} className="text-xs">
-              <span className="text-[var(--text-secondary)] font-medium">{ex.name}</span>
+              <span className="text-on-surface-variant font-medium">{ex.name}</span>
               <div className="flex flex-wrap gap-1 mt-1">
                 {ex.sets.map((set) => (
                   <span
                     key={set.id}
-                    className="bg-[var(--surface-hover)] text-[var(--text-muted)] px-1.5 py-0.5 rounded"
+                    className="bg-surface-container-high text-outline px-1.5 py-0.5 rounded"
                   >
                     S{set.setNumber}
                     {set.reps ? ` ${set.reps}r` : ""}
@@ -174,7 +174,7 @@ export default function WorkoutHistoryList({ workouts, onDeleted }: Props) {
 
   if (workouts.length === 0) {
     return (
-      <div className="card text-center py-10 text-[var(--text-muted)] text-sm">
+      <div className="card text-center py-10 text-outline text-sm">
         Sin entrenamientos registrados en los últimos 14 días
       </div>
     );
@@ -184,7 +184,7 @@ export default function WorkoutHistoryList({ workouts, onDeleted }: Props) {
     <div className="space-y-4">
       {groups.map((group) => (
         <div key={group.date} className="space-y-2">
-          <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide px-1">
+          <h4 className="text-xs font-semibold text-outline uppercase tracking-wide px-1">
             {group.label}
           </h4>
           {group.workouts.map((w) => (

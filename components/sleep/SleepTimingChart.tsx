@@ -81,29 +81,29 @@ function CustomTooltip({
   if (!active || !payload?.length) return null;
   const entry = payload[0].payload;
   return (
-    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 text-sm shadow-xl">
-      <p className="font-semibold text-[var(--text-primary)] mb-2">{label}</p>
+    <div className="bg-surface-container border border-outline-variant/20 rounded-xl p-3 text-sm shadow-xl">
+      <p className="font-semibold text-on-surface mb-2">{label}</p>
       {entry.bedTime && (
         <div className="space-y-1 text-xs">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-violet-500" />
-            <span className="text-[var(--text-muted)]">Dormiste:</span>
-            <span className="font-medium text-[var(--text-primary)]">
+            <span className="text-outline">Dormiste:</span>
+            <span className="font-medium text-on-surface">
               {formatTime(entry.bedTime)}
             </span>
           </div>
           {entry.wakeTime && (
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-amber-400" />
-              <span className="text-[var(--text-muted)]">Desperté:</span>
-              <span className="font-medium text-[var(--text-primary)]">
+              <span className="text-outline">Desperté:</span>
+              <span className="font-medium text-on-surface">
                 {formatTime(entry.wakeTime)}
               </span>
             </div>
           )}
           {entry.duration !== null && (
-            <div className="flex items-center gap-1.5 pt-1 border-t border-[var(--border)]">
-              <span className="text-[var(--text-muted)]">Duración:</span>
+            <div className="flex items-center gap-1.5 pt-1 border-t border-outline-variant/20">
+              <span className="text-outline">Duración:</span>
               <span className="font-medium text-module-sleep">
                 {Math.floor(entry.duration)}h{" "}
                 {Math.round((entry.duration % 1) * 60)}min
@@ -113,7 +113,7 @@ function CustomTooltip({
         </div>
       )}
       {!entry.bedTime && (
-        <p className="text-xs text-[var(--text-muted)]">Sin registro</p>
+        <p className="text-xs text-outline">Sin registro</p>
       )}
     </div>
   );
@@ -160,7 +160,7 @@ export function SleepTimingChart({ history }: Props) {
 
   return (
     <div className="card">
-      <h3 className="text-sm font-semibold text-[var(--text-secondary)] mb-4">
+      <h3 className="text-sm font-semibold text-on-surface-variant mb-4">
         Horarios de sueño (últimos 7 días)
       </h3>
 
@@ -214,7 +214,7 @@ export function SleepTimingChart({ history }: Props) {
         </ComposedChart>
       </ResponsiveContainer>
 
-      <p className="text-xs text-center text-[var(--text-muted)] mt-1">
+      <p className="text-xs text-center text-outline mt-1">
         Cada barra muestra la ventana de sueño (hora de dormir → despertar)
       </p>
     </div>

@@ -232,16 +232,16 @@ export default function IdeasModuleClient({ initialIdeas, initialStats }: Props)
 
       {/* ── Stats row ─────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3">
-        <StatPill label="Total"   value={stats.total}          color="text-[var(--text-primary)]" />
+        <StatPill label="Total"   value={stats.total}          color="text-on-surface" />
         <StatPill label="Activas" value={stats.active ?? 0}    color="text-violet-400" />
         <StatPill label="Hechas"  value={stats.done ?? 0}      color="text-emerald-400" />
       </div>
 
       {/* ── Capture form ──────────────────────────────────────────────────────── */}
-      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 space-y-3">
+      <div className="bg-surface-container border border-outline-variant/20 rounded-xl p-4 space-y-3">
         <div className="flex items-center gap-2 mb-0.5">
           <Lightbulb className="w-4 h-4 text-module-ideas" />
-          <span className="text-sm font-semibold text-[var(--text-primary)]">
+          <span className="text-sm font-semibold text-on-surface">
             Nueva idea
           </span>
         </div>
@@ -253,13 +253,13 @@ export default function IdeasModuleClient({ initialIdeas, initialStats }: Props)
           onKeyDown={handleKeyDown}
           placeholder="¿Qué tenés en mente? (Cmd+Enter para guardar)"
           rows={2}
-          className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] resize-none focus:outline-none focus:ring-1 focus:ring-module-ideas/50 transition-all"
+          className="w-full bg-background border border-outline-variant/20 rounded-lg px-3 py-2 text-sm text-on-surface placeholder:text-outline resize-none focus:outline-none focus:ring-1 focus:ring-module-ideas/50 transition-all"
           disabled={isCapturing}
         />
 
         {/* Priority + submit */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-[var(--text-secondary)]">Prioridad:</span>
+          <span className="text-xs text-on-surface-variant">Prioridad:</span>
           {(Object.keys(PRIORITY_CONFIG) as IdeaPriority[]).map((p) => {
             const cfg = PRIORITY_CONFIG[p];
             const active = capturePriority === p;
@@ -270,7 +270,7 @@ export default function IdeasModuleClient({ initialIdeas, initialStats }: Props)
                 className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs border transition-all ${
                   active
                     ? `${cfg.color} ${cfg.border} bg-white/5`
-                    : "text-[var(--text-tertiary)] border-[var(--border)] hover:border-[var(--border-hover)]"
+                    : "text-outline border-outline-variant/30 hover:border-outline"
                 }`}
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
@@ -314,7 +314,7 @@ export default function IdeasModuleClient({ initialIdeas, initialStats }: Props)
                 className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all ${
                   activeFilter === key
                     ? "bg-module-ideas text-white"
-                    : "bg-[var(--surface)] text-[var(--text-secondary)] border border-[var(--border)] hover:text-[var(--text-primary)]"
+                    : "bg-surface-container text-on-surface-variant border border-outline-variant/20 hover:text-on-surface"
                 }`}
               >
                 {label}
@@ -327,20 +327,20 @@ export default function IdeasModuleClient({ initialIdeas, initialStats }: Props)
         {/* Search */}
         <div className="flex gap-2 items-start">
           <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-tertiary)]" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-outline" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar ideas…"
-              className="w-full pl-8 pr-7 py-1.5 bg-[var(--surface)] border border-[var(--border)] rounded-lg text-xs text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-module-ideas/50"
+              className="w-full pl-8 pr-7 py-1.5 bg-surface-container border border-outline-variant/20 rounded-lg text-xs text-on-surface placeholder:text-outline focus:outline-none focus:ring-1 focus:ring-module-ideas/50"
             />
             {search && (
               <button
                 onClick={() => setSearch("")}
                 className="absolute right-2 top-1/2 -translate-y-1/2"
               >
-                <X className="w-3 h-3 text-[var(--text-tertiary)]" />
+                <X className="w-3 h-3 text-outline" />
               </button>
             )}
           </div>
@@ -356,7 +356,7 @@ export default function IdeasModuleClient({ initialIdeas, initialStats }: Props)
                 className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-all ${
                   activeTag === tag
                     ? "bg-module-ideas/20 text-module-ideas border-module-ideas/40"
-                    : "bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border)] hover:border-[var(--border-hover)]"
+                    : "bg-surface-container text-on-surface-variant border-outline-variant/30 hover:border-outline"
                 }`}
               >
                 <Tag className="w-2.5 h-2.5" />
@@ -369,7 +369,7 @@ export default function IdeasModuleClient({ initialIdeas, initialStats }: Props)
 
       {/* ── Ideas list ────────────────────────────────────────────────────────── */}
       {filtered.length === 0 ? (
-        <div className="text-center py-12 text-[var(--text-tertiary)]">
+        <div className="text-center py-12 text-outline">
           <Lightbulb className="w-8 h-8 mx-auto mb-2 opacity-30" />
           <p className="text-sm">
             {ideas.length === 0
@@ -422,9 +422,9 @@ function StatPill({
   color: string;
 }) {
   return (
-    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 text-center">
+    <div className="bg-surface-container border border-outline-variant/20 rounded-xl p-3 text-center">
       <div className={`text-xl font-bold ${color}`}>{value}</div>
-      <div className="text-xs text-[var(--text-secondary)] mt-0.5">{label}</div>
+      <div className="text-xs text-on-surface-variant mt-0.5">{label}</div>
     </div>
   );
 }
@@ -478,8 +478,8 @@ function IdeaCard({
 
   return (
     <div
-      className={`bg-[var(--surface)] border rounded-xl transition-all ${
-        isExpanded ? "border-module-ideas/40" : "border-[var(--border)]"
+      className={`bg-surface-container border rounded-xl transition-all ${
+        isExpanded ? "border-module-ideas/40" : "border-outline-variant/20"
       } ${isDeleting ? "opacity-40 pointer-events-none" : ""}`}
     >
       {/* ── Card header — always visible ──────────────────────────────────────── */}
@@ -492,7 +492,7 @@ function IdeaCard({
 
         {/* Main content */}
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)] leading-tight">
+          <h3 className="text-sm font-semibold text-on-surface leading-tight">
             {idea.title ?? idea.rawText.slice(0, 70)}
           </h3>
 
@@ -509,7 +509,7 @@ function IdeaCard({
                   className={`text-[10px] px-1.5 py-0.5 rounded-full cursor-pointer transition-all ${
                     activeTag === tag
                       ? "bg-module-ideas/20 text-module-ideas"
-                      : "bg-[var(--bg)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                      : "bg-background text-outline hover:text-on-surface-variant"
                   }`}
                 >
                   #{tag}
@@ -538,7 +538,7 @@ function IdeaCard({
           className="px-3.5 pb-3.5 space-y-3"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="border-t border-[var(--border)] pt-3">
+          <div className="border-t border-outline-variant/20 pt-3">
             {isEditing ? (
               /* Edit mode */
               <div className="space-y-2">
@@ -547,18 +547,18 @@ function IdeaCard({
                   value={editTitle}
                   onChange={(e) => onEditTitle(e.target.value)}
                   placeholder="Título"
-                  className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-module-ideas/50"
+                  className="w-full bg-background border border-outline-variant/20 rounded-lg px-3 py-1.5 text-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-module-ideas/50"
                 />
                 <textarea
                   value={editContent}
                   onChange={(e) => onEditContent(e.target.value)}
                   rows={5}
-                  className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] resize-none focus:outline-none focus:ring-1 focus:ring-module-ideas/50"
+                  className="w-full bg-background border border-outline-variant/20 rounded-lg px-3 py-2 text-sm text-on-surface resize-none focus:outline-none focus:ring-1 focus:ring-module-ideas/50"
                 />
                 <div className="flex gap-2 justify-end">
                   <button
                     onClick={onCancelEdit}
-                    className="px-3 py-1.5 text-xs rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                    className="px-3 py-1.5 text-xs rounded-lg text-on-surface-variant hover:text-on-surface transition-colors"
                   >
                     Cancelar
                   </button>
@@ -574,7 +574,7 @@ function IdeaCard({
               </div>
             ) : (
               /* View mode */
-              <p className="text-sm text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap">
+              <p className="text-sm text-on-surface-variant leading-relaxed whitespace-pre-wrap">
                 {displayText}
               </p>
             )}
@@ -598,7 +598,7 @@ function IdeaCard({
               </button>
 
               {/* Date */}
-              <span className="text-[10px] text-[var(--text-tertiary)]">
+              <span className="text-[10px] text-outline">
                 {new Date(idea.createdAt).toLocaleDateString("es-UY", {
                   day: "numeric",
                   month: "short",
@@ -608,14 +608,14 @@ function IdeaCard({
               <div className="ml-auto flex items-center gap-1">
                 <button
                   onClick={onStartEdit}
-                  className="px-2 py-1 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg)] transition-colors text-xs"
+                  className="px-2 py-1 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-background transition-colors text-xs"
                 >
                   Editar
                 </button>
                 <button
                   onClick={onDelete}
                   disabled={isDeleting}
-                  className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                  className="p-1.5 rounded-lg text-outline hover:text-red-400 hover:bg-red-400/10 transition-colors"
                 >
                   {isDeleting ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />

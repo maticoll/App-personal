@@ -114,15 +114,15 @@ export default function FitnessModuleClient({
       )}
 
       {/* Tab navigation */}
-      <div className="flex gap-1 bg-[var(--surface-hover)] rounded-xl p-1">
+      <div className="flex gap-1 bg-surface-container-high rounded-xl p-1">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               tab === t.id
-                ? "bg-[var(--surface)] text-[var(--text-primary)] shadow-sm"
-                : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                ? "bg-surface-container text-on-surface shadow-sm"
+                : "text-outline hover:text-on-surface-variant"
             }`}
           >
             {t.label}
@@ -166,7 +166,7 @@ export default function FitnessModuleClient({
         <div className="space-y-4">
           <WeeklyVolumeChart data={weeklyStats} />
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-[var(--text-primary)] px-1">
+            <h3 className="text-sm font-semibold text-on-surface px-1">
               Últimos 14 días
             </h3>
             <WorkoutHistoryList

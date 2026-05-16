@@ -2,29 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Material Symbols Outlined icon font */
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+
+/* Geist font */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap');
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  vertical-align: middle;
+}
+
 @layer base {
   :root {
-    /* Light mode variables */
-    --bg: #F8FAFC;
-    --surface: #FFFFFF;
-    --surface-hover: #F1F5F9;
-    --border: #E2E8F0;
-    --text-primary: #0F172A;
-    --text-secondary: #64748B;
-    --text-muted: #94A3B8;
-    --accent: #6366F1;
-  }
-
-  .dark {
-    /* Dark mode variables */
     --bg: #0D0F14;
     --surface: #1A1D27;
     --surface-hover: #232736;
     --border: #2D3148;
-    --text-primary: #F1F5F9;
-    --text-secondary: #94A3B8;
-    --text-muted: #64748B;
-    --accent: #818CF8;
+    --text-primary: #e0e2f0;
+    --text-secondary: #c7c4d7;
+    --text-muted: #908fa0;
+    --accent: #c0c1ff;
+  }
+
+  .dark {
+    --bg: #0D0F14;
+    --surface: #1A1D27;
+    --surface-hover: #232736;
+    --border: #464554;
+    --text-primary: #e0e2f0;
+    --text-secondary: #c7c4d7;
+    --text-muted: #908fa0;
+    --accent: #c0c1ff;
   }
 
   * {
@@ -32,22 +53,18 @@
   }
 
   html {
-    /* Smooth scroll */
     scroll-behavior: smooth;
-    /* Prevenir selección accidental en mobile */
     -webkit-tap-highlight-color: transparent;
   }
 
   body {
-    background-color: var(--bg);
-    color: var(--text-primary);
-    font-family: var(--font-inter), system-ui, sans-serif;
-    /* Safe area para iOS (notch / Dynamic Island) */
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
+    background-color: #10131d;
+    color: #e0e2f0;
+    font-family: 'Geist', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100dvh;
   }
 
-  /* Scrollbar minimalista */
   ::-webkit-scrollbar {
     width: 4px;
     height: 4px;
@@ -56,70 +73,69 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--border);
+    background: #464554;
     border-radius: 2px;
   }
 }
 
 @layer components {
-  /* Card base */
-  .card {
-    background-color: var(--surface);
-    border: 1px solid var(--border);
-    @apply rounded-2xl p-4;
+  .glass-card {
+    background: rgba(26, 29, 39, 0.6);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  /* Score bar */
+  .card {
+    @apply glass-card rounded-2xl p-4;
+  }
+
   .score-bar-track {
-    background-color: var(--border);
+    background-color: #272a34;
     @apply h-2 rounded-full overflow-hidden;
   }
 
-  /* Botón primario */
   .btn-primary {
-    background-color: var(--accent);
-    @apply text-white font-medium px-4 py-2.5 rounded-xl transition-opacity hover:opacity-90 active:opacity-75;
+    background-color: #c0c1ff;
+    @apply text-[#1000a9] font-medium px-4 py-2.5 rounded-full transition-opacity hover:opacity-90 active:opacity-75;
   }
 
-  /* Input base */
   .input {
-    background-color: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--text-primary);
+    background: rgba(26, 29, 39, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #e0e2f0;
     @apply rounded-xl px-3 py-2 text-sm outline-none w-full;
   }
 
   .input::placeholder {
-    color: var(--text-muted);
+    color: #908fa0;
   }
 
   .input:focus {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+    box-shadow: 0 0 0 1px #c0c1ff;
   }
 
-  /* Link de navegación */
   .nav-item {
     @apply flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-colors text-xs font-medium;
-    color: var(--text-muted);
+    color: #908fa0;
   }
 
   .nav-item.active {
-    color: var(--accent);
-    background-color: color-mix(in srgb, var(--accent) 12%, transparent);
-  }
-
-  .nav-item:hover:not(.active) {
-    background-color: var(--surface-hover);
-    color: var(--text-secondary);
+    color: #c0c1ff;
   }
 }
 
 @layer utilities {
-  /* iOS safe area helpers */
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom);
   }
   .pt-safe {
     padding-top: env(safe-area-inset-top);
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }

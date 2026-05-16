@@ -47,13 +47,13 @@ export function GarminSyncButton({ lastSync, isConnected, onSync }: Props) {
         {isConnected ? (
           <Wifi className="w-4 h-4 text-green-400 flex-shrink-0" />
         ) : (
-          <WifiOff className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0" />
+          <WifiOff className="w-4 h-4 text-outline flex-shrink-0" />
         )}
         <div className="min-w-0">
-          <p className="text-sm font-medium text-[var(--text-primary)]">
+          <p className="text-sm font-medium text-on-surface">
             Garmin Connect
           </p>
-          <p className="text-xs text-[var(--text-muted)] truncate">
+          <p className="text-xs text-outline truncate">
             {isConnected
               ? lastSync
                 ? `Último sync ${relativeTime(lastSync)}`
@@ -72,7 +72,7 @@ export function GarminSyncButton({ lastSync, isConnected, onSync }: Props) {
             "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
             "border",
             syncState === "idle" &&
-              "border-[var(--border)] text-[var(--text-secondary)] hover:border-module-sleep hover:text-module-sleep",
+              "border-outline-variant/30 text-on-surface-variant hover:border-module-sleep hover:text-module-sleep",
             syncState === "syncing" &&
               "border-module-sleep/30 text-module-sleep opacity-60",
             syncState === "success" &&
@@ -110,7 +110,7 @@ export function GarminSyncButton({ lastSync, isConnected, onSync }: Props) {
       )}
 
       {!isConnected && (
-        <span className="text-xs text-[var(--text-muted)]">No conectado</span>
+        <span className="text-xs text-outline">No conectado</span>
       )}
     </div>
   );

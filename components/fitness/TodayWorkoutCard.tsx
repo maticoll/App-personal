@@ -16,7 +16,7 @@ const TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color:
   SWIMMING: { label: "Natación", icon: <Droplets className="w-4 h-4" />, color: "text-blue-400" },
   WALKING: { label: "Caminata", icon: <MapPin className="w-4 h-4" />, color: "text-green-400" },
   CYCLING: { label: "Ciclismo", icon: <Bike className="w-4 h-4" />, color: "text-purple-400" },
-  OTHER: { label: "Actividad", icon: <Activity className="w-4 h-4" />, color: "text-[var(--text-secondary)]" },
+  OTHER: { label: "Actividad", icon: <Activity className="w-4 h-4" />, color: "text-on-surface-variant" },
 };
 
 function formatDuration(minutes: number | null): string {
@@ -54,10 +54,10 @@ function WorkoutRow({ workout, onDeleted }: WorkoutRowProps) {
   };
 
   return (
-    <div className="border border-[var(--border)] rounded-xl overflow-hidden">
+    <div className="border border-outline-variant/20 rounded-xl overflow-hidden">
       {/* Header del workout */}
       <div className="flex items-center gap-3 p-3">
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-[var(--surface-hover)] ${config.color}`}>
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-surface-container-high ${config.color}`}>
           {config.icon}
         </div>
         <div className="flex-1 min-w-0">
@@ -65,21 +65,21 @@ function WorkoutRow({ workout, onDeleted }: WorkoutRowProps) {
             {workout.title ?? config.label}
           </p>
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-xs text-[var(--text-muted)]">
+            <span className="text-xs text-outline">
               {formatDuration(workout.durationMinutes)}
             </span>
             {workout.distanceKm && (
-              <span className="text-xs text-[var(--text-muted)]">
+              <span className="text-xs text-outline">
                 · {workout.distanceKm.toFixed(1)} km
               </span>
             )}
             {workout.calories && (
-              <span className="text-xs text-[var(--text-muted)]">
+              <span className="text-xs text-outline">
                 · {workout.calories} kcal
               </span>
             )}
             {workout.source === "GARMIN" && (
-              <span className="text-xs bg-[var(--surface-hover)] text-[var(--text-muted)] px-1.5 py-0.5 rounded-full">
+              <span className="text-xs bg-surface-container-high text-outline px-1.5 py-0.5 rounded-full">
                 Garmin
               </span>
             )}
@@ -89,7 +89,7 @@ function WorkoutRow({ workout, onDeleted }: WorkoutRowProps) {
           {workout.exercises.length > 0 && (
             <button
               onClick={() => setExpanded(!expanded)}
-              className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-muted)] transition-colors"
+              className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-surface-container-high text-outline transition-colors"
             >
               {expanded ? (
                 <ChevronUp className="w-4 h-4" />
@@ -101,7 +101,7 @@ function WorkoutRow({ workout, onDeleted }: WorkoutRowProps) {
           <button
             onClick={handleDelete}
             disabled={deleting}
-            className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-red-500/10 text-[var(--text-muted)] hover:text-red-400 transition-colors disabled:opacity-40"
+            className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-red-500/10 text-outline hover:text-red-400 transition-colors disabled:opacity-40"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -110,17 +110,17 @@ function WorkoutRow({ workout, onDeleted }: WorkoutRowProps) {
 
       {/* Ejercicios expandibles (solo para GYM) */}
       {expanded && workout.exercises.length > 0 && (
-        <div className="px-3 pb-3 space-y-2 border-t border-[var(--border)] pt-3">
+        <div className="px-3 pb-3 space-y-2 border-t border-outline-variant/20 pt-3">
           {workout.exercises.map((ex) => (
             <div key={ex.id}>
-              <p className="text-xs font-medium text-[var(--text-secondary)] mb-1">
+              <p className="text-xs font-medium text-on-surface-variant mb-1">
                 {ex.name}
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {ex.sets.map((set) => (
                   <span
                     key={set.id}
-                    className="text-xs bg-[var(--surface-hover)] text-[var(--text-muted)] px-2 py-0.5 rounded-full"
+                    className="text-xs bg-surface-container-high text-outline px-2 py-0.5 rounded-full"
                   >
                     Serie {set.setNumber}
                     {set.reps ? `: ${set.reps} reps` : ""}
@@ -146,10 +146,10 @@ export default function TodayWorkoutCard({ workouts, onDeleted, isRefreshing }: 
   return (
     <div className="card space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-[var(--text-primary)]">
-          Hoy{isRefreshing && <span className="ml-2 text-xs text-[var(--text-muted)]">actualizando...</span>}
+        <h3 className="font-semibold text-on-surface">
+          Hoy{isRefreshing && <span className="ml-2 text-xs text-outline">actualizando...</span>}
         </h3>
-        <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+        <div className="flex items-center gap-3 text-xs text-outline">
           {totalMinutes > 0 && <span>{formatDuration(totalMinutes)}</span>}
           {totalSets > 0 && <span>{totalSets} series</span>}
         </div>

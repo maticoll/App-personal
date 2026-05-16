@@ -7,62 +7,137 @@ const config: Config = {
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./lib/**/*.{js,ts,jsx,tsx,mdx}",
   ],
-  darkMode: "class", // Controlado por next-themes con la clase "dark"
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
-        // Color 'border' mapeado a la variable CSS — requerido por @apply border-border en globals.css
+        // ── MD3 tokens (Stitch design system) ──
+        background: "#10131d",
+        "on-background": "#e0e2f0",
+        surface: {
+          DEFAULT: "#10131d",
+          dim: "#10131d",
+          bright: "#363944",
+          variant: "#31343f",
+          tint: "#c0c1ff",
+          container: {
+            DEFAULT: "#1c1f29",
+            lowest: "#0b0e17",
+            low: "#181b25",
+            high: "#272a34",
+            highest: "#31343f",
+          },
+        },
+        "on-surface": "#e0e2f0",
+        "on-surface-variant": "#c7c4d7",
+        "inverse-surface": "#e0e2f0",
+        "inverse-on-surface": "#2d303b",
+        outline: "#908fa0",
+        "outline-variant": "#464554",
+        primary: {
+          DEFAULT: "#c0c1ff",
+          container: "#8083ff",
+          fixed: "#e1e0ff",
+          "fixed-dim": "#c0c1ff",
+        },
+        "on-primary": "#1000a9",
+        "on-primary-container": "#0d0096",
+        "on-primary-fixed": "#07006c",
+        "on-primary-fixed-variant": "#2f2ebe",
+        "inverse-primary": "#494bd6",
+        secondary: {
+          DEFAULT: "#d0bcff",
+          container: "#571bc1",
+          fixed: "#e9ddff",
+          "fixed-dim": "#d0bcff",
+        },
+        "on-secondary": "#3c0091",
+        "on-secondary-container": "#c4abff",
+        "on-secondary-fixed": "#23005c",
+        "on-secondary-fixed-variant": "#5516be",
+        tertiary: {
+          DEFAULT: "#ffb783",
+          container: "#d97721",
+          fixed: "#ffdcc5",
+          "fixed-dim": "#ffb783",
+        },
+        "on-tertiary": "#4f2500",
+        "on-tertiary-container": "#452000",
+        "on-tertiary-fixed": "#301400",
+        "on-tertiary-fixed-variant": "#703700",
+        error: {
+          DEFAULT: "#ffb4ab",
+          container: "#93000a",
+        },
+        "on-error": "#690005",
+        "on-error-container": "#ffdad6",
+        // ── Module accent colors ──
+        "accent-cyan": "#06B6D4",
+        "accent-emerald": "#10B981",
+        "accent-rose": "#F43F5E",
+        // ── Legacy (mantener compatibilidad con componentes existentes) ──
         border: "var(--border)",
-        // Design system: dark mode
-        dark: {
-          bg: "#0D0F14",
-          surface: "#1A1D27",
-          surfaceHover: "#232736",
-          border: "#2D3148",
-          muted: "#3D4266",
-        },
-        // Design system: light mode
-        light: {
-          bg: "#F8FAFC",
-          surface: "#FFFFFF",
-          surfaceHover: "#F1F5F9",
-          border: "#E2E8F0",
-          muted: "#CBD5E1",
-        },
-        // Accent principal — Indigo/Violet
         accent: {
           DEFAULT: "#6366F1",
           hover: "#4F46E5",
           light: "#818CF8",
           subtle: "#EEF2FF",
         },
-        // Colores de scoring (gradient verde → rojo)
         score: {
-          excellent: "#22C55E",   // 80-100
-          good: "#84CC16",        // 60-79
-          average: "#EAB308",     // 40-59
-          poor: "#F97316",        // 20-39
-          bad: "#EF4444",         // 0-19
+          excellent: "#22C55E",
+          good: "#84CC16",
+          average: "#EAB308",
+          poor: "#F97316",
+          bad: "#EF4444",
         },
-        // Colores por módulo
         module: {
-          sleep: "#8B5CF6",       // Violeta
-          fitness: "#06B6D4",     // Cyan
-          nutrition: "#10B981",   // Esmeralda
-          projects: "#F59E0B",    // Ámbar
-          ideas: "#EC4899",       // Rosa
-          finances: "#3B82F6",    // Azul
-          scoring: "#6366F1",     // Indigo
+          sleep: "#8B5CF6",
+          fitness: "#06B6D4",
+          nutrition: "#10B981",
+          projects: "#F59E0B",
+          ideas: "#EC4899",
+          finances: "#3B82F6",
+          scoring: "#6366F1",
         },
       },
       fontFamily: {
-        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
+        sans: ["Geist", "system-ui", "sans-serif"],
+        mono: ["Geist Mono", "monospace"],
+        "label-md": ["Geist"],
+        "body-md": ["Geist"],
+        "display-lg": ["Geist"],
+        "body-lg": ["Geist"],
+        "headline-lg": ["Geist"],
+        "headline-md": ["Geist"],
+        "mono-md": ["Geist Mono"],
+        "label-sm": ["Geist"],
+      },
+      fontSize: {
+        "label-md": ["14px", { lineHeight: "1.4", letterSpacing: "0.01em", fontWeight: "500" }],
+        "body-md": ["16px", { lineHeight: "1.5", fontWeight: "400" }],
+        "display-lg": ["48px", { lineHeight: "1.1", letterSpacing: "-0.04em", fontWeight: "700" }],
+        "body-lg": ["18px", { lineHeight: "1.6", fontWeight: "400" }],
+        "headline-lg": ["32px", { lineHeight: "1.2", letterSpacing: "-0.02em", fontWeight: "600" }],
+        "headline-md": ["24px", { lineHeight: "1.3", fontWeight: "600" }],
+        "mono-md": ["14px", { lineHeight: "1.6", fontWeight: "400" }],
+        "label-sm": ["12px", { lineHeight: "1.2", letterSpacing: "0.05em", fontWeight: "600" }],
       },
       borderRadius: {
         "4xl": "2rem",
       },
+      spacing: {
+        lg: "24px",
+        xl: "40px",
+        "margin-desktop": "32px",
+        gutter: "16px",
+        "margin-mobile": "16px",
+        unit: "4px",
+        xs: "4px",
+        sm: "8px",
+        md: "16px",
+      },
       screens: {
-        xs: "375px",  // iPhone 14 width
+        xs: "375px",
       },
       animation: {
         "score-fill": "scoreFill 1s ease-out forwards",

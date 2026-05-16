@@ -29,16 +29,16 @@ export function DailyScoreCard({ entry }: DailyScoreCardProps) {
     <div className="card space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-[var(--text-secondary)] capitalize">
+        <span className="text-sm font-medium text-on-surface-variant capitalize">
           {dateLabel}
         </span>
         {entry.global !== null ? (
           <span className={cn("text-lg font-bold", getScoreColor(global))}>
             {global}
-            <span className="text-xs text-[var(--text-muted)] font-normal">/100</span>
+            <span className="text-xs text-outline font-normal">/100</span>
           </span>
         ) : (
-          <span className="text-sm text-[var(--text-muted)]">Sin datos</span>
+          <span className="text-sm text-outline">Sin datos</span>
         )}
       </div>
 
@@ -49,10 +49,10 @@ export function DailyScoreCard({ entry }: DailyScoreCardProps) {
           return (
             <div key={key} className="flex items-center gap-2">
               <Icon className={cn("w-3.5 h-3.5 flex-shrink-0", color)} />
-              <span className="text-xs text-[var(--text-muted)] w-16 flex-shrink-0">
+              <span className="text-xs text-outline w-16 flex-shrink-0">
                 {label}
               </span>
-              <div className="flex-1 h-1.5 bg-[var(--border)] rounded-full overflow-hidden">
+              <div className="flex-1 h-1.5 bg-outline-variant/30 rounded-full overflow-hidden">
                 {score !== null ? (
                   <div
                     className={cn("h-full rounded-full", getScoreBgColor(score))}
@@ -67,7 +67,7 @@ export function DailyScoreCard({ entry }: DailyScoreCardProps) {
                   {score}
                 </span>
               ) : (
-                <span className="text-xs text-[var(--text-muted)] w-6 text-right">—</span>
+                <span className="text-xs text-outline w-6 text-right">—</span>
               )}
             </div>
           );

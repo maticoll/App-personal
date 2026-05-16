@@ -47,11 +47,11 @@ export default function ProjectsModuleClient({ initialProjects, initialStats }: 
       <WeeklyProjectStatsComponent stats={stats} />
 
       <div className="flex items-center gap-3">
-        <div className="flex gap-1 bg-[var(--surface-hover)] rounded-xl p-1 flex-1">
+        <div className="flex gap-1 bg-surface-container-high rounded-xl p-1 flex-1">
           {TABS.map((t) => (
             <button
               key={t.id} onClick={() => setTab(t.id)}
-              className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === t.id ? "bg-[var(--surface)] text-[var(--text-primary)] shadow-sm" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"}`}
+              className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === t.id ? "bg-surface-container text-on-surface shadow-sm" : "text-outline hover:text-on-surface-variant"}`}
             >
               {t.label}
             </button>

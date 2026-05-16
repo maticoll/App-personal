@@ -145,7 +145,7 @@ export default function FitnessQuickActions({ onLogged }: Props) {
 
   return (
     <div className="card space-y-4">
-      <h3 className="font-semibold text-[var(--text-primary)]">Registrar actividad</h3>
+      <h3 className="font-semibold text-on-surface">Registrar actividad</h3>
 
       {/* Quick buttons */}
       <div className="grid grid-cols-5 gap-2">
@@ -178,23 +178,23 @@ export default function FitnessQuickActions({ onLogged }: Props) {
       {showActivityForm && (
         <form
           onSubmit={handleActivitySubmit}
-          className="space-y-3 pt-3 border-t border-[var(--border)]"
+          className="space-y-3 pt-3 border-t border-outline-variant/20"
         >
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-[var(--text-primary)]">
+            <span className="text-sm font-medium text-on-surface">
               {ACTIVITY_CONFIG[selectedType].label}
             </span>
             <button
               type="button"
               onClick={() => setShowActivityForm(false)}
-              className="text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+              className="text-outline hover:text-on-surface-variant"
             >
               <ChevronUp className="w-4 h-4" />
             </button>
           </div>
           <div className={`grid gap-2 ${showDistanceField ? "grid-cols-2" : "grid-cols-1"}`}>
             <div>
-              <label className="text-xs text-[var(--text-secondary)] mb-1 block">
+              <label className="text-xs text-on-surface-variant mb-1 block">
                 Duración (min)
               </label>
               <input
@@ -208,7 +208,7 @@ export default function FitnessQuickActions({ onLogged }: Props) {
             </div>
             {showDistanceField && (
               <div>
-                <label className="text-xs text-[var(--text-secondary)] mb-1 block">
+                <label className="text-xs text-on-surface-variant mb-1 block">
                   Distancia (km)
                 </label>
                 <input
@@ -234,8 +234,8 @@ export default function FitnessQuickActions({ onLogged }: Props) {
       )}
 
       {/* NLP exercise logging */}
-      <div className="pt-3 border-t border-[var(--border)] space-y-2">
-        <label className="text-xs text-[var(--text-secondary)] block">
+      <div className="pt-3 border-t border-outline-variant/20 space-y-2">
+        <label className="text-xs text-on-surface-variant block">
           Ejercicios del gym en lenguaje natural
         </label>
         <form onSubmit={handleNLPSubmit} className="flex gap-2">

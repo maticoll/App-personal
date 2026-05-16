@@ -73,13 +73,13 @@ export function SleepTodayCard({ log }: Props) {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Moon className="w-4 h-4 text-module-sleep" />
-            <span className="text-sm font-medium text-[var(--text-secondary)]">
+            <span className="text-sm font-medium text-on-surface-variant">
               Sueño de anoche
             </span>
           </div>
           {log.durationMinutes ? (
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-[var(--text-primary)]">
+              <span className="text-3xl font-bold text-on-surface">
                 {formatDuration(log.durationMinutes)}
               </span>
               <span
@@ -92,7 +92,7 @@ export function SleepTodayCard({ log }: Props) {
               </span>
             </div>
           ) : (
-            <span className="text-sm text-[var(--text-muted)]">
+            <span className="text-sm text-outline">
               Sin hora de despertar
             </span>
           )}
@@ -112,7 +112,7 @@ export function SleepTodayCard({ log }: Props) {
             >
               {getQualityLabel(log.garminScore).label}
             </div>
-            <div className="text-xs text-[var(--text-muted)]">Garmin</div>
+            <div className="text-xs text-outline">Garmin</div>
           </div>
         )}
       </div>
@@ -122,16 +122,16 @@ export function SleepTodayCard({ log }: Props) {
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-module-sleep" />
-            <span className="text-[var(--text-muted)]">Dormiste</span>
-            <span className="font-semibold text-[var(--text-primary)]">
+            <span className="text-outline">Dormiste</span>
+            <span className="font-semibold text-on-surface">
               {formatTime(log.bedTime)}
             </span>
           </div>
-          <div className="flex-1 border-t border-dashed border-[var(--border)]" />
+          <div className="flex-1 border-t border-dashed border-outline-variant/30" />
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-amber-400" />
-            <span className="text-[var(--text-muted)]">Desperté</span>
-            <span className="font-semibold text-[var(--text-primary)]">
+            <span className="text-outline">Desperté</span>
+            <span className="font-semibold text-on-surface">
               {formatTime(log.wakeTime!)}
             </span>
           </div>
@@ -171,7 +171,7 @@ export function SleepTodayCard({ log }: Props) {
                   <div
                     className={cn("w-2 h-2 rounded-full", phase.color)}
                   />
-                  <span className="text-[var(--text-muted)]">
+                  <span className="text-outline">
                     {phase.label}
                   </span>
                   <span className={cn("font-medium", phase.textColor)}>
@@ -186,12 +186,12 @@ export function SleepTodayCard({ log }: Props) {
 
       {/* Extra stats (Garmin) */}
       {hasGarmin && (
-        <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-[var(--border)]">
+        <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-outline-variant/20">
           {log.spo2Avg !== null && (
             <div className="flex items-center gap-1.5 text-xs">
               <Droplets className="w-3.5 h-3.5 text-blue-400" />
-              <span className="text-[var(--text-muted)]">SpO2</span>
-              <span className="font-semibold text-[var(--text-primary)]">
+              <span className="text-outline">SpO2</span>
+              <span className="font-semibold text-on-surface">
                 {log.spo2Avg.toFixed(0)}%
               </span>
             </div>
@@ -199,10 +199,10 @@ export function SleepTodayCard({ log }: Props) {
           {log.respirationAvg !== null && (
             <div className="flex items-center gap-1.5 text-xs">
               <Wind className="w-3.5 h-3.5 text-teal-400" />
-              <span className="text-[var(--text-muted)]">Resp.</span>
-              <span className="font-semibold text-[var(--text-primary)]">
+              <span className="text-outline">Resp.</span>
+              <span className="font-semibold text-on-surface">
                 {log.respirationAvg.toFixed(1)}{" "}
-                <span className="font-normal text-[var(--text-muted)]">
+                <span className="font-normal text-outline">
                   resp/min
                 </span>
               </span>
@@ -211,7 +211,7 @@ export function SleepTodayCard({ log }: Props) {
           {log.bodyBatteryChange !== null && (
             <div className="flex items-center gap-1.5 text-xs">
               <TrendingUp className="w-3.5 h-3.5 text-green-400" />
-              <span className="text-[var(--text-muted)]">Body Battery</span>
+              <span className="text-outline">Body Battery</span>
               <span
                 className={cn(
                   "font-semibold",
@@ -228,8 +228,8 @@ export function SleepTodayCard({ log }: Props) {
           {log.stressScore !== null && (
             <div className="flex items-center gap-1.5 text-xs">
               <Clock className="w-3.5 h-3.5 text-yellow-400" />
-              <span className="text-[var(--text-muted)]">Estrés</span>
-              <span className="font-semibold text-[var(--text-primary)]">
+              <span className="text-outline">Estrés</span>
+              <span className="font-semibold text-on-surface">
                 {log.stressScore}
               </span>
             </div>
@@ -239,7 +239,7 @@ export function SleepTodayCard({ log }: Props) {
 
       {/* Notes */}
       {log.notes && (
-        <p className="text-xs text-[var(--text-muted)] italic border-t border-[var(--border)] pt-2">
+        <p className="text-xs text-outline italic border-t border-outline-variant/20 pt-2">
           {log.notes}
         </p>
       )}

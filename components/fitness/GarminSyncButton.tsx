@@ -42,12 +42,12 @@ export default function GarminSyncButton({ garminStatus, onSynced }: Props) {
         {isConnected ? (
           <>
             <Wifi className="w-3.5 h-3.5 text-green-400" />
-            <span className="text-[var(--text-muted)]">Garmin conectado</span>
+            <span className="text-outline">Garmin conectado</span>
           </>
         ) : (
           <>
-            <WifiOff className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-            <span className="text-[var(--text-muted)]">Garmin no configurado</span>
+            <WifiOff className="w-3.5 h-3.5 text-outline" />
+            <span className="text-outline">Garmin no configurado</span>
           </>
         )}
       </div>
@@ -66,7 +66,7 @@ export default function GarminSyncButton({ garminStatus, onSynced }: Props) {
 
       {/* Resultado */}
       {lastResult && (
-        <span className="text-xs text-[var(--text-muted)]">{lastResult}</span>
+        <span className="text-xs text-outline">{lastResult}</span>
       )}
     </div>
   );

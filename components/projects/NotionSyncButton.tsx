@@ -50,7 +50,7 @@ export default function NotionSyncButton({ onSynced }: Props) {
       </button>
 
       {result && (
-        <div className="text-xs text-[var(--text-secondary)] flex items-center gap-1">
+        <div className="text-xs text-on-surface-variant flex items-center gap-1">
           {result.errors.length === 0 ? (
             <><CheckCircle className="w-3 h-3 text-green-400 flex-shrink-0" />{result.created} creados · {result.updated} actualizados</>
           ) : (

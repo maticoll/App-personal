@@ -62,7 +62,7 @@ export function GlobalScoreRing({
             cy={svgSize / 2}
             r={radius}
             fill="none"
-            stroke="var(--border)"
+            stroke="#464554"
             strokeWidth={strokeWidth}
           />
           {/* Progress */}
@@ -93,12 +93,12 @@ export function GlobalScoreRing({
               >
                 {animatedScore}
               </span>
-              <span className={cn("text-[var(--text-muted)]", isLg ? "text-sm" : "text-xs")}>
+              <span className={cn("text-outline", isLg ? "text-sm" : "text-xs")}>
                 /100
               </span>
             </>
           ) : (
-            <span className={cn("text-[var(--text-muted)]", isLg ? "text-2xl" : isSm ? "text-base" : "text-xl")}>
+            <span className={cn("text-outline", isLg ? "text-2xl" : isSm ? "text-base" : "text-xl")}>
               —
             </span>
           )}
@@ -111,13 +111,13 @@ export function GlobalScoreRing({
           <span className={isLg ? "text-xl" : "text-lg"}>
             {getScoreEmoji(value)}
           </span>
-          <span className="text-sm font-medium text-[var(--text-secondary)]">
+          <span className="text-sm font-medium text-on-surface-variant">
             Score del día
           </span>
         </div>
       )}
       {score === null && !isSm && (
-        <span className="text-sm text-[var(--text-muted)] mt-2">
+        <span className="text-sm text-outline mt-2">
           Completá módulos para ver tu score
         </span>
       )}

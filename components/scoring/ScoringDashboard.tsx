@@ -57,14 +57,14 @@ export function ScoringDashboard({ todayScore }: ScoringDashboardProps) {
       {/* ─── Mobile: score inline + lista con barras ─────────── */}
       <div className="block md:hidden space-y-3">
         {/* Score inline */}
-        <div className="flex items-center gap-4 p-3 bg-[var(--surface-hover)] rounded-2xl">
+        <div className="flex items-center gap-4 p-3 bg-surface-container-high rounded-2xl">
           <GlobalScoreRing score={global} size="sm" />
           <div>
-            <div className="text-3xl font-bold text-[var(--text-primary)] leading-none">
+            <div className="text-3xl font-bold text-on-surface leading-none">
               {global !== null ? global : "—"}
-              <span className="text-sm font-normal text-[var(--text-secondary)] ml-1">/100</span>
+              <span className="text-sm font-normal text-on-surface-variant ml-1">/100</span>
             </div>
-            <p className="text-xs text-[var(--text-secondary)] mt-1">
+            <p className="text-xs text-on-surface-variant mt-1">
               {global === null
                 ? "Sin datos aún"
                 : global >= 80
@@ -95,8 +95,8 @@ export function ScoringDashboard({ todayScore }: ScoringDashboardProps) {
                 <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", bgColor)}>
                   <Icon className={cn("w-4 h-4", color)} />
                 </div>
-                <span className="text-sm text-[var(--text-secondary)] w-20 shrink-0">{label}</span>
-                <div className="flex-1 h-1.5 rounded-full bg-[var(--surface-alt)] overflow-hidden">
+                <span className="text-sm text-on-surface-variant w-20 shrink-0">{label}</span>
+                <div className="flex-1 h-1.5 rounded-full bg-surface-container-high overflow-hidden">
                   {s !== null && (
                     <div
                       className="h-full rounded-full transition-all duration-500"
@@ -107,7 +107,7 @@ export function ScoringDashboard({ todayScore }: ScoringDashboardProps) {
                     />
                   )}
                 </div>
-                <span className="text-sm font-semibold text-[var(--text-primary)] w-8 text-right shrink-0">
+                <span className="text-sm font-semibold text-on-surface w-8 text-right shrink-0">
                   {s !== null ? s : "—"}
                 </span>
               </div>

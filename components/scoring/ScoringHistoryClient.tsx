@@ -185,10 +185,10 @@ export function ScoringHistoryClient({
             { label: "Mínimo", value: stats.min },
           ].map(({ label, value }) => (
             <div key={label} className="card text-center py-3">
-              <p className="text-lg font-bold text-[var(--text-primary)]">
+              <p className="text-lg font-bold text-on-surface">
                 {value}
               </p>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">{label}</p>
+              <p className="text-xs text-outline mt-0.5">{label}</p>
             </div>
           ))}
         </div>
@@ -197,11 +197,11 @@ export function ScoringHistoryClient({
       {/* ─── Gráfico de tendencia ──────────────────────────── */}
       <div className="card space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <span className="font-medium text-[var(--text-primary)] text-sm">
+          <span className="font-medium text-on-surface text-sm">
             Evolución del score
           </span>
           <button
-            className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+            className="text-xs text-outline hover:text-on-surface-variant transition-colors"
             onClick={() => setShowModules((v) => !v)}
           >
             {showModules ? "Ocultar módulos" : "Mostrar módulos"}
@@ -226,7 +226,7 @@ export function ScoringHistoryClient({
         />
 
         {isMock && (
-          <p className="text-xs text-[var(--text-muted)] text-center">
+          <p className="text-xs text-outline text-center">
             * Datos de ejemplo generados para visualización
           </p>
         )}
@@ -234,7 +234,7 @@ export function ScoringHistoryClient({
 
       {/* ─── Lista de días ─────────────────────────────────── */}
       <div>
-        <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-3">
+        <h3 className="text-sm font-medium text-on-surface-variant mb-3">
           Días recientes
         </h3>
         <div className="space-y-3">
@@ -243,7 +243,7 @@ export function ScoringHistoryClient({
           ))}
           {dailyCards.length === 0 && (
             <div className="card text-center py-8">
-              <p className="text-sm text-[var(--text-muted)]">
+              <p className="text-sm text-outline">
                 Sin registros para este período
               </p>
             </div>

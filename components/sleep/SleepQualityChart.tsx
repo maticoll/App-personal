@@ -45,10 +45,10 @@ function CustomTooltip({
   if (!active || !payload?.length) return null;
   const entry = payload[0].payload;
   return (
-    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 text-sm shadow-xl space-y-1">
-      <p className="font-semibold text-[var(--text-primary)]">{label}</p>
+    <div className="bg-surface-container border border-outline-variant/20 rounded-xl p-3 text-sm shadow-xl space-y-1">
+      <p className="font-semibold text-on-surface">{label}</p>
       {entry.garminScore !== null && (
-        <p className="text-[var(--text-secondary)]">
+        <p className="text-on-surface-variant">
           <span className="text-module-sleep font-medium">
             {entry.garminScore}/100
           </span>{" "}
@@ -56,7 +56,7 @@ function CustomTooltip({
         </p>
       )}
       {entry.durationMin !== null && (
-        <p className="text-[var(--text-secondary)]">
+        <p className="text-on-surface-variant">
           <span className="text-amber-400 font-medium">
             {formatDuration(entry.durationMin)}
           </span>{" "}
@@ -64,7 +64,7 @@ function CustomTooltip({
         </p>
       )}
       {entry.garminScore === null && entry.durationMin === null && (
-        <p className="text-[var(--text-muted)]">Sin datos</p>
+        <p className="text-outline">Sin datos</p>
       )}
     </div>
   );
@@ -104,11 +104,11 @@ export function SleepQualityChart({ history }: Props) {
   return (
     <div className="card">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-[var(--text-secondary)]">
+        <h3 className="text-sm font-semibold text-on-surface-variant">
           {hasGarminData ? "Calidad Garmin (14 días)" : "Duración (14 días)"}
         </h3>
         {hasGarminData && (
-          <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+          <div className="flex items-center gap-3 text-xs text-outline">
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-violet-500 inline-block" />
               Garmin
@@ -184,7 +184,7 @@ export function SleepQualityChart({ history }: Props) {
       </ResponsiveContainer>
 
       {!hasGarminData && (
-        <p className="text-xs text-center text-[var(--text-muted)] mt-2">
+        <p className="text-xs text-center text-outline mt-2">
           Conectá Garmin para ver el score de calidad del sueño
         </p>
       )}

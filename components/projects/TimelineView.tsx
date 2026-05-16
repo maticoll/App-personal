@@ -55,13 +55,13 @@ export default function TimelineView({ projects, onRefresh }: Props) {
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-[var(--text-primary)] truncate">{project.title}</span>
+                    <span className="font-medium text-on-surface truncate">{project.title}</span>
                     {project.notionId && (
                       <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 flex-shrink-0">Notion</span>
                     )}
                   </div>
                   {project.description && (
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">{project.description}</p>
+                    <p className="text-xs text-outline mt-0.5 line-clamp-1">{project.description}</p>
                   )}
                 </div>
                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${STATUS_COLORS[project.status]}`}>
@@ -72,28 +72,28 @@ export default function TimelineView({ projects, onRefresh }: Props) {
               {project.deadline ? (
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
-                    <div className={`flex items-center gap-1 ${overdue ? "text-red-400" : "text-[var(--text-muted)]"}`}>
+                    <div className={`flex items-center gap-1 ${overdue ? "text-red-400" : "text-outline"}`}>
                       <Calendar className="w-3 h-3" />
                       {overdue ? "Vencido: " : "Deadline: "}{formatDate(project.deadline)}
                     </div>
-                    <span className="text-[var(--text-muted)]">Tiempo: {progress}%</span>
+                    <span className="text-outline">Tiempo: {progress}%</span>
                   </div>
-                  <div className="h-1.5 rounded-full bg-[var(--surface-hover)] overflow-hidden">
+                  <div className="h-1.5 rounded-full bg-surface-container-high overflow-hidden">
                     <div className={`h-full rounded-full transition-all ${overdue ? "bg-red-500" : progress > 75 ? "bg-orange-500" : "bg-amber-500"}`} style={{ width: `${Math.min(progress, 100)}%` }} />
                   </div>
                   {project.tasks.length > 0 && (
                     <div className="flex items-center gap-2">
-                      <div className="flex-1 h-1 rounded-full bg-[var(--surface-hover)]">
+                      <div className="flex-1 h-1 rounded-full bg-surface-container-high">
                         <div className="h-full rounded-full bg-green-500" style={{ width: `${taskProgress}%` }} />
                       </div>
-                      <span className="text-[10px] text-[var(--text-muted)] flex-shrink-0">
+                      <span className="text-[10px] text-outline flex-shrink-0">
                         {project.tasks.filter((t) => t.done).length}/{project.tasks.length} tareas
                       </span>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="text-xs text-[var(--text-muted)] italic">
+                <div className="text-xs text-outline italic">
                   Sin fecha límite{project.tasks.length > 0 && ` · ${project.tasks.filter((t) => t.done).length}/${project.tasks.length} tareas`}
                 </div>
               )}
@@ -101,7 +101,7 @@ export default function TimelineView({ projects, onRefresh }: Props) {
           );
         })}
         {allItems.length === 0 && (
-          <div className="text-center py-12 text-[var(--text-muted)]">
+          <div className="text-center py-12 text-outline">
             <p className="text-sm">Sin proyectos activos</p>
             <p className="text-xs mt-1">Creá tu primer proyecto con el botón +</p>
           </div>

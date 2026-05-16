@@ -24,7 +24,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
       onClick={() => setTheme(isDark ? "light" : "dark")}
       className={cn(
         "w-9 h-9 flex items-center justify-center rounded-xl transition-colors",
-        "hover:bg-[var(--surface-hover)] text-[var(--text-secondary)]",
+        "hover:bg-surface-container-high text-on-surface-variant",
         className
       )}
       aria-label="Cambiar tema"

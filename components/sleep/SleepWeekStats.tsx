@@ -25,7 +25,7 @@ export function SleepWeekStats({ stats }: Props) {
 
   return (
     <div className="card">
-      <h3 className="text-sm font-semibold text-[var(--text-secondary)] mb-3">
+      <h3 className="text-sm font-semibold text-on-surface-variant mb-3">
         Últimos 7 días
       </h3>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -35,7 +35,7 @@ export function SleepWeekStats({ stats }: Props) {
             className={cn(
               "text-2xl font-bold",
               avgDurationMinutes === null
-                ? "text-[var(--text-muted)]"
+                ? "text-outline"
                 : avgDurationMinutes >= 7 * 60 && avgDurationMinutes <= 9 * 60
                 ? "text-score-excellent"
                 : avgDurationMinutes >= 6 * 60
@@ -47,7 +47,7 @@ export function SleepWeekStats({ stats }: Props) {
               ? formatDuration(avgDurationMinutes)
               : "–"}
           </div>
-          <div className="text-xs text-[var(--text-muted)] mt-0.5">
+          <div className="text-xs text-outline mt-0.5">
             Promedio
           </div>
         </div>
@@ -63,12 +63,12 @@ export function SleepWeekStats({ stats }: Props) {
                 ? "text-score-good"
                 : daysInIdealRange >= 1
                 ? "text-score-average"
-                : "text-[var(--text-muted)]"
+                : "text-outline"
             )}
           >
             {totalDays > 0 ? `${daysInIdealRange}/7` : "–"}
           </div>
-          <div className="text-xs text-[var(--text-muted)] mt-0.5">
+          <div className="text-xs text-outline mt-0.5">
             7–9h ideales
           </div>
         </div>
@@ -79,7 +79,7 @@ export function SleepWeekStats({ stats }: Props) {
             className={cn(
               "text-2xl font-bold",
               avgGarminScore === null
-                ? "text-[var(--text-muted)]"
+                ? "text-outline"
                 : avgGarminScore >= 75
                 ? "text-score-excellent"
                 : avgGarminScore >= 60
@@ -89,7 +89,7 @@ export function SleepWeekStats({ stats }: Props) {
           >
             {avgGarminScore !== null ? `${avgGarminScore}` : "–"}
           </div>
-          <div className="text-xs text-[var(--text-muted)] mt-0.5">
+          <div className="text-xs text-outline mt-0.5">
             Calidad Garmin
           </div>
         </div>
@@ -105,25 +105,25 @@ export function SleepWeekStats({ stats }: Props) {
                 ? "text-score-good"
                 : streak >= 2
                 ? "text-score-average"
-                : "text-[var(--text-muted)]"
+                : "text-outline"
             )}
           >
             {streak > 0 ? `${streak}🔥` : "–"}
           </div>
-          <div className="text-xs text-[var(--text-muted)] mt-0.5">Racha</div>
+          <div className="text-xs text-outline mt-0.5">Racha</div>
         </div>
       </div>
 
       {/* Mini barra de días en rango */}
       {totalDays > 0 && (
         <div className="mt-4 space-y-1">
-          <div className="flex justify-between text-xs text-[var(--text-muted)]">
-            <span>Días en rango (6–10h)</span>
+          <div className="flex justify-between text-xs text-outline">
+            <span className="text-outline">Días en rango (6–10h)</span>
             <span>
               {daysInRange}/{totalDays}
             </span>
           </div>
-          <div className="h-1.5 rounded-full bg-[var(--surface-alt)]">
+          <div className="h-1.5 rounded-full bg-surface-container-high">
             <div
               className="h-full rounded-full bg-module-sleep transition-all duration-500"
               style={{ width: `${(daysInRange / 7) * 100}%` }}

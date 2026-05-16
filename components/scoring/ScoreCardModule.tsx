@@ -43,7 +43,7 @@ export function ScoreCardModule({
       <button
         className={cn(
           "w-full flex items-center gap-3 p-4 text-left transition-colors",
-          hasDetails && "hover:bg-[var(--surface-hover)]"
+          hasDetails && "hover:bg-surface-container-high"
         )}
         onClick={() => hasDetails && setExpanded((v) => !v)}
         disabled={!hasDetails}
@@ -62,16 +62,16 @@ export function ScoreCardModule({
         {/* Nombre + barra */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-sm font-medium text-[var(--text-primary)]">
+            <span className="text-sm font-medium text-on-surface">
               {label}
             </span>
             {hasScore ? (
               <span className={cn("text-sm font-bold", getScoreColor(score!))}>
                 {score}
-                <span className="text-[var(--text-muted)] font-normal text-xs">/100</span>
+                <span className="text-outline font-normal text-xs">/100</span>
               </span>
             ) : (
-              <span className="text-xs text-[var(--text-muted)]">Sin datos</span>
+              <span className="text-xs text-outline">Sin datos</span>
             )}
           </div>
           <ScoreBar score={score} showValue={false} size="sm" />
@@ -81,7 +81,7 @@ export function ScoreCardModule({
         {hasDetails && (
           <ChevronDown
             className={cn(
-              "w-4 h-4 text-[var(--text-muted)] flex-shrink-0 transition-transform duration-200",
+              "w-4 h-4 text-outline flex-shrink-0 transition-transform duration-200",
               expanded && "rotate-180"
             )}
           />
@@ -96,12 +96,12 @@ export function ScoreCardModule({
             expanded ? "max-h-96" : "max-h-0"
           )}
         >
-          <div className="px-4 pb-4 space-y-2 border-t border-[var(--border)] pt-3">
+          <div className="px-4 pb-4 space-y-2 border-t border-outline-variant/20 pt-3">
             {/* Items cumplidos */}
             {met.map((item, i) => (
               <div key={`met-${i}`} className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-score-excellent flex-shrink-0 mt-0.5" />
-                <span className="text-xs text-[var(--text-secondary)]">{item}</span>
+                <span className="text-xs text-on-surface-variant">{item}</span>
               </div>
             ))}
 
@@ -109,7 +109,7 @@ export function ScoreCardModule({
             {missed.map((item, i) => (
               <div key={`missed-${i}`} className="flex items-start gap-2">
                 <XCircle className="w-4 h-4 text-score-poor flex-shrink-0 mt-0.5" />
-                <span className="text-xs text-[var(--text-muted)]">{item}</span>
+                <span className="text-xs text-outline">{item}</span>
               </div>
             ))}
           </div>

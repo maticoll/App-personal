@@ -80,8 +80,8 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   }
 
   return (
-    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 shadow-lg text-xs space-y-1.5">
-      <p className="font-medium text-[var(--text-primary)] capitalize mb-2">
+    <div className="bg-surface-container border border-outline-variant/20 rounded-xl p-3 shadow-lg text-xs space-y-1.5">
+      <p className="font-medium text-on-surface capitalize mb-2">
         {dateLabel}
       </p>
       {payload.map((entry) => (
@@ -90,7 +90,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
             className="w-2.5 h-2.5 rounded-full flex-shrink-0"
             style={{ backgroundColor: entry.color }}
           />
-          <span className="text-[var(--text-secondary)]">{entry.name}:</span>
+          <span className="text-on-surface-variant">{entry.name}:</span>
           <span className="font-bold" style={{ color: entry.color }}>
             {entry.value !== null && entry.value !== undefined
               ? `${entry.value}/100`
@@ -112,7 +112,7 @@ export function ScoreTrendChart({
   if (data.length === 0) {
     return (
       <div
-        className="flex items-center justify-center text-[var(--text-muted)] text-sm"
+        className="flex items-center justify-center text-outline text-sm"
         style={{ height }}
       >
         Sin datos para este período

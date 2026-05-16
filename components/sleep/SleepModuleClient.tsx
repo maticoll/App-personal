@@ -157,7 +157,7 @@ export function SleepModuleClient({
       {stats.totalDays > 0 && <SleepWeekStats stats={stats} />}
 
       {/* Tabs: Gráficos | Historial */}
-      <div className="flex rounded-xl border border-[var(--border)] overflow-hidden">
+      <div className="flex rounded-xl border border-outline-variant/20 overflow-hidden">
         {(
           [
             { id: "charts", label: "Gráficos", icon: BarChart2 },
@@ -171,7 +171,7 @@ export function SleepModuleClient({
               "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-all",
               activeTab === id
                 ? "bg-module-sleep/15 text-module-sleep"
-                : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                : "text-outline hover:text-on-surface-variant"
             )}
           >
             <Icon className="w-4 h-4" />
@@ -186,10 +186,10 @@ export function SleepModuleClient({
           {history.length === 0 ? (
             <div className="card text-center py-10">
               <Moon className="w-10 h-10 text-module-sleep mx-auto mb-3 opacity-30" />
-              <p className="text-sm font-medium text-[var(--text-primary)]">
+              <p className="text-sm font-medium text-on-surface">
                 Sin datos de sueño aún
               </p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">
+              <p className="text-xs text-outline mt-1">
                 Registrá tu primer sueño con el botón de arriba
               </p>
             </div>

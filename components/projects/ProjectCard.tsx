@@ -53,14 +53,14 @@ export default function ProjectCard({ project, onClick, dragHandleProps }: Props
                 style={{ backgroundColor: project.color.startsWith("#") ? project.color : project.color === "amber-600" ? "#d97706" : "#f59e0b" }}
               />
             )}
-            <span className="text-sm font-medium text-[var(--text-primary)] truncate">{project.title}</span>
+            <span className="text-sm font-medium text-on-surface truncate">{project.title}</span>
           </div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {project.notionId && (
               <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">Notion</span>
             )}
             {project.deadline && (
-              <span className={`flex items-center gap-0.5 text-[10px] ${isOverdue ? "text-red-400" : "text-[var(--text-muted)]"}`}>
+              <span className={`flex items-center gap-0.5 text-[10px] ${isOverdue ? "text-red-400" : "text-outline"}`}>
                 <Calendar className="w-3 h-3" />
                 {formatDeadline(project.deadline)}
                 {isOverdue && " ⚠"}
@@ -68,16 +68,16 @@ export default function ProjectCard({ project, onClick, dragHandleProps }: Props
             )}
           </div>
         </div>
-        <ChevronRight className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0 group-hover:text-[var(--text-secondary)] transition-colors" />
+        <ChevronRight className="w-4 h-4 text-outline flex-shrink-0 group-hover:text-on-surface-variant transition-colors" />
       </div>
 
       {taskCount > 0 && (
         <div>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] text-[var(--text-muted)]">{doneCount}/{taskCount} tareas</span>
-            <span className="text-[10px] text-[var(--text-muted)]">{progress}%</span>
+            <span className="text-[10px] text-outline">{doneCount}/{taskCount} tareas</span>
+            <span className="text-[10px] text-outline">{progress}%</span>
           </div>
-          <div className="h-1 rounded-full bg-[var(--surface-hover)]">
+          <div className="h-1 rounded-full bg-surface-container-high">
             <div className="h-1 rounded-full bg-amber-500 transition-all" style={{ width: `${progress}%` }} />
           </div>
         </div>

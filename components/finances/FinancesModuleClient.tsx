@@ -69,14 +69,14 @@ function StatCard({
   return (
     <div className="card flex-1">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
+        <span className="text-xs font-medium text-outline uppercase tracking-wide">
           {label}
         </span>
         <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center", colorClass)}>
           <Icon className="w-3.5 h-3.5" />
         </div>
       </div>
-      <p className="text-xl font-bold text-[var(--text-primary)]">
+      <p className="text-xl font-bold text-on-surface">
         {formatCurrency(amount)}
       </p>
       {trend !== undefined && trend !== null && (
@@ -101,12 +101,12 @@ function StatCard({
 function TransactionRow({ tx }: { tx: FinancesTransaction }) {
   const isGasto = tx.type === "gasto";
   return (
-    <div className="flex items-center justify-between py-2.5 border-b border-[var(--border)] last:border-0">
+    <div className="flex items-center justify-between py-2.5 border-b border-outline-variant/20 last:border-0">
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+        <p className="text-sm font-medium text-on-surface truncate">
           {tx.description}
         </p>
-        <p className="text-xs text-[var(--text-muted)]">
+        <p className="text-xs text-outline">
           {tx.card?.name ?? ""}{tx.date ? ` · ${formatDateShort(tx.date)}` : ""}
         </p>
       </div>
@@ -173,11 +173,11 @@ export function FinancesModuleClient({
   if (!connected) {
     return (
       <div className="card text-center py-10 space-y-3">
-        <AlertCircle className="w-10 h-10 text-[var(--text-muted)] mx-auto opacity-40" />
-        <p className="font-medium text-[var(--text-primary)]">
+        <AlertCircle className="w-10 h-10 text-outline mx-auto opacity-40" />
+        <p className="font-medium text-on-surface">
           Finanzas no conectado
         </p>
-        <p className="text-sm text-[var(--text-muted)]">
+        <p className="text-sm text-outline">
           Configurá tu API key en{" "}
           <a href="/settings" className="text-accent underline">
             Ajustes → Finanzas
@@ -221,12 +221,12 @@ export function FinancesModuleClient({
     <div className="space-y-4">
       {/* ── Header con mes + refresh ── */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-[var(--text-secondary)] capitalize">{currentMonth}</p>
+        <p className="text-sm text-on-surface-variant capitalize">{currentMonth}</p>
         <div className="flex items-center gap-2">
           <button
             onClick={refresh}
             disabled={loading}
-            className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-[var(--surface-hover)] text-[var(--text-muted)] transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-surface-container-high text-outline transition-colors"
           >
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -238,7 +238,7 @@ export function FinancesModuleClient({
             href="https://finanzas-lemon.vercel.app"
             target="_blank"
             rel="noopener noreferrer"
-            className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-[var(--surface-hover)] text-[var(--text-muted)] transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-surface-container-high text-outline transition-colors"
             title="Abrir app de finanzas"
           >
             <ExternalLink className="w-4 h-4" />
@@ -283,23 +283,23 @@ export function FinancesModuleClient({
         </div>
       ) : (
         <div className="card text-center py-6">
-          <p className="text-sm text-[var(--text-muted)]">Sin datos del mes</p>
+          <p className="text-sm text-outline">Sin datos del mes</p>
         </div>
       )}
 
       {/* ── Balances por tarjeta ── */}
       {balances.length > 0 && (
         <div className="card">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">
+          <h3 className="text-sm font-semibold text-on-surface mb-3">
             Balances por cuenta
           </h3>
           <div className="space-y-2">
             {balances.map((b, i) => (
               <div key={i} className="flex items-center justify-between">
-                <span className="text-sm text-[var(--text-secondary)]">
+                <span className="text-sm text-on-surface-variant">
                   {b.card?.name ?? "Cuenta"}
                 </span>
-                <span className="text-sm font-semibold text-[var(--text-primary)]">
+                <span className="text-sm font-semibold text-on-surface">
                   {formatCurrency(b.expectedBalance)}
                 </span>
               </div>
@@ -311,7 +311,7 @@ export function FinancesModuleClient({
       {/* ── Últimas transacciones ── */}
       <div className="card">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+          <h3 className="text-sm font-semibold text-on-surface">
             Últimas transacciones
           </h3>
           <a
@@ -326,7 +326,7 @@ export function FinancesModuleClient({
         </div>
 
         {transactions.length === 0 ? (
-          <p className="text-sm text-[var(--text-muted)] text-center py-4">
+          <p className="text-sm text-outline text-center py-4">
             Sin transacciones este mes
           </p>
         ) : (
@@ -341,7 +341,7 @@ export function FinancesModuleClient({
       {/* ── Historial últimos 6 meses ── */}
       {last6.length > 1 && (
         <div className="card">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">
+          <h3 className="text-sm font-semibold text-on-surface mb-3">
             Últimos 6 meses
           </h3>
           <div className="space-y-2">
@@ -355,10 +355,10 @@ export function FinancesModuleClient({
               const balanceColor = m.balance >= 0 ? "text-green-400" : "text-red-400";
               return (
                 <div key={i} className="flex items-center gap-3">
-                  <span className="text-xs text-[var(--text-muted)] w-12 capitalize">
+                  <span className="text-xs text-outline w-12 capitalize">
                     {monthLabel}
                   </span>
-                  <div className="flex-1 h-1.5 bg-[var(--border)] rounded-full overflow-hidden">
+                  <div className="flex-1 h-1.5 bg-outline-variant/30 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-red-400/60 rounded-full"
                       style={{ width: `${barWidth}%` }}

@@ -33,7 +33,7 @@ export function ModuleSummaryCard({
   return (
     <Link
       href={href}
-      className="card hover:bg-[var(--surface-hover)] active:scale-[0.98] transition-all duration-150 group block min-h-[56px]"
+      className="card hover:bg-surface-container-high active:scale-[0.98] transition-all duration-150 group block min-h-[56px]"
     >
       {/* Mobile: layout horizontal */}
       <div className="flex items-center gap-3 md:hidden">
@@ -42,16 +42,16 @@ export function ModuleSummaryCard({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <p className="font-medium text-[var(--text-primary)] text-sm">{label}</p>
+            <p className="font-medium text-on-surface text-sm">{label}</p>
             {badge && (
-              <span className="text-xs bg-[var(--surface-hover)] text-[var(--text-secondary)] px-2 py-0.5 rounded-full shrink-0">
+              <span className="text-xs bg-surface-container-high text-on-surface-variant px-2 py-0.5 rounded-full shrink-0">
                 {badge}
               </span>
             )}
           </div>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">{summary}</p>
+          <p className="text-xs text-outline mt-0.5 line-clamp-1">{summary}</p>
           {score !== null && (
-            <div className="mt-1.5 h-1 rounded-full bg-[var(--surface-alt)] overflow-hidden">
+            <div className="mt-1.5 h-1 rounded-full bg-surface-container-high overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
@@ -63,7 +63,7 @@ export function ModuleSummaryCard({
           )}
         </div>
         {score !== null && (
-          <span className="text-sm font-bold text-[var(--text-primary)] shrink-0 w-8 text-right">
+          <span className="text-sm font-bold text-on-surface shrink-0 w-8 text-right">
             {score}
           </span>
         )}
@@ -76,14 +76,14 @@ export function ModuleSummaryCard({
             {icon}
           </div>
           {badge && (
-            <span className="text-xs bg-[var(--surface-hover)] text-[var(--text-secondary)] px-2 py-0.5 rounded-full">
+            <span className="text-xs bg-surface-container-high text-on-surface-variant px-2 py-0.5 rounded-full">
               {badge}
             </span>
           )}
         </div>
         <div>
-          <p className="font-medium text-[var(--text-primary)] text-sm">{label}</p>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">{summary}</p>
+          <p className="font-medium text-on-surface text-sm">{label}</p>
+          <p className="text-xs text-outline mt-0.5 line-clamp-1">{summary}</p>
         </div>
         {score !== null && (
           <ScoreBar score={score} size="sm" showValue={false} />

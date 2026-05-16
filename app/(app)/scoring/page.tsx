@@ -39,13 +39,13 @@ export default async function ScoringPage() {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <BarChart3 className="w-5 h-5 text-module-scoring" />
-          <h2 className="text-xl font-bold text-[var(--text-primary)]">Scoring</h2>
+          <h2 className="text-xl font-bold text-on-surface">Scoring</h2>
         </div>
-        <p className="text-sm text-[var(--text-secondary)]">
+        <p className="text-sm text-on-surface-variant">
           Evolución de tu progreso diario
         </p>
         {isMock && (
-          <p className="text-xs text-[var(--text-muted)] mt-1">
+          <p className="text-xs text-outline mt-1">
             * Datos de ejemplo — registrá actividades para ver tus scores reales
           </p>
         )}

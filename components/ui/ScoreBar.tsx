@@ -36,14 +36,14 @@ export function ScoreBar({
       {(label || showValue) && (
         <div className="flex justify-between items-center">
           {label && (
-            <span className="text-sm font-medium text-[var(--text-secondary)]">
+            <span className="text-sm font-medium text-on-surface-variant">
               {label}
             </span>
           )}
           {showValue && (
-            <span className="text-sm font-bold text-[var(--text-primary)]">
+            <span className="text-sm font-bold text-on-surface">
               {value}
-              <span className="text-[var(--text-muted)] font-normal text-xs">/100</span>
+              <span className="text-outline font-normal text-xs">/100</span>
             </span>
           )}
         </div>

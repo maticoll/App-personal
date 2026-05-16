@@ -35,9 +35,9 @@ export default async function IdeasPage() {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Lightbulb className="w-5 h-5 text-module-ideas" />
-          <h2 className="text-xl font-bold text-[var(--text-primary)]">Ideas</h2>
+          <h2 className="text-xl font-bold text-on-surface">Ideas</h2>
         </div>
-        <p className="text-sm text-[var(--text-secondary)]">
+        <p className="text-sm text-on-surface-variant">
           Capturá y desarrollá ideas con IA
         </p>
       </div>

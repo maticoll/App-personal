@@ -29,7 +29,7 @@ export function PeriodSelector({
   return (
     <div
       className={cn(
-        "flex gap-1 bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1",
+        "flex gap-1 bg-surface-container border border-outline-variant/20 rounded-xl p-1",
         className
       )}
     >
@@ -40,8 +40,8 @@ export function PeriodSelector({
           className={cn(
             "flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-all duration-200",
             value === p.value
-              ? "bg-accent text-white shadow-sm"
-              : "text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+              ? "bg-primary text-on-primary shadow-sm"
+              : "text-outline hover:text-on-surface-variant hover:bg-surface-container-high"
           )}
         >
           {p.label}

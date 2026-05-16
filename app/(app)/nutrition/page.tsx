@@ -49,9 +49,9 @@ export default async function NutritionPage() {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Salad className="w-5 h-5 text-module-nutrition" />
-          <h2 className="text-xl font-bold text-[var(--text-primary)]">Nutrición</h2>
+          <h2 className="text-xl font-bold text-on-surface">Nutrición</h2>
         </div>
-        <p className="text-sm text-[var(--text-secondary)]">
+        <p className="text-sm text-on-surface-variant">
           Comidas, macros e hidratación
         </p>
       </div>

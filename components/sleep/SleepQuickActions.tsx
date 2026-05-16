@@ -37,10 +37,10 @@ export function SleepQuickActions({
           <Check className="w-5 h-5 text-module-sleep" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-[var(--text-primary)] text-sm">
+          <p className="font-medium text-on-surface text-sm">
             Sueño registrado ✓
           </p>
-          <p className="text-xs text-[var(--text-muted)]">
+          <p className="text-xs text-outline">
             Podés editar el registro desde el historial
           </p>
         </div>
@@ -54,11 +54,11 @@ export function SleepQuickActions({
         // Modo despertar — hay bedTime activo
         <div className="space-y-3">
           <div className="card bg-module-sleep/5 border border-module-sleep/20 py-3">
-            <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+            <div className="flex items-center gap-2 text-sm text-on-surface-variant">
               <Moon className="w-4 h-4 text-module-sleep" />
               <span>
                 Te fuiste a dormir a las{" "}
-                <span className="font-semibold text-[var(--text-primary)]">
+                <span className="font-semibold text-on-surface">
                   {new Date(pendingLog!.bedTime).toLocaleTimeString("es-AR", {
                     hour: "2-digit",
                     minute: "2-digit",

@@ -52,14 +52,14 @@ export default function GymRoutineCard({ routine, onStarted }: Props) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-[var(--text-primary)]">
+              <p className="text-sm font-semibold text-on-surface">
                 Rutina de hoy
               </p>
               <p className="text-sm text-module-fitness font-medium">{routine.name}</p>
             </div>
             <button
               onClick={() => setExpanded(!expanded)}
-              className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-muted)]"
+              className="p-1.5 rounded-lg hover:bg-surface-container-high text-outline"
             >
               {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
@@ -67,7 +67,7 @@ export default function GymRoutineCard({ routine, onStarted }: Props) {
 
           {/* Días asignados */}
           <div className="flex items-center gap-1 mt-2">
-            <Calendar className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+            <Calendar className="w-3.5 h-3.5 text-outline" />
             <div className="flex gap-1">
               {routine.days.map((day) => (
                 <span
@@ -84,15 +84,15 @@ export default function GymRoutineCard({ routine, onStarted }: Props) {
 
       {/* Lista de ejercicios (expandible) */}
       {expanded && routine.exercises.length > 0 && (
-        <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4">
+        <div className="mt-4 space-y-2 border-t border-outline-variant/20 pt-4">
           {routine.exercises.map((ex, idx) => (
             <div key={ex.id} className="flex items-center gap-3">
-              <span className="w-6 h-6 rounded-full bg-[var(--surface-hover)] flex items-center justify-center text-xs text-[var(--text-muted)] flex-shrink-0">
+              <span className="w-6 h-6 rounded-full bg-surface-container-high flex items-center justify-center text-xs text-outline flex-shrink-0">
                 {idx + 1}
               </span>
               <div className="flex-1 min-w-0">
-                <span className="text-sm text-[var(--text-primary)]">{ex.name}</span>
-                <span className="text-xs text-[var(--text-muted)] ml-2">
+                <span className="text-sm text-on-surface">{ex.name}</span>
+                <span className="text-xs text-outline ml-2">
                   {ex.sets} series{ex.repsRange ? ` × ${ex.repsRange} reps` : ""}
                 </span>
               </div>

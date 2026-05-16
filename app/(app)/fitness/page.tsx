@@ -45,9 +45,9 @@ export default async function FitnessPage() {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Dumbbell className="w-5 h-5 text-module-fitness" />
-          <h2 className="text-xl font-bold text-[var(--text-primary)]">Fitness</h2>
+          <h2 className="text-xl font-bold text-on-surface">Fitness</h2>
         </div>
-        <p className="text-sm text-[var(--text-secondary)]">
+        <p className="text-sm text-on-surface-variant">
           Gym, running, natación y actividad física
         </p>
       </div>

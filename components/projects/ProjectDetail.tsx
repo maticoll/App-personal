@@ -113,64 +113,64 @@ export default function ProjectDetail({ project, onClose, onUpdated, onDeleted }
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-[var(--surface)] border border-[var(--border)] rounded-t-2xl md:rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between p-4 border-b border-[var(--border)]">
+      <div className="relative bg-surface-container border border-outline-variant/20 rounded-t-2xl md:rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between p-4 border-b border-outline-variant/20">
           <input
             value={title} onChange={(e) => setTitle(e.target.value)} onBlur={handleTitleBlur}
-            className="text-lg font-semibold text-[var(--text-primary)] bg-transparent border-none outline-none focus:ring-0 flex-1 min-w-0 truncate"
+            className="text-lg font-semibold text-on-surface bg-transparent border-none outline-none focus:ring-0 flex-1 min-w-0 truncate"
             placeholder="Nombre del proyecto"
           />
-          <button onClick={onClose} className="ml-2 p-1 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-muted)] flex-shrink-0">
+          <button onClick={onClose} className="ml-2 p-1 rounded-lg hover:bg-surface-container-high text-outline flex-shrink-0">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div>
-            <label className="text-xs font-medium text-[var(--text-muted)] block mb-1">Descripción</label>
+            <label className="text-xs font-medium text-outline block mb-1">Descripción</label>
             <textarea
               value={description} onChange={(e) => setDescription(e.target.value)} onBlur={handleDescriptionBlur}
               placeholder="Agrega una descripción..." rows={2}
-              className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-amber-500/30 resize-none"
+              className="w-full px-3 py-2 text-sm rounded-lg bg-surface-container-high border border-outline-variant/20 text-on-surface placeholder:text-outline focus:outline-none focus:ring-2 focus:ring-amber-500/30 resize-none"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] block mb-1">Estado</label>
+              <label className="text-xs font-medium text-outline block mb-1">Estado</label>
               <select
                 value={status} onChange={(e) => handleStatusChange(e.target.value as ProjectStatus)}
-                className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                className="w-full px-3 py-2 text-sm rounded-lg bg-surface-container-high border border-outline-variant/20 text-on-surface focus:outline-none focus:ring-2 focus:ring-amber-500/30"
               >
                 {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium text-[var(--text-muted)] block mb-1">Deadline</label>
+              <label className="text-xs font-medium text-outline block mb-1">Deadline</label>
               <div className="relative">
-                <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)] pointer-events-none" />
+                <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-outline pointer-events-none" />
                 <input
                   type="date" value={deadline} onChange={(e) => handleDeadlineChange(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 text-sm rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                  className="w-full pl-8 pr-3 py-2 text-sm rounded-lg bg-surface-container-high border border-outline-variant/20 text-on-surface focus:outline-none focus:ring-2 focus:ring-amber-500/30"
                 />
               </div>
             </div>
           </div>
 
           <div>
-            <label className="text-xs font-medium text-[var(--text-muted)] block mb-2">
+            <label className="text-xs font-medium text-outline block mb-2">
               Tareas ({tasks.filter((t) => t.done).length}/{tasks.length})
             </label>
             <div className="space-y-1 mb-2">
               {tasks.map((task) => (
-                <div key={task.id} className="flex items-center gap-2 group px-2 py-1.5 rounded-lg hover:bg-[var(--surface-hover)]">
+                <div key={task.id} className="flex items-center gap-2 group px-2 py-1.5 rounded-lg hover:bg-surface-container-high">
                   <button
                     onClick={() => handleToggleTask(task)}
-                    className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${task.done ? "bg-amber-500 border-amber-500" : "border-[var(--border)] hover:border-amber-400"}`}
+                    className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${task.done ? "bg-amber-500 border-amber-500" : "border-outline-variant/30 hover:border-amber-400"}`}
                   >
                     {task.done && <Check className="w-3 h-3 text-white" />}
                   </button>
-                  <span className={`flex-1 text-sm ${task.done ? "line-through text-[var(--text-muted)]" : "text-[var(--text-primary)]"}`}>
+                  <span className={`flex-1 text-sm ${task.done ? "line-through text-outline" : "text-on-surface"}`}>
                     {task.title}
                   </span>
                   <button onClick={() => handleDeleteTask(task.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 text-red-400 transition-opacity">
@@ -184,7 +184,7 @@ export default function ProjectDetail({ project, onClose, onUpdated, onDeleted }
                 type="text" value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleAddTask()}
                 placeholder="Nueva tarea..."
-                className="flex-1 px-3 py-1.5 text-sm rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                className="flex-1 px-3 py-1.5 text-sm rounded-lg bg-surface-container-high border border-outline-variant/20 text-on-surface placeholder:text-outline focus:outline-none focus:ring-2 focus:ring-amber-500/30"
               />
               <button
                 onClick={handleAddTask} disabled={!newTaskTitle.trim()}
@@ -196,7 +196,7 @@ export default function ProjectDetail({ project, onClose, onUpdated, onDeleted }
           </div>
         </div>
 
-        <div className="p-4 border-t border-[var(--border)]">
+        <div className="p-4 border-t border-outline-variant/20">
           <button
             onClick={handleDeleteProject}
             className={`w-full py-2 text-sm rounded-lg transition-colors flex items-center justify-center gap-2 ${confirmDelete ? "bg-red-500 text-white" : "text-red-400 hover:bg-red-500/10"}`}
@@ -206,7 +206,7 @@ export default function ProjectDetail({ project, onClose, onUpdated, onDeleted }
           </button>
         </div>
 
-        {saving && <div className="absolute top-3 right-12 text-xs text-[var(--text-muted)]">Guardando...</div>}
+        {saving && <div className="absolute top-3 right-12 text-xs text-outline">Guardando...</div>}
       </div>
     </div>
   );

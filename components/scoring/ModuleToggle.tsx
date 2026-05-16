@@ -48,11 +48,11 @@ export function ModuleToggle({ active, onChange, className }: ModuleToggleProps)
             className={cn(
               "flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-all duration-150",
               isActive
-                ? `${border} bg-[var(--surface-hover)] text-[var(--text-primary)]`
-                : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--text-muted)]"
+                ? `${border} bg-surface-container-high text-on-surface`
+                : "border-outline-variant/30 text-outline hover:border-outline"
             )}
           >
-            <span className={cn("w-2 h-2 rounded-full", isActive ? color : "bg-[var(--border)]")} />
+            <span className={cn("w-2 h-2 rounded-full", isActive ? color : "bg-outline-variant")} />
             {label}
           </button>
         );

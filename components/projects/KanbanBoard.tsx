@@ -69,14 +69,14 @@ export default function KanbanBoard({ projects, onProjectsChange, onRefresh }: P
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_COLORS[status]}`}>
                     {STATUS_LABELS[status]}
                   </span>
-                  <span className="text-xs text-[var(--text-muted)]">{colProjects.length}</span>
+                  <span className="text-xs text-outline">{colProjects.length}</span>
                 </div>
                 <Droppable droppableId={status}>
                   {(provided, snapshot) => (
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className={`min-h-[120px] rounded-xl p-2 transition-colors ${snapshot.isDraggingOver ? "bg-amber-500/5 border border-amber-500/20" : "bg-[var(--surface-hover)]/30"}`}
+                      className={`min-h-[120px] rounded-xl p-2 transition-colors ${snapshot.isDraggingOver ? "bg-amber-500/5 border border-amber-500/20" : "bg-surface-container-high/30"}`}
                     >
                       <div className="space-y-2">
                         {colProjects.map((project, index) => (
@@ -99,7 +99,7 @@ export default function KanbanBoard({ projects, onProjectsChange, onRefresh }: P
                       </div>
                       {provided.placeholder}
                       {colProjects.length === 0 && !snapshot.isDraggingOver && (
-                        <div className="text-center py-6 text-[var(--text-muted)] text-xs">Sin proyectos</div>
+                        <div className="text-center py-6 text-outline text-xs">Sin proyectos</div>
                       )}
                     </div>
                   )}

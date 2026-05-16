@@ -55,14 +55,14 @@ function CustomTooltip({
   if (!active || !payload?.length) return null;
   const entry = payload[0].payload;
   return (
-    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 text-sm shadow-xl">
-      <p className="font-semibold text-[var(--text-primary)] mb-1">{label}</p>
+    <div className="bg-surface-container border border-outline-variant/20 rounded-xl p-3 text-sm shadow-xl">
+      <p className="font-semibold text-on-surface mb-1">{label}</p>
       {entry.minutes !== null ? (
         <>
-          <p className="text-[var(--text-secondary)]">
+          <p className="text-on-surface-variant">
             {formatDuration(entry.minutes)}
           </p>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+          <p className="text-xs text-outline mt-0.5">
             {entry.hours !== null && entry.hours >= 7 && entry.hours <= 9
               ? "✅ Rango ideal"
               : entry.hours !== null && entry.hours >= 6 && entry.hours <= 10
@@ -71,7 +71,7 @@ function CustomTooltip({
           </p>
         </>
       ) : (
-        <p className="text-[var(--text-muted)]">Sin registro</p>
+        <p className="text-outline">Sin registro</p>
       )}
     </div>
   );
@@ -106,10 +106,10 @@ export function SleepDurationChart({ history, days = 7 }: Props) {
   return (
     <div className="card">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-[var(--text-secondary)]">
+        <h3 className="text-sm font-semibold text-on-surface-variant">
           Duración (últimos {days} días)
         </h3>
-        <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
+        <div className="flex items-center gap-3 text-xs text-outline">
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-violet-500 inline-block" />
             Ideal

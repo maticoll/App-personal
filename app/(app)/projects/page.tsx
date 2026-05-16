@@ -29,9 +29,9 @@ export default async function ProjectsPage() {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <FolderKanban className="w-5 h-5 text-module-projects" />
-          <h2 className="text-xl font-bold text-[var(--text-primary)]">Proyectos</h2>
+          <h2 className="text-xl font-bold text-on-surface">Proyectos</h2>
         </div>
-        <p className="text-sm text-[var(--text-secondary)]">
+        <p className="text-sm text-on-surface-variant">
           Personales, trabajo y deadlines
         </p>
       </div>

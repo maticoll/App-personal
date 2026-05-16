@@ -39,10 +39,10 @@ export default function ProjectsQuickActions({ onCreated }: Props) {
 
   return (
     <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-30
-      bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl p-4 w-72">
+      bg-surface-container border border-outline-variant/20 rounded-xl shadow-xl p-4 w-72">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold text-[var(--text-primary)]">Nuevo proyecto</span>
-        <button onClick={() => { setOpen(false); setTitle(""); }} className="text-[var(--text-muted)] hover:text-[var(--text-secondary)]">
+        <span className="text-sm font-semibold text-on-surface">Nuevo proyecto</span>
+        <button onClick={() => { setOpen(false); setTitle(""); }} className="text-outline hover:text-on-surface-variant">
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -50,9 +50,9 @@ export default function ProjectsQuickActions({ onCreated }: Props) {
         type="text" value={title} onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && handleCreate()}
         placeholder="Nombre del proyecto..."
-        className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--surface-hover)]
-          border border-[var(--border)] text-[var(--text-primary)]
-          placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-amber-500/50 mb-3"
+        className="w-full px-3 py-2 text-sm rounded-lg bg-surface-container-high
+          border border-outline-variant/20 text-on-surface
+          placeholder:text-outline focus:outline-none focus:ring-2 focus:ring-amber-500/50 mb-3"
         autoFocus
       />
       <button

@@ -40,8 +40,8 @@ function CustomTooltip({ active, payload, label }: any) {
   const entry = payload[0]?.payload as WeeklyStatEntry;
 
   return (
-    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 shadow-lg">
-      <p className="text-xs font-semibold text-[var(--text-primary)] mb-2">{label}</p>
+    <div className="bg-surface-container border border-outline-variant/20 rounded-xl p-3 shadow-lg">
+      <p className="text-xs font-semibold text-on-surface mb-2">{label}</p>
       {entry.gymMinutes > 0 && (
         <p className="text-xs text-module-fitness">
           Gym: {formatMinutes(entry.gymMinutes)}
@@ -53,12 +53,12 @@ function CustomTooltip({ active, payload, label }: any) {
         </p>
       )}
       {entry.totalMinutes > 0 && (
-        <p className="text-xs text-[var(--text-muted)] mt-1">
+        <p className="text-xs text-outline mt-1">
           Total: {formatMinutes(entry.totalMinutes)}
         </p>
       )}
       {entry.totalMinutes === 0 && (
-        <p className="text-xs text-[var(--text-muted)]">Sin actividad</p>
+        <p className="text-xs text-outline">Sin actividad</p>
       )}
     </div>
   );
@@ -80,14 +80,14 @@ export default function WeeklyVolumeChart({ data }: Props) {
   return (
     <div className="card space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-[var(--text-primary)]">
+        <h3 className="font-semibold text-on-surface">
           Volumen semanal
         </h3>
-        <span className="text-xs text-[var(--text-muted)]">Últimos 7 días</span>
+        <span className="text-xs text-outline">Últimos 7 días</span>
       </div>
 
       {!hasData ? (
-        <div className="text-center py-8 text-[var(--text-muted)] text-sm">
+        <div className="text-center py-8 text-outline text-sm">
           Sin actividades registradas esta semana
         </div>
       ) : (
@@ -119,7 +119,7 @@ export default function WeeklyVolumeChart({ data }: Props) {
                         ? "#F97316" // naranja para cardio
                         : entry.totalMinutes > 0
                         ? "#8B5CF6" // violeta para otro
-                        : "var(--border)"
+                        : "#464554"
                     }
                     fillOpacity={entry.totalMinutes > 0 ? 0.85 : 0.4}
                   />
@@ -131,7 +131,7 @@ export default function WeeklyVolumeChart({ data }: Props) {
       )}
 
       {/* Leyenda */}
-      <div className="flex items-center gap-4 text-xs text-[var(--text-muted)]">
+      <div className="flex items-center gap-4 text-xs text-outline">
         <div className="flex items-center gap-1">
           <span className="w-3 h-3 rounded-sm bg-module-fitness opacity-85 inline-block" />
           Gym
