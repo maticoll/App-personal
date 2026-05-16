@@ -1,14 +1,5 @@
 "use client";
 
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from "recharts";
-
 type Props = {
   proteinG: number;
   carbsG: number;
@@ -16,78 +7,119 @@ type Props = {
   calories: number | null;
 };
 
-const COLORS = {
-  Proteínas: "#6366F1",
-  Carbohidratos: "#06B6D4",
-  Grasas: "#F59E0B",
-};
+// Calcula el stroke-dashoffset para un arco SVG en un círculo r=45, circunferencia=282.7
+function calcOffset(value: number, total: number): number {
+  if (total === 0) return 282.7;
+  const pct = Math.min(value / total, 1);
+  return 282.7 * (1 - pct);
+}
 
 export default function MacrosChart({ proteinG, carbsG, fatG, calories }: Props) {
   const total = proteinG + carbsG + fatG;
-  if (total === 0) return null;
 
-  const data = [
-    { name: "Proteínas", value: Math.round(proteinG), unit: "g" },
-    { name: "Carbohidratos", value: Math.round(carbsG), unit: "g" },
-    { name: "Grasas", value: Math.round(fatG), unit: "g" },
-  ].filter((d) => d.value > 0);
+  // Offsets acumulados para cada arco (apilados)
+  const proteinPct = total > 0 ? proteinG / total : 0;
+  const carbsPct = total > 0 ? carbsG / total : 0;
+  const fatPct = total > 0 ? fatG / total : 0;
+
+  const CIRC = 282.7;
+  const proteinDash = CIRC * proteinPct;
+  const carbsDash = CIRC * carbsPct;
+  const fatDash = CIRC * fatPct;
+
+  // Para apilar los arcos usamos rotation
+  const proteinRot = 0;
+  const carbsRot = proteinPct * 360;
+  const fatRot = (proteinPct + carbsPct) * 360;
+
+  const hasData = total > 0;
 
   return (
-    <div className="rounded-xl bg-surface border border-white/5 p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-text-primary">Macros del día</h3>
-        {calories !== null && (
-          <span className="text-xs text-text-muted">
-            ~{Math.round(calories)} kcal total
+    <section className="flex flex-col items-center glass-card rounded-2xl p-4">
+      {/* Ring */}
+      <div className="relative w-56 h-56 flex items-center justify-center">
+        <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+          {/* Track */}
+          <circle
+            cx="50" cy="50" r="45" fill="none"
+            stroke="rgba(255,255,255,0.06)" strokeWidth="8"
+          />
+          {hasData ? (
+            <>
+              {/* Protein — emerald */}
+              <circle
+                cx="50" cy="50" r="45" fill="none"
+                stroke="#10B981"
+                strokeWidth="8"
+                strokeDasharray={`${proteinDash} ${CIRC - proteinDash}`}
+                strokeDashoffset="0"
+                strokeLinecap="round"
+                style={{ transform: `rotate(${proteinRot}deg)`, transformOrigin: "50px 50px" }}
+                className="drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]"
+              />
+              {/* Carbs — primary */}
+              <circle
+                cx="50" cy="50" r="45" fill="none"
+                stroke="#c0c1ff"
+                strokeWidth="8"
+                strokeDasharray={`${carbsDash} ${CIRC - carbsDash}`}
+                strokeDashoffset="0"
+                strokeLinecap="round"
+                style={{ transform: `rotate(${carbsRot}deg)`, transformOrigin: "50px 50px" }}
+              />
+              {/* Fat — tertiary */}
+              <circle
+                cx="50" cy="50" r="45" fill="none"
+                stroke="#ffb783"
+                strokeWidth="8"
+                strokeDasharray={`${fatDash} ${CIRC - fatDash}`}
+                strokeDashoffset="0"
+                strokeLinecap="round"
+                style={{ transform: `rotate(${fatRot}deg)`, transformOrigin: "50px 50px" }}
+              />
+            </>
+          ) : (
+            <circle cx="50" cy="50" r="45" fill="none"
+              stroke="rgba(255,255,255,0.04)" strokeWidth="8" strokeDasharray="8 6" />
+          )}
+        </svg>
+
+        {/* Center text */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">
+            {hasData ? "Total" : "Sin datos"}
           </span>
-        )}
+          <span className="text-4xl font-bold text-on-surface leading-tight">
+            {calories !== null ? Math.round(calories) : "—"}
+          </span>
+          <span className="text-sm font-medium text-accent-emerald">kcal</span>
+        </div>
       </div>
-      <div className="h-48">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={50}
-              outerRadius={75}
-              paddingAngle={3}
-              dataKey="value"
-            >
-              {data.map((entry) => (
-                <Cell
-                  key={entry.name}
-                  fill={COLORS[entry.name as keyof typeof COLORS]}
-                />
-              ))}
-            </Pie>
-            <Tooltip
-              formatter={(value: number, name: string) => [`${value}g`, name]}
-              contentStyle={{
-                background: "#1A1D27",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: "8px",
-                color: "#E2E8F0",
-              }}
-            />
-            <Legend
-              formatter={(value) => (
-                <span style={{ color: "#94A3B8", fontSize: "12px" }}>{value}</span>
-              )}
-            />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="grid grid-cols-3 gap-2 mt-2">
-        {data.map((d) => (
-          <div key={d.name} className="text-center">
-            <p className="text-xs text-text-muted">{d.name}</p>
-            <p className="text-sm font-semibold text-text-primary">
-              {d.value}g
-            </p>
+
+      {/* Legend */}
+      <div className="grid grid-cols-3 gap-4 w-full mt-4 px-2">
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-accent-emerald flex-shrink-0" />
+            <span className="text-xs font-medium text-on-surface">Protein</span>
           </div>
-        ))}
+          <span className="text-xl font-bold text-on-surface">{Math.round(proteinG)}g</span>
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+            <span className="text-xs font-medium text-on-surface">Carbs</span>
+          </div>
+          <span className="text-xl font-bold text-on-surface">{Math.round(carbsG)}g</span>
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: "#ffb783" }} />
+            <span className="text-xs font-medium text-on-surface">Fat</span>
+          </div>
+          <span className="text-xl font-bold text-on-surface">{Math.round(fatG)}g</span>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
