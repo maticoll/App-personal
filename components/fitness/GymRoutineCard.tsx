@@ -1,18 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Dumbbell, Calendar, Play, ChevronDown, ChevronUp } from "lucide-react";
 import type { GymRoutineWithExercises } from "@/lib/fitness";
 
 const DAY_LABELS: Record<string, string> = {
-  MONDAY: "Lun",
-  TUESDAY: "Mar",
-  WEDNESDAY: "Mié",
-  THURSDAY: "Jue",
-  FRIDAY: "Vie",
-  SATURDAY: "Sáb",
-  SUNDAY: "Dom",
+  MONDAY: "Lun", TUESDAY: "Mar", WEDNESDAY: "Mié",
+  THURSDAY: "Jue", FRIDAY: "Vie", SATURDAY: "Sáb", SUNDAY: "Dom",
 };
+
+// Tiempo estimado: 10 min calentamiento + 8 min por ejercicio
+function estimateMinutes(exerciseCount: number): string {
+  return `${10 + exerciseCount * 8} min`;
+}
 
 type Props = {
   routine: GymRoutineWithExercises;
@@ -20,8 +19,8 @@ type Props = {
 };
 
 export default function GymRoutineCard({ routine, onStarted }: Props) {
-  const [expanded, setExpanded] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const handleStart = async () => {
     setStarting(true);
@@ -31,7 +30,7 @@ export default function GymRoutineCard({ routine, onStarted }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "GYM", title: routine.name }),
       });
-      if (!res.ok) throw new Error("Error al iniciar sesión");
+      if (!res.ok) throw new Error();
       onStarted();
     } catch {
       alert("Error al iniciar la sesión de gym");
@@ -41,73 +40,82 @@ export default function GymRoutineCard({ routine, onStarted }: Props) {
   };
 
   return (
-    <div className="card">
-      <div className="flex items-start gap-3">
-        {/* Ícono */}
-        <div className="w-10 h-10 rounded-xl bg-[#06B6D4]/10 flex items-center justify-center flex-shrink-0">
-          <Dumbbell className="w-5 h-5 text-module-fitness" />
+    <div
+      className="glass-card rounded-2xl p-4 flex flex-col justify-between min-h-[160px] relative overflow-hidden active:scale-[0.98] transition-all duration-150"
+      style={{ minHeight: expanded ? "auto" : 160 }}
+    >
+      {/* Decoración de fondo cyan */}
+      <div className="absolute top-0 right-0 w-32 h-32 bg-accent-cyan/10 blur-3xl -mr-16 -mt-16 pointer-events-none" />
+
+      {/* Top row */}
+      <div className="flex justify-between items-start z-10">
+        <div>
+          <span className="text-xs font-bold text-accent-cyan uppercase tracking-widest opacity-80">
+            Gym Routine
+          </span>
+          <h3 className="text-2xl font-bold text-on-surface mt-1">{routine.name}</h3>
         </div>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-10 h-10 bg-[#06B6D4]/20 rounded-full flex items-center justify-center active:scale-90 transition-transform"
+        >
+          <span
+            className="material-symbols-outlined text-accent-cyan text-[22px]"
+            style={{ fontVariationSettings: "'FILL' 1" }}
+          >
+            fitness_center
+          </span>
+        </button>
+      </div>
 
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-on-surface">
-                Rutina de hoy
-              </p>
-              <p className="text-sm text-module-fitness font-medium">{routine.name}</p>
-            </div>
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="p-1.5 rounded-lg hover:bg-surface-container-high text-outline"
-            >
-              {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-          </div>
-
-          {/* Días asignados */}
-          <div className="flex items-center gap-1 mt-2">
-            <Calendar className="w-3.5 h-3.5 text-outline" />
-            <div className="flex gap-1">
-              {routine.days.map((day) => (
-                <span
-                  key={day}
-                  className="text-xs bg-[#06B6D4]/10 text-module-fitness px-1.5 py-0.5 rounded-full"
-                >
-                  {DAY_LABELS[day] ?? day}
-                </span>
-              ))}
-            </div>
-          </div>
+      {/* Stats row */}
+      <div className="flex gap-4 mt-4 z-10">
+        <div className="flex flex-col">
+          <span className="text-xs text-on-surface-variant">Exercises</span>
+          <span className="text-base font-semibold text-on-surface">
+            {routine.exercises.length} Total
+          </span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-xs text-on-surface-variant">Est. Time</span>
+          <span className="text-base font-semibold text-on-surface">
+            {estimateMinutes(routine.exercises.length)}
+          </span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-xs text-on-surface-variant">Días</span>
+          <span className="text-xs font-semibold text-accent-cyan">
+            {routine.days.map((d) => DAY_LABELS[d] ?? d).join(" · ")}
+          </span>
         </div>
       </div>
 
-      {/* Lista de ejercicios (expandible) */}
+      {/* Ejercicios expandidos */}
       {expanded && routine.exercises.length > 0 && (
-        <div className="mt-4 space-y-2 border-t border-outline-variant/20 pt-4">
+        <div className="mt-4 pt-4 border-t border-white/10 space-y-2 z-10">
           {routine.exercises.map((ex, idx) => (
             <div key={ex.id} className="flex items-center gap-3">
-              <span className="w-6 h-6 rounded-full bg-surface-container-high flex items-center justify-center text-xs text-outline flex-shrink-0">
+              <span className="w-5 h-5 rounded-full bg-surface-container-high flex items-center justify-center text-[10px] text-outline flex-shrink-0">
                 {idx + 1}
               </span>
-              <div className="flex-1 min-w-0">
-                <span className="text-sm text-on-surface">{ex.name}</span>
-                <span className="text-xs text-outline ml-2">
-                  {ex.sets} series{ex.repsRange ? ` × ${ex.repsRange} reps` : ""}
-                </span>
-              </div>
+              <span className="text-sm text-on-surface flex-1">{ex.name}</span>
+              <span className="text-xs text-outline">
+                {ex.sets}×{ex.repsRange ?? "—"}
+              </span>
             </div>
           ))}
         </div>
       )}
 
-      {/* Botón iniciar */}
+      {/* Botón empezar gym */}
       <button
         onClick={handleStart}
         disabled={starting}
-        className="btn-primary w-full mt-4 flex items-center justify-center gap-2 text-sm"
+        className="mt-4 w-full py-2.5 rounded-full bg-accent-cyan text-[#0D0F14] font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-60 z-10"
       >
-        <Play className="w-4 h-4" />
+        <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+          play_arrow
+        </span>
         {starting ? "Iniciando..." : "Empezar gym"}
       </button>
     </div>

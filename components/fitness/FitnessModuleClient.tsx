@@ -37,25 +37,20 @@ export default function FitnessModuleClient({
   garminConnected,
 }: Props) {
   const [tab, setTab] = useState<Tab>("hoy");
-  const [todayWorkouts, setTodayWorkouts] =
-    useState<WorkoutWithExercises[]>(initialTodayWorkouts);
+  const [todayWorkouts, setTodayWorkouts] = useState<WorkoutWithExercises[]>(initialTodayWorkouts);
   const [history, setHistory] = useState<WorkoutWithExercises[]>(initialHistory);
-  const [weeklyStats, setWeeklyStats] =
-    useState<WeeklyStatEntry[]>(initialWeeklyStats);
-  const [smartHabit, setSmartHabit] =
-    useState<SmartHabitStatus>(initialSmartHabit);
+  const [weeklyStats, setWeeklyStats] = useState<WeeklyStatEntry[]>(initialWeeklyStats);
+  const [smartHabit, setSmartHabit] = useState<SmartHabitStatus>(initialSmartHabit);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const refreshAll = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const [todayRes, historyRes, weekRes, habitRes] = await Promise.all([
+      const [todayRes, historyRes, weekRes] = await Promise.all([
         fetch("/api/fitness/today"),
         fetch("/api/fitness/workout?days=14"),
         fetch("/api/fitness/weekly-stats"),
-        fetch("/api/fitness/today"),
       ]);
-
       if (todayRes.ok) {
         const d = await todayRes.json();
         setTodayWorkouts(d.workouts ?? []);
@@ -69,60 +64,47 @@ export default function FitnessModuleClient({
         const d = await weekRes.json();
         setWeeklyStats(d.stats ?? []);
       }
-      // habitRes shares same response as todayRes, already handled
-      void habitRes;
-    } catch {
-      // silently fail — data stays as-is
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, []);
-
-  const refreshStats = useCallback(async () => {
-    try {
-      const res = await fetch("/api/fitness/weekly-stats");
-      if (res.ok) {
-        const d = await res.json();
-        setWeeklyStats(d.stats ?? []);
-      }
     } catch {
       // silently fail
+    } finally {
+      setIsRefreshing(false);
     }
   }, []);
 
   const handleWorkoutDeleted = useCallback((id: string) => {
     setTodayWorkouts((prev) => prev.filter((w) => w.id !== id));
     setHistory((prev) => prev.filter((w) => w.id !== id));
-    refreshStats();
-  }, [refreshStats]);
+  }, []);
 
-  const handleLogged = useCallback(() => {
-    refreshAll();
-  }, [refreshAll]);
+  const handleLogged = useCallback(() => { refreshAll(); }, [refreshAll]);
 
-  const TABS: { id: Tab; label: string }[] = [
-    { id: "hoy", label: "Hoy" },
-    { id: "stats", label: "Stats" },
-    { id: "rutinas", label: "Rutinas" },
+  const today = new Date();
+  const dateLabel = today.toLocaleDateString("es-UY", { day: "numeric", month: "short" }).toUpperCase();
+
+  const TABS = [
+    { id: "hoy" as Tab, label: "Today" },
+    { id: "stats" as Tab, label: "Stats" },
+    { id: "rutinas" as Tab, label: "Routines" },
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+
       {/* Smart Habit Alert */}
       {smartHabit.shouldNotify && (
         <SmartHabitAlert message={smartHabit.message ?? ""} />
       )}
 
-      {/* Tab navigation */}
-      <div className="flex gap-1 bg-surface-container-high rounded-xl p-1">
+      {/* ── Tab nav estilo Stitch ─────────────────────────────── */}
+      <div className="flex p-1 bg-surface-container rounded-xl">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
               tab === t.id
-                ? "bg-surface-container text-on-surface shadow-sm"
-                : "text-outline hover:text-on-surface-variant"
+                ? "text-accent-cyan bg-surface-container-high shadow-[0_0_12px_rgba(6,182,212,0.3)]"
+                : "text-on-surface-variant hover:text-on-surface"
             }`}
           >
             {t.label}
@@ -130,21 +112,21 @@ export default function FitnessModuleClient({
         ))}
       </div>
 
-      {/* ─── TAB: HOY ─── */}
+      {/* ── TODAY ────────────────────────────────────────────── */}
       {tab === "hoy" && (
         <div className="space-y-4">
+          {/* Daily Focus heading */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-on-surface tracking-tight">Daily Focus</h2>
+            <span className="text-xs font-bold text-accent-cyan uppercase tracking-widest">{dateLabel}</span>
+          </div>
+
           {/* Rutina del día */}
           {initialTodayRoutine && (
-            <GymRoutineCard
-              routine={initialTodayRoutine}
-              onStarted={handleLogged}
-            />
+            <GymRoutineCard routine={initialTodayRoutine} onStarted={handleLogged} />
           )}
 
-          {/* Registrar actividad */}
-          <FitnessQuickActions onLogged={handleLogged} />
-
-          {/* Entrenamientos de hoy */}
+          {/* Entrenamientos de hoy (cardio completado) */}
           {todayWorkouts.length > 0 && (
             <TodayWorkoutCard
               workouts={todayWorkouts}
@@ -153,7 +135,10 @@ export default function FitnessModuleClient({
             />
           )}
 
-          {/* Garmin sync — al fondo */}
+          {/* NLP Quick Log */}
+          <FitnessQuickActions onLogged={handleLogged} />
+
+          {/* Garmin sync */}
           <GarminSyncButton
             garminStatus={{ connected: garminConnected, sessionValid: garminConnected, lastSync: null }}
             onSynced={handleLogged}
@@ -161,25 +146,26 @@ export default function FitnessModuleClient({
         </div>
       )}
 
-      {/* ─── TAB: STATS ─── */}
+      {/* ── STATS ─────────────────────────────────────────────── */}
       {tab === "stats" && (
         <div className="space-y-4">
+          <h2 className="text-2xl font-bold text-on-surface tracking-tight">Analysis</h2>
           <WeeklyVolumeChart data={weeklyStats} />
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-on-surface px-1">
+            <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest px-1">
               Últimos 14 días
             </h3>
-            <WorkoutHistoryList
-              workouts={history}
-              onDeleted={handleWorkoutDeleted}
-            />
+            <WorkoutHistoryList workouts={history} onDeleted={handleWorkoutDeleted} />
           </div>
         </div>
       )}
 
-      {/* ─── TAB: RUTINAS ─── */}
+      {/* ── ROUTINES ──────────────────────────────────────────── */}
       {tab === "rutinas" && (
-        <RoutineManager onChanged={handleLogged} />
+        <div className="space-y-4">
+          <h2 className="text-2xl font-bold text-on-surface tracking-tight">Library</h2>
+          <RoutineManager onChanged={handleLogged} />
+        </div>
       )}
     </div>
   );
