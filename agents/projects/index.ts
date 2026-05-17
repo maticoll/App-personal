@@ -6,6 +6,7 @@
 import {
   getAllProjects,
   createProject,
+  createTask,
   updateProject,
   updateTask,
   getTodayProjectsSummary,
@@ -35,7 +36,8 @@ function normalize(text: string): string {
 // -------------------------------------------------------
 
 type Intention =
-  | "create"
+  | "create_project"
+  | "create_task"
   | "update_status"
   | "task_done"
   | "query"
@@ -44,11 +46,13 @@ type Intention =
 
 async function detectIntention(text: string): Promise<Intention> {
   const intent = await detectIntentAI(
-    "Eres el agente de proyectos de una app personal.",
+    `Eres el agente de proyectos de una app personal.
+IMPORTANTE: una TAREA es una acción concreta que pertenece a un proyecto (ej: "hacer el mockup", "llamar al cliente"). Un PROYECTO es un objetivo mayor o iniciativa (ej: "lanzar la web", "rediseñar la app").`,
     {
-      create: "El usuario quiere crear un nuevo proyecto",
+      create_project: "El usuario quiere crear un nuevo PROYECTO (iniciativa, objetivo, área de trabajo)",
+      create_task: "El usuario quiere agregar una TAREA o ítem concreto a un proyecto existente",
       update_status: "El usuario quiere cambiar el estado de un proyecto (en progreso, hecho, archivado)",
-      task_done: "El usuario marco una tarea como completada o terminada",
+      task_done: "El usuario marcó una tarea como completada o terminada",
       query: "El usuario pregunta por sus proyectos, tareas pendientes o estado general",
       sync_notion: "El usuario quiere sincronizar con Notion",
       unknown: "Otro mensaje no relacionado a proyectos",
@@ -62,16 +66,129 @@ async function detectIntention(text: string): Promise<Intention> {
 // Handlers por intención
 // -------------------------------------------------------
 
-async function handleCreate(userId: string, text: string): Promise<string> {
+async function handleCreateProject(userId: string, text: string): Promise<string> {
+  // Acepta: "nuevo proyecto: X", "crear proyecto X", "agregar proyecto X"
   const match = text.match(/(?:nuevo|crear?|agregar?)\s+proyecto[:\s]+(.+)/i);
-  const title = match?.[1]?.trim();
+  const title = match?.[1]?.trim() ?? text.replace(/nuevo|crear?|agregar?|proyecto/gi, "").trim();
 
   if (!title) {
     return "¿Cómo se llama el proyecto que querés crear?";
   }
 
   await createProject(userId, { title });
-  return `✅ Proyecto "${title}" creado en la columna TODO.`;
+  return `✅ Proyecto "${title}" creado. Podés agregarle tareas con "nueva tarea: [descripción] en [proyecto]".`;
+}
+
+/**
+ * Extrae una lista de títulos de tareas desde texto con formato de lista.
+ * Soporta: guiones, bullets, asteriscos, numerados, o simplemente saltos de línea.
+ */
+function extractTaskList(text: string): string[] {
+  // Separar la cabecera ("agrega las siguientes tareas:") del contenido
+  const bodyMatch = text.match(/(?:tareas?[:\s]+|siguiente[s]?[:\s]+)([\s\S]+)/i);
+  const body = bodyMatch?.[1] ?? text;
+
+  const lines = body
+    .split(/\n/)
+    .map((l) => l.replace(/^[\s\-•*\d.]+/, "").trim())
+    .filter((l) => l.length > 0);
+
+  return lines;
+}
+
+async function handleCreateTask(userId: string, text: string): Promise<string> {
+  const projects = await getAllProjects(userId);
+  const activeProjects = projects.filter(
+    (p) => p.status === "TODO" || p.status === "IN_PROGRESS"
+  );
+
+  if (activeProjects.length === 0) {
+    return 'No tenés proyectos activos. Primero creá un proyecto con "nuevo proyecto: [nombre]".';
+  }
+
+  // Detectar si es una lista de tareas (múltiples líneas o saltos explícitos)
+  const isBulkList = /\n/.test(text) || /siguiente[s]?\s*tarea[s]?/i.test(text);
+
+  if (isBulkList) {
+    return handleCreateTasksBulk(userId, text, activeProjects);
+  }
+
+  // --- Tarea única ---
+  const taskMatch = text.match(
+    /(?:nueva?|crear?|agregar?|añadir?)\s+tarea[:\s]+(.+?)(?:\s+(?:en|a|al|para)\s+(.+))?$/i
+  ) ?? text.match(/tarea[:\s]+(.+?)(?:\s+(?:en|a|al|para)\s+(.+))?$/i);
+
+  let taskTitle = taskMatch?.[1]?.trim();
+  const projectHint = taskMatch?.[2]?.trim();
+
+  if (!taskTitle) {
+    taskTitle = text
+      .replace(/nueva?|crear?|agregar?|añadir?|tarea[s]?/gi, "")
+      .trim();
+  }
+
+  if (!taskTitle) {
+    return "¿Cómo se llama la tarea que querés agregar?";
+  }
+
+  let targetProject = projectHint
+    ? activeProjects.find((p) => normalize(p.title).includes(normalize(projectHint)))
+    : null;
+
+  if (!targetProject && activeProjects.length === 1) {
+    targetProject = activeProjects[0];
+  }
+
+  if (!targetProject) {
+    return (
+      `¿En qué proyecto va la tarea "${taskTitle}"?\n` +
+      activeProjects.slice(0, 5).map((p) => `• ${p.title}`).join("\n")
+    );
+  }
+
+  await createTask(targetProject.id, userId, taskTitle);
+  return `✅ Tarea "${taskTitle}" agregada al proyecto "${targetProject.title}".`;
+}
+
+async function handleCreateTasksBulk(
+  userId: string,
+  text: string,
+  activeProjects: Awaited<ReturnType<typeof getAllProjects>>
+): Promise<string> {
+  // Detectar proyecto mencionado en la cabecera
+  const headerProjectMatch = text.match(
+    /(?:en|a|al|para)\s+(?:el\s+proyecto\s+)?[""]?([^:\n]+?)[""]?\s*[:\n]/i
+  );
+  const projectHint = headerProjectMatch?.[1]?.trim();
+
+  let targetProject = projectHint
+    ? activeProjects.find((p) => normalize(p.title).includes(normalize(projectHint)))
+    : null;
+
+  if (!targetProject && activeProjects.length === 1) {
+    targetProject = activeProjects[0];
+  }
+
+  const taskTitles = extractTaskList(text);
+
+  if (taskTitles.length === 0) {
+    return "No encontré tareas en tu lista. Mandámelas una por línea.";
+  }
+
+  if (!targetProject) {
+    return (
+      `¿En qué proyecto van estas ${taskTitles.length} tareas?\n` +
+      activeProjects.slice(0, 5).map((p) => `• ${p.title}`).join("\n")
+    );
+  }
+
+  // Crear todas en paralelo
+  await Promise.all(
+    taskTitles.map((title) => createTask(targetProject!.id, userId, title))
+  );
+
+  const list = taskTitles.map((t) => `• ${t}`).join("\n");
+  return `✅ ${taskTitles.length} tareas agregadas al proyecto "${targetProject.title}":\n${list}`;
 }
 
 async function handleUpdateStatus(userId: string, text: string): Promise<string> {
@@ -242,8 +359,10 @@ export async function processProjectsMessage(
   const intention = await detectIntention(text);
 
   switch (intention) {
-    case "create":
-      return handleCreate(userId, text);
+    case "create_project":
+      return handleCreateProject(userId, text);
+    case "create_task":
+      return handleCreateTask(userId, text);
     case "update_status":
       return handleUpdateStatus(userId, text);
     case "task_done":
@@ -255,7 +374,8 @@ export async function processProjectsMessage(
     default:
       return (
         "No entendí. Podés decirme:\n" +
-        '• "nuevo proyecto: [nombre]"\n' +
+        '• "nuevo proyecto: [nombre]" — crea un proyecto\n' +
+        '• "nueva tarea: [descripción]" — agrega una tarea a un proyecto\n' +
         '• "moví [proyecto] a en progreso"\n' +
         '• "terminé la tarea [nombre]"\n' +
         '• "mis proyectos"\n' +
