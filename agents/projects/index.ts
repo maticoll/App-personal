@@ -402,6 +402,10 @@ export const projectsAgent = {
   name: "projects",
   description: "Gestiona proyectos personales y tareas de trabajo",
 
+  async onGoalsUpdate(_userId: string, _goals: import("@prisma/client").UserGoals): Promise<{ ok: boolean }> {
+    return { ok: true };
+  },
+
   async process(input: AgentInput): Promise<AgentOutput> {
     try {
       const response = await processProjectsMessage(input.userId, input.message);

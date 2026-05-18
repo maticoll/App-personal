@@ -45,6 +45,18 @@ export const sleepAgent = {
     "Registra y analiza datos de sueño. Maneja: dormirse, despertarse, consultas y sync Garmin.",
 
   /**
+   * Callback invocado cuando el usuario actualiza sus objetivos en Settings.
+   * Recalcula el scoring umbral y retorna ok si todo está bien.
+   */
+  async onGoalsUpdate(userId: string, goals: import("@prisma/client").UserGoals): Promise<{ ok: boolean }> {
+    // El agente de sueño no necesita procesamiento especial al actualizar objetivos.
+    // Los nuevos umbrales se aplican automáticamente en el próximo cálculo de score
+    // porque calcSleepScore lee los goals frescos de DB.
+    // Si en el futuro el agente cachea algo, recalcularlo acá.
+    return { ok: true };
+  },
+
+  /**
    * Punto de entrada principal — llamado por el orquestrador.
    * Detecta la intención y ejecuta la acción correspondiente.
    */

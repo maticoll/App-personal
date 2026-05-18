@@ -1,20 +1,21 @@
 // ============================================================
 // Lógica de Scoring — lib/scoring.ts
-// Sesión 2 — Dashboard + Scoring
 //
-// Criterios por módulo:
-//   Sleep     /100  →  duración + calidad Garmin
-//   Fitness   /100  →  workout completado + tipo
-//   Nutrition /100  →  comidas registradas + agua
-//   Projects  /100  →  progreso en proyectos + tareas
-//   Ideas     /100  →  idea capturada (binario)
+// Criterios por módulo (basados en UserGoals del usuario):
+//   Sleep     /100  →  duración vs objetivo + calidad Garmin
+//   Fitness   /100  →  workout completado + duración vs objetivo
+//   Nutrition /100  →  macros reales vs objetivos
+//   Projects  /100  →  tareas completadas vs objetivo semanal
+//   Finances  /100  →  gastos vs presupuesto + ahorro vs objetivo
 //
-// Global = promedio de los módulos con datos (excluye nulls)
+// Global = promedio PONDERADO según UserGoals.weight* (excluye nulls)
 // ============================================================
 
 import { db } from "@/lib/db";
 import { average } from "@/lib/utils";
+import { getGoals, normalizeWeights, calcWeightedGlobal } from "@/lib/goals";
 import type { DailyScoreData, ScoreDetails } from "@/lib/types";
+import type { UserGoals } from "@prisma/client";
 
 // -------------------------------------------------------
 // Tipos internos
@@ -26,13 +27,7 @@ export type ModuleScoreResult = {
   missed: string[];
 };
 
-export type FullScoreResult = {
-  sleep: ModuleScoreResult;
-  fitness: ModuleScoreResult;
-  nutrition: ModuleScoreResult;
-  projects: ModuleScoreResult;
-  global: number;
-};
+// FullScoreResult se define más abajo junto a calcFinancesScore (incluye finances)
 
 // -------------------------------------------------------
 // Helpers de fecha
@@ -51,7 +46,7 @@ function endOfDay(date: Date): Date {
 }
 
 // -------------------------------------------------------
-// Score de SUEÑO — Criterios actualizados Sesión 3
+// Score de SUEÑO — Basado en UserGoals del usuario
 //
 // Total: 100 puntos (3 bloques)
 //
@@ -59,43 +54,44 @@ function endOfDay(date: Date): Date {
 //   +30  bedTime + wakeTime registrados
 //   +15  solo bedTime (registro parcial)
 //
-// Bloque Duración  (40 pts):
-//   +40  duración ideal: 7–9h
-//   +20  duración aceptable: 6–7h ó 9–10h
-//   +0   fuera de rango o sin dato
+// Bloque Duración  (40 pts) — proporcional al objetivo:
+//   Usa goals.sleepTargetHours como meta
+//   +40  ≥ 95% del objetivo (ej: meta 8h → ≥ 7.6h)
+//   +28  ≥ 85% del objetivo
+//   +16  ≥ 75% del objetivo
+//   +0   < 75%
 //
 // Bloque Calidad   (30 pts — dos modos):
-//   Sin Garmin: hora de acostarse
-//     +30  bedTime ≤ 23:30
-//     +20  bedTime ≤ 00:30
-//     +10  bedTime ≤ 01:00
-//   Con Garmin: score de calidad
-//     proporcional: (garminScore / 100) * 30
+//   Sin Garmin: hora vs goals.sleepTargetBedTime
+//     +30  ≤ bedTime objetivo
+//     +20  ≤ bedTime objetivo + 30min
+//     +10  ≤ bedTime objetivo + 60min
+//   Con Garmin: proporcional al garminScore
 //
-// Comportamiento null: si no hay ningún registro, retorna null (sin datos)
+// Comportamiento null: sin registro → null (excluido del promedio)
 // -------------------------------------------------------
 
 async function calcSleepScore(
   userId: string,
-  date: Date
+  date: Date,
+  goals?: UserGoals
 ): Promise<ModuleScoreResult> {
   const met: string[] = [];
   const missed: string[] = [];
 
-  const log = await db.sleepLog.findUnique({
-    where: {
-      userId_date: {
-        userId,
-        date: startOfDay(date),
-      },
-    },
-  });
+  const [log, userGoals] = await Promise.all([
+    db.sleepLog.findUnique({
+      where: { userId_date: { userId, date: startOfDay(date) } },
+    }),
+    goals ?? getGoals(userId),
+  ]);
 
   if (!log) {
     return { score: null, met: [], missed: ["No se registró el sueño"] };
   }
 
   let score = 0;
+  const targetHours = userGoals.sleepTargetHours;
 
   // === Bloque Registro (30 pts) ===
   if (log.wakeTime) {
@@ -107,37 +103,30 @@ async function calcSleepScore(
     missed.push("No se registró la hora de despertar");
   }
 
-  // === Bloque Duración (40 pts) ===
-  const minutes = log.durationMinutes;
-  if (minutes !== null) {
-    const hours = minutes / 60;
-    const hoursRounded = Math.round(hours * 10) / 10;
-
-    if (hours >= 7 && hours <= 9) {
-      score += 40;
-      met.push(`Duración ideal: ${hoursRounded}h ✓`);
-    } else if ((hours >= 6 && hours < 7) || (hours > 9 && hours <= 10)) {
-      score += 20;
-      met.push(`Duración aceptable: ${hoursRounded}h`);
-      missed.push(
-        hours < 7
-          ? `Objetivo: al menos 7h (dormiste ${hoursRounded}h)`
-          : `Objetivo: máximo 9h (dormiste ${hoursRounded}h)`
-      );
-    } else {
-      missed.push(
-        hours < 6
-          ? `Duración insuficiente: ${hoursRounded}h (mínimo recomendado: 6h)`
-          : `Duración excesiva: ${hoursRounded}h (máximo recomendado: 10h)`
-      );
-    }
+  // === Bloque Duración (40 pts) — proporcional al objetivo ===
+  let actualHours: number | null = null;
+  if (log.durationMinutes !== null) {
+    actualHours = log.durationMinutes / 60;
   } else if (log.wakeTime) {
-    // Tiene ambos tiempos pero no se calculó la duración (edge case)
-    const ms = log.wakeTime.getTime() - log.bedTime.getTime();
-    const computedHours = ms / (1000 * 60 * 60);
-    if (computedHours >= 7 && computedHours <= 9) {
+    actualHours = (log.wakeTime.getTime() - log.bedTime.getTime()) / (1000 * 60 * 60);
+  }
+
+  if (actualHours !== null) {
+    const hoursRounded = Math.round(actualHours * 10) / 10;
+    const ratio = actualHours / targetHours;
+
+    if (ratio >= 0.95) {
       score += 40;
-      met.push(`Duración ideal: ${Math.round(computedHours * 10) / 10}h ✓`);
+      met.push(`Duración: ${hoursRounded}h (objetivo: ${targetHours}h) ✓`);
+    } else if (ratio >= 0.85) {
+      score += 28;
+      met.push(`Duración: ${hoursRounded}h (objetivo: ${targetHours}h)`);
+      missed.push(`Cerca del objetivo — faltan ${Math.round((targetHours - actualHours) * 60)}min`);
+    } else if (ratio >= 0.75) {
+      score += 16;
+      missed.push(`Duración baja: ${hoursRounded}h (objetivo: ${targetHours}h)`);
+    } else {
+      missed.push(`Duración insuficiente: ${hoursRounded}h (objetivo: ${targetHours}h)`);
     }
   } else {
     missed.push("Sin hora de despertar — no se puede calcular la duración");
@@ -145,7 +134,6 @@ async function calcSleepScore(
 
   // === Bloque Calidad (30 pts) ===
   if (log.garminScore !== null) {
-    // Con Garmin: proporcional al score de calidad
     const garminContrib = Math.round((log.garminScore / 100) * 30);
     score += garminContrib;
     met.push(`Calidad Garmin: ${log.garminScore}/100`);
@@ -153,32 +141,29 @@ async function calcSleepScore(
       missed.push(`Calidad de sueño baja (${log.garminScore}/100)`);
     }
   } else {
-    // Sin Garmin: evaluar hora de acostarse
-    const bedHour =
-      log.bedTime.getHours() + log.bedTime.getMinutes() / 60;
-    // Normalizar: si bedHour < 12 (ej: 00:30, 01:00) → es "pasada medianoche"
-    const normalizedBedHour =
-      bedHour < 12 ? bedHour + 24 : bedHour; // ej: 00:30 → 24.5, 23:30 → 23.5
+    // Sin Garmin: comparar hora de acostarse vs objetivo
+    const [targetH, targetM] = userGoals.sleepTargetBedTime.split(":").map(Number);
+    const targetBedDecimal = targetH < 12 ? targetH + 24 : targetH; // normalizar noche
+    const targetBedNorm = targetBedDecimal + targetM / 60;
 
-    if (normalizedBedHour <= 23.5) {
-      // Antes de las 23:30
+    const bedHour = log.bedTime.getHours() + log.bedTime.getMinutes() / 60;
+    const normalizedBedHour = bedHour < 12 ? bedHour + 24 : bedHour;
+
+    if (normalizedBedHour <= targetBedNorm) {
       score += 30;
-      met.push(`Buen horario de dormir: ${formatBedTime(log.bedTime)}`);
-    } else if (normalizedBedHour <= 24.5) {
-      // Entre 23:30 y 00:30
+      met.push(`Hora de dormir: ${formatBedTime(log.bedTime)} (meta: ${userGoals.sleepTargetBedTime}) ✓`);
+    } else if (normalizedBedHour <= targetBedNorm + 0.5) {
       score += 20;
-      met.push(`Horario aceptable: ${formatBedTime(log.bedTime)}`);
-      missed.push("Intentá dormir antes de las 23:30");
-    } else if (normalizedBedHour <= 25) {
-      // Entre 00:30 y 01:00
+      met.push(`Hora de dormir: ${formatBedTime(log.bedTime)}`);
+      missed.push(`Intentá dormir antes de las ${userGoals.sleepTargetBedTime}`);
+    } else if (normalizedBedHour <= targetBedNorm + 1) {
       score += 10;
-      missed.push(`Hora de dormir tardía: ${formatBedTime(log.bedTime)} (ideal: antes de las 23:30)`);
+      missed.push(`Hora tardía: ${formatBedTime(log.bedTime)} (meta: ${userGoals.sleepTargetBedTime})`);
     } else {
-      // Después de la 1 AM
-      missed.push(`Hora de dormir muy tarde: ${formatBedTime(log.bedTime)} (ideal: antes de las 23:30)`);
+      missed.push(`Hora muy tardía: ${formatBedTime(log.bedTime)} (meta: ${userGoals.sleepTargetBedTime})`);
     }
 
-    missed.push("Conectá Garmin para obtener el score de calidad del sueño");
+    missed.push("Conectá Garmin para el score de calidad del sueño");
   }
 
   return { score: Math.min(score, 100), met, missed };
@@ -204,13 +189,13 @@ function formatBedTime(bedTime: Date): string {
 }
 
 // -------------------------------------------------------
-// Score de FITNESS — Criterios actualizados Sesión 4
+// Score de FITNESS — Basado en UserGoals del usuario
 //
 // Total: 100 puntos (4 bloques)
 //
 // Bloque Base     (40 pts): cualquier actividad registrada
 // Bloque Gym      (20 pts): tipo GYM registrado
-// Bloque Duración (20 pts): duración total ≥ 45 min
+// Bloque Duración (20 pts): vs goals.fitnessTargetGymDuration
 // Bloque Cardio   (20 pts): RUNNING / SWIMMING / CYCLING
 //
 // Comportamiento null vs 0:
@@ -219,59 +204,42 @@ function formatBedTime(bedTime: Date): string {
 // -------------------------------------------------------
 
 function getDayName(date: Date): string {
-  const days = [
-    "SUNDAY",
-    "MONDAY",
-    "TUESDAY",
-    "WEDNESDAY",
-    "THURSDAY",
-    "FRIDAY",
-    "SATURDAY",
-  ];
+  const days = ["SUNDAY","MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY"];
   return days[date.getDay()];
 }
 
 async function calcFitnessScore(
   userId: string,
-  date: Date
+  date: Date,
+  goals?: UserGoals
 ): Promise<ModuleScoreResult> {
   const met: string[] = [];
   const missed: string[] = [];
 
-  const [workouts, settings] = await Promise.all([
+  const [workouts, settings, userGoals] = await Promise.all([
     db.workout.findMany({
       where: { userId, date: { gte: startOfDay(date), lte: endOfDay(date) } },
     }),
     db.userSettings.findUnique({ where: { userId } }),
+    goals ?? getGoals(userId),
   ]);
 
   const dayName = getDayName(date);
   const isGymDay = (settings?.gymDays ?? []).includes(dayName);
+  const targetDuration = userGoals.fitnessTargetGymDuration;
 
   if (workouts.length === 0) {
-    // Si era día de gym configurado → score 0 (objetivo fallido)
-    // Si no → null (módulo sin datos, excluido del promedio)
     if (isGymDay && (settings?.gymDays?.length ?? 0) > 0) {
-      return {
-        score: 0,
-        met: [],
-        missed: ["Hoy era día de gym — sin actividad registrada"],
-      };
+      return { score: 0, met: [], missed: ["Hoy era día de gym — sin actividad registrada"] };
     }
-    return {
-      score: null,
-      met: [],
-      missed: ["Sin actividad física registrada"],
-    };
+    return { score: null, met: [], missed: ["Sin actividad física registrada"] };
   }
 
   let score = 0;
 
   // Base: hizo algo (40 pts)
   score += 40;
-  met.push(
-    `${workouts.length} actividad${workouts.length > 1 ? "es" : ""} registrada${workouts.length > 1 ? "s" : ""}`
-  );
+  met.push(`${workouts.length} actividad${workouts.length > 1 ? "es" : ""} registrada${workouts.length > 1 ? "s" : ""}`);
 
   // Gym (20 pts)
   const hasGym = workouts.some((w) => w.type === "GYM");
@@ -280,28 +248,25 @@ async function calcFitnessScore(
     met.push("Fue al gym ✓");
   } else if (isGymDay) {
     missed.push("Hoy era día de gym (sin registro de gym)");
-  } else {
-    missed.push("Sin gym hoy");
   }
 
-  // Duración total ≥ 45 min (20 pts)
-  const totalMinutes = workouts.reduce(
-    (sum, w) => sum + (w.durationMinutes ?? 0),
-    0
-  );
-  if (totalMinutes >= 45) {
+  // Duración vs objetivo (20 pts)
+  const totalMinutes = workouts.reduce((sum, w) => sum + (w.durationMinutes ?? 0), 0);
+  if (totalMinutes >= targetDuration) {
     score += 20;
-    met.push(`Duración total: ${totalMinutes} min ✓`);
+    met.push(`Duración: ${totalMinutes}min (objetivo: ${targetDuration}min) ✓`);
+  } else if (totalMinutes >= targetDuration * 0.75) {
+    score += 10;
+    met.push(`Duración: ${totalMinutes}min (objetivo: ${targetDuration}min)`);
+    missed.push(`Faltan ${targetDuration - totalMinutes}min para el objetivo`);
   } else if (totalMinutes > 0) {
-    missed.push(`Duración: ${totalMinutes} min (objetivo: ≥ 45 min)`);
+    missed.push(`Duración baja: ${totalMinutes}min (objetivo: ${targetDuration}min)`);
   } else {
     missed.push("Sin duración registrada");
   }
 
   // Actividad cardiovascular (20 pts)
-  const hasCardio = workouts.some((w) =>
-    ["RUNNING", "SWIMMING", "CYCLING"].includes(w.type)
-  );
+  const hasCardio = workouts.some((w) => ["RUNNING", "SWIMMING", "CYCLING"].includes(w.type));
   if (hasCardio) {
     score += 20;
     met.push("Actividad cardiovascular ✓");
@@ -312,10 +277,6 @@ async function calcFitnessScore(
   return { score: Math.min(score, 100), met, missed };
 }
 
-/**
- * Función exportada para que el agente de fitness pueda calcular el score
- * sin cargar el módulo de scoring completo.
- */
 export async function calcFitnessScoreForDate(
   userId: string,
   date: Date
@@ -324,43 +285,42 @@ export async function calcFitnessScoreForDate(
 }
 
 // -------------------------------------------------------
-// Score de NUTRICIÓN
-// Criterios:
-//   +20  Registró desayuno
-//   +30  Registró almuerzo
-//   +30  Registró cena
-//   +20  Cumplió meta de agua (settings.dailyWaterGoalThermos)
+// Score de NUTRICIÓN — Basado en macros reales vs UserGoals
+//
+// Total: 100 puntos (3 bloques)
+//
+// Bloque Registro (20 pts):
+//   +20  Al menos 2 comidas principales registradas
+//   +10  Al menos 1 comida registrada
+//
+// Bloque Macros (60 pts) — proporcional al objetivo:
+//   Proteína (25 pts): ratio real/objetivo
+//   Calorías (20 pts): penaliza exceso Y déficit
+//   Grasa    (15 pts): ratio real/objetivo
+//
+//   Si no hay macros calculadas (sin IA) → fallback a scoring
+//   por tipos de comida registrados (desayuno/almuerzo/cena)
+//
+// Bloque Agua (20 pts): termos vs settings.dailyWaterGoalThermos
 // -------------------------------------------------------
 
 async function calcNutritionScore(
   userId: string,
-  date: Date
+  date: Date,
+  goals?: UserGoals
 ): Promise<ModuleScoreResult> {
   const met: string[] = [];
   const missed: string[] = [];
 
-  const [meals, waterLogs, settings] = await Promise.all([
-    db.meal.findMany({
-      where: {
-        userId,
-        date: startOfDay(date),
-      },
-    }),
-    db.waterLog.findMany({
-      where: {
-        userId,
-        date: startOfDay(date),
-      },
-    }),
+  const [meals, waterLogs, settings, userGoals] = await Promise.all([
+    db.meal.findMany({ where: { userId, date: startOfDay(date) } }),
+    db.waterLog.findMany({ where: { userId, date: startOfDay(date) } }),
     db.userSettings.findUnique({ where: { userId } }),
+    goals ?? getGoals(userId),
   ]);
 
   if (meals.length === 0 && waterLogs.length === 0) {
-    return {
-      score: null,
-      met: [],
-      missed: ["No se registraron comidas ni agua"],
-    };
+    return { score: null, met: [], missed: ["No se registraron comidas ni agua"] };
   }
 
   let score = 0;
@@ -368,44 +328,88 @@ async function calcNutritionScore(
   const waterGoal = settings?.dailyWaterGoalThermos ?? 1.0;
   const totalWater = waterLogs.reduce((acc, w) => acc + w.thermos, 0);
 
-  if (mealTypes.includes("BREAKFAST")) {
+  // === Bloque Registro (20 pts) ===
+  const mainMeals = ["BREAKFAST", "LUNCH", "DINNER"].filter((t) => mealTypes.includes(t as never));
+  if (mainMeals.length >= 2) {
     score += 20;
-    met.push("Desayuno registrado");
+    met.push(`${mainMeals.length} comidas principales registradas`);
+  } else if (mainMeals.length === 1) {
+    score += 10;
+    met.push("1 comida principal registrada");
+    missed.push("Registrá al menos 2 comidas principales para el puntaje completo");
   } else {
-    missed.push("Sin desayuno registrado");
+    missed.push("Solo snacks registrados — sin comidas principales");
   }
 
-  if (mealTypes.includes("LUNCH")) {
-    score += 30;
-    met.push("Almuerzo registrado");
+  // === Bloque Macros (60 pts) ===
+  const totalProtein  = meals.reduce((s, m) => s + (m.proteinG  ?? 0), 0);
+  const totalCalories = meals.reduce((s, m) => s + (m.calories  ?? 0), 0);
+  const totalFat      = meals.reduce((s, m) => s + (m.fatG      ?? 0), 0);
+  const hasMacros = totalProtein > 0 || totalCalories > 0;
+
+  if (hasMacros) {
+    // Proteína (25 pts) — proporcional, cap en 100%
+    const proteinRatio = Math.min(totalProtein / userGoals.nutritionTargetProtein, 1);
+    const proteinPts = Math.round(proteinRatio * 25);
+    score += proteinPts;
+    if (proteinRatio >= 0.9) {
+      met.push(`Proteína: ${Math.round(totalProtein)}g / ${userGoals.nutritionTargetProtein}g ✓`);
+    } else {
+      missed.push(`Proteína baja: ${Math.round(totalProtein)}g (objetivo: ${userGoals.nutritionTargetProtein}g)`);
+    }
+
+    // Calorías (20 pts) — penaliza déficit y exceso
+    const calRatio = totalCalories / userGoals.nutritionTargetCalories;
+    let calPts = 0;
+    if (calRatio >= 0.9 && calRatio <= 1.1) {
+      calPts = 20;
+      met.push(`Calorías: ${Math.round(totalCalories)}kcal (objetivo: ${userGoals.nutritionTargetCalories}kcal) ✓`);
+    } else if (calRatio >= 0.8 && calRatio <= 1.2) {
+      calPts = 12;
+      met.push(`Calorías: ${Math.round(totalCalories)}kcal (objetivo: ${userGoals.nutritionTargetCalories}kcal)`);
+    } else if (calRatio > 1.2) {
+      calPts = 5;
+      missed.push(`Exceso calórico: ${Math.round(totalCalories)}kcal (objetivo: ${userGoals.nutritionTargetCalories}kcal)`);
+    } else {
+      missed.push(`Déficit calórico: ${Math.round(totalCalories)}kcal (objetivo: ${userGoals.nutritionTargetCalories}kcal)`);
+    }
+    score += calPts;
+
+    // Grasa (15 pts) — proporcional, cap en 100%
+    if (totalFat > 0) {
+      const fatRatio = Math.min(totalFat / userGoals.nutritionTargetFat, 1.2);
+      const fatPts = fatRatio <= 1.1 ? Math.round(Math.min(fatRatio, 1) * 15) : 8;
+      score += fatPts;
+      if (fatRatio >= 0.85 && fatRatio <= 1.1) {
+        met.push(`Grasas: ${Math.round(totalFat)}g (objetivo: ${userGoals.nutritionTargetFat}g) ✓`);
+      } else {
+        missed.push(`Grasas: ${Math.round(totalFat)}g (objetivo: ${userGoals.nutritionTargetFat}g)`);
+      }
+    } else {
+      missed.push("Sin datos de grasas — registrá comidas con IA para calcular macros");
+    }
   } else {
-    missed.push("Sin almuerzo registrado");
+    // Fallback sin macros: scoring por tipos (desayuno/almuerzo/cena)
+    if (mealTypes.includes("BREAKFAST")) { score += 15; met.push("Desayuno registrado"); }
+    else missed.push("Sin desayuno");
+    if (mealTypes.includes("LUNCH"))     { score += 25; met.push("Almuerzo registrado"); }
+    else missed.push("Sin almuerzo");
+    if (mealTypes.includes("DINNER"))    { score += 20; met.push("Cena registrada"); }
+    else missed.push("Sin cena");
+    missed.push("Activá el cálculo de macros con IA para un score más preciso");
   }
 
-  if (mealTypes.includes("DINNER")) {
-    score += 30;
-    met.push("Cena registrada");
-  } else {
-    missed.push("Sin cena registrada");
-  }
-
+  // === Bloque Agua (20 pts) ===
   if (totalWater >= waterGoal) {
     score += 20;
-    met.push(
-      `Hidratación: ${totalWater.toFixed(1)}/${waterGoal.toFixed(1)} termos ✓`
-    );
+    met.push(`Hidratación: ${totalWater.toFixed(1)}/${waterGoal.toFixed(1)} termos ✓`);
   } else {
-    missed.push(
-      `Hidratación: ${totalWater.toFixed(1)}/${waterGoal.toFixed(1)} termos`
-    );
+    missed.push(`Hidratación: ${totalWater.toFixed(1)}/${waterGoal.toFixed(1)} termos`);
   }
 
   return { score: Math.min(score, 100), met, missed };
 }
 
-/**
- * Función exportada para que el agente de nutrición pueda calcular el score.
- */
 export async function calcNutritionScoreForDate(
   userId: string,
   date: Date
@@ -542,6 +546,114 @@ export async function calcProjectsScoreForDate(
 }
 
 // -------------------------------------------------------
+// Score de FINANZAS — Basado en UserGoals del usuario
+//
+// Total: 100 puntos (2 bloques)
+//
+// Bloque Presupuesto (60 pts):
+//   Ratio gasto_mes / presupuesto_mes
+//   +60  ≤ 90% del presupuesto
+//   +40  ≤ 100% del presupuesto
+//   +20  ≤ 110% del presupuesto
+//   +0   > 110%
+//
+// Bloque Ahorro (40 pts):
+//   Ratio ahorro_proyectado / objetivo_ahorro
+//   +40  ≥ 100% del objetivo
+//   +25  ≥ 80% del objetivo
+//   +10  ≥ 60% del objetivo
+//   +0   < 60%
+//
+// Null: sin API de finanzas configurada o sin datos del mes
+// -------------------------------------------------------
+
+async function calcFinancesScore(
+  userId: string,
+  date: Date,
+  goals?: UserGoals
+): Promise<ModuleScoreResult> {
+  const met: string[] = [];
+  const missed: string[] = [];
+
+  const userGoals = goals ?? await getGoals(userId);
+
+  // Obtener datos de finanzas vía lib/finances
+  try {
+    const { getMonthlyReport } = await import("@/lib/finances");
+    const report = await getMonthlyReport(userId);
+
+    if (!report) {
+      return { score: null, met: [], missed: ["Sin datos de finanzas este mes"] };
+    }
+
+    let score = 0;
+    const { totalExpenses, totalIncome } = report;
+    const budget  = userGoals.financesMonthlyBudget;
+    const savings = userGoals.financesMonthlyTarget;
+
+    // Bloque Presupuesto (60 pts)
+    const spendRatio = totalExpenses / budget;
+    if (spendRatio <= 0.9) {
+      score += 60;
+      met.push(`Gastos: $${Math.round(totalExpenses)} / $${budget} ✓ (${Math.round(spendRatio * 100)}%)`);
+    } else if (spendRatio <= 1.0) {
+      score += 40;
+      met.push(`Gastos: $${Math.round(totalExpenses)} / $${budget} (${Math.round(spendRatio * 100)}%)`);
+      missed.push("Cerca del límite de presupuesto");
+    } else if (spendRatio <= 1.1) {
+      score += 20;
+      missed.push(`Presupuesto excedido: $${Math.round(totalExpenses)} / $${budget} (${Math.round(spendRatio * 100)}%)`);
+    } else {
+      missed.push(`Presupuesto muy excedido: $${Math.round(totalExpenses)} / $${budget} (${Math.round(spendRatio * 100)}%)`);
+    }
+
+    // Bloque Ahorro (40 pts) — proyección al fin de mes
+    const today = date.getDate();
+    const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    const projectedSavings = (totalIncome - totalExpenses) * (daysInMonth / today);
+    const savingsRatio = projectedSavings / savings;
+
+    if (savingsRatio >= 1.0) {
+      score += 40;
+      met.push(`Ahorro proyectado: $${Math.round(projectedSavings)} (objetivo: $${savings}) ✓`);
+    } else if (savingsRatio >= 0.8) {
+      score += 25;
+      met.push(`Ahorro proyectado: $${Math.round(projectedSavings)} (objetivo: $${savings})`);
+      missed.push("Cerca del objetivo de ahorro");
+    } else if (savingsRatio >= 0.6) {
+      score += 10;
+      missed.push(`Ahorro bajo: $${Math.round(projectedSavings)} proyectado (objetivo: $${savings})`);
+    } else {
+      missed.push(`Ahorro muy por debajo del objetivo (proyectado: $${Math.round(projectedSavings)} / $${savings})`);
+    }
+
+    return { score: Math.min(score, 100), met, missed };
+  } catch {
+    return { score: null, met: [], missed: ["Sin conexión con la app de finanzas"] };
+  }
+}
+
+export async function calcFinancesScoreForDate(
+  userId: string,
+  date: Date
+): Promise<ModuleScoreResult> {
+  return calcFinancesScore(userId, date);
+}
+
+// -------------------------------------------------------
+// Tipo extendido de resultado con finanzas
+// -------------------------------------------------------
+
+export type FullScoreResult = {
+  sleep:     ModuleScoreResult;
+  fitness:   ModuleScoreResult;
+  nutrition: ModuleScoreResult;
+  projects:  ModuleScoreResult;
+  finances:  ModuleScoreResult;
+  global:    number;
+};
+
+// -------------------------------------------------------
 // Función principal: calcular score completo de un día
 // -------------------------------------------------------
 
@@ -549,22 +661,25 @@ export async function calculateFullScore(
   userId: string,
   date: Date
 ): Promise<FullScoreResult> {
-  // Global = promedio de Sueño, Fitness, Nutrición y Proyectos (Ideas excluida)
-  const [sleep, fitness, nutrition, projects] = await Promise.all([
-    calcSleepScore(userId, date),
-    calcFitnessScore(userId, date),
-    calcNutritionScore(userId, date),
+  // Cargar objetivos UNA sola vez y pasarlos a todos los módulos
+  const goals = await getGoals(userId);
+  const weights = normalizeWeights(goals);
+
+  const [sleep, fitness, nutrition, projects, finances] = await Promise.all([
+    calcSleepScore(userId, date, goals),
+    calcFitnessScore(userId, date, goals),
+    calcNutritionScore(userId, date, goals),
     calcProjectsScore(userId, date),
+    calcFinancesScore(userId, date, goals),
   ]);
 
-  const global = average([
-    sleep.score,
-    fitness.score,
-    nutrition.score,
-    projects.score,
-  ]);
+  // Score global = promedio ponderado (excluye módulos null)
+  const global = calcWeightedGlobal(
+    { sleep: sleep.score, fitness: fitness.score, nutrition: nutrition.score, finances: finances.score, projects: projects.score },
+    weights
+  );
 
-  return { sleep, fitness, nutrition, projects, global };
+  return { sleep, fitness, nutrition, projects, finances, global };
 }
 
 // -------------------------------------------------------
@@ -577,35 +692,33 @@ export async function saveScore(
   result: FullScoreResult
 ): Promise<void> {
   const details: ScoreDetails = {
-    sleep: { met: result.sleep.met, missed: result.sleep.missed },
-    fitness: { met: result.fitness.met, missed: result.fitness.missed },
+    sleep:     { met: result.sleep.met,     missed: result.sleep.missed },
+    fitness:   { met: result.fitness.met,   missed: result.fitness.missed },
     nutrition: { met: result.nutrition.met, missed: result.nutrition.missed },
-    projects: { met: result.projects.met, missed: result.projects.missed },
+    projects:  { met: result.projects.met,  missed: result.projects.missed },
+    finances:  { met: result.finances.met,  missed: result.finances.missed },
   };
 
   await db.dailyScore.upsert({
-    where: {
-      userId_date: {
-        userId,
-        date: startOfDay(date),
-      },
-    },
+    where: { userId_date: { userId, date: startOfDay(date) } },
     update: {
-      sleepScore: result.sleep.score,
-      fitnessScore: result.fitness.score,
+      sleepScore:     result.sleep.score,
+      fitnessScore:   result.fitness.score,
       nutritionScore: result.nutrition.score,
-      projectsScore: result.projects.score,
-      globalScore: result.global,
+      projectsScore:  result.projects.score,
+      financesScore:  result.finances.score,
+      globalScore:    result.global,
       details,
     },
     create: {
       userId,
       date: startOfDay(date),
-      sleepScore: result.sleep.score,
-      fitnessScore: result.fitness.score,
+      sleepScore:     result.sleep.score,
+      fitnessScore:   result.fitness.score,
       nutritionScore: result.nutrition.score,
-      projectsScore: result.projects.score,
-      globalScore: result.global,
+      projectsScore:  result.projects.score,
+      financesScore:  result.finances.score,
+      globalScore:    result.global,
       details,
     },
   });

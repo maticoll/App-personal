@@ -173,6 +173,11 @@ export { getNutritionSummaryText, getWaterReminderText };
 export const nutritionAgent = {
   name: "nutrition",
   description: "Registra y analiza nutricion e hidratacion",
+
+  async onGoalsUpdate(_userId: string, _goals: import("@prisma/client").UserGoals): Promise<{ ok: boolean }> {
+    return { ok: true };
+  },
+
   async process(input: AgentInput): Promise<AgentOutput> {
     if (!input.userId || !input.message) {
       return { success: false, message: "userId y message son requeridos" };

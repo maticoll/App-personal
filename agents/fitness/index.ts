@@ -99,6 +99,10 @@ export const fitnessAgent = {
   name: "fitness",
   description: "Registra y analiza datos de fitness",
 
+  async onGoalsUpdate(_userId: string, _goals: import("@prisma/client").UserGoals): Promise<{ ok: boolean }> {
+    return { ok: true };
+  },
+
   async process(input: AgentInput): Promise<AgentOutput> {
     const { userId, message: text } = input;
     const intent = await detectIntentAI(

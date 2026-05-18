@@ -160,6 +160,10 @@ export const financesAgent = {
   name: "finances",
   description: "Interfaz con la app de finanzas externa",
 
+  async onGoalsUpdate(_userId: string, _goals: import("@prisma/client").UserGoals): Promise<{ ok: boolean }> {
+    return { ok: true };
+  },
+
   async process(input: AgentInput): Promise<AgentOutput> {
     const { userId, message } = input;
 

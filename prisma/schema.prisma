@@ -57,6 +57,12 @@ model User {
   // Configuración
   settings     UserSettings?
 
+  // Objetivos por módulo
+  goals        UserGoals?
+
+  // Memoria de conversación WhatsApp
+  conversationMemory ConversationMemory?
+
   @@map("users")
 }
 
@@ -409,9 +415,10 @@ model DailyScore {
   fitnessScore   Int?
   nutritionScore Int?
   projectsScore  Int?
+  financesScore  Int?
   ideasScore     Int?
 
-  // Score global
+  // Score global (promedio ponderado según UserGoals.weight*)
   globalScore Int?
 
   // Detalle de qué se cumplió y qué no
@@ -425,6 +432,82 @@ model DailyScore {
 
   @@unique([userId, date])
   @@map("daily_scores")
+}
+
+// ============================================================
+// OBJETIVOS DEL USUARIO
+// Metas por módulo + pesos del score global
+// ============================================================
+
+model UserGoals {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  // === SUEÑO ===
+  sleepTargetHours    Float  @default(8.0)     // Horas objetivo por noche
+  sleepTargetBedTime  String @default("23:00") // Hora meta de acostarse "HH:MM"
+  sleepTargetWakeTime String @default("07:00") // Hora meta de despertar "HH:MM"
+
+  // === FITNESS ===
+  fitnessCurrentWeight      Float? // Peso actual (kg)
+  fitnessTargetWeight       Float? // Peso objetivo (kg)
+  fitnessTargetBodyFat      Float? // % grasa objetivo
+  fitnessTargetGymDuration  Int    @default(60)  // Duración mínima por sesión (min)
+  fitnessTargetCardioWeekly Int    @default(120) // Cardio semanal objetivo (min)
+
+  // === NUTRICIÓN ===
+  nutritionTargetCalories Int @default(2200)
+  nutritionTargetProtein  Int @default(160) // gramos
+  nutritionTargetCarbs    Int @default(220) // gramos
+  nutritionTargetFat      Int @default(70)  // gramos
+
+  // === FINANZAS ===
+  financesMonthlyIncome  Float @default(3000) // Ingreso mensual esperado
+  financesMonthlyTarget  Float @default(600)  // Ahorro mensual objetivo
+  financesMonthlyBudget  Float @default(2400) // Límite de gasto mensual
+
+  // === PROYECTOS ===
+  projectsTargetTasksPerWeek Int @default(10)
+
+  // === PESOS DEL SCORE GLOBAL (1–5) ===
+  // El sistema normaliza automáticamente a porcentajes
+  weightSleep     Int @default(5)
+  weightFitness   Int @default(5)
+  weightNutrition Int @default(3)
+  weightFinances  Int @default(2)
+  weightProjects  Int @default(2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_goals")
+}
+
+// ============================================================
+// MEMORIA DE CONVERSACIÓN (WhatsApp)
+// Historial deslizante + resumen comprimido por usuario
+// ============================================================
+
+model ConversationMemory {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  // Últimos N mensajes: [{ role: "user"|"assistant", content: string, timestamp: string }]
+  recentMessages Json @default("[]")
+
+  // Resumen comprimido de la conversación anterior (estilo Core)
+  summary String?
+
+  // Contador de turnos desde el último resumen (trigger cada 12 turnos)
+  turnCount Int @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("conversation_memory")
 }
 
 // ============================================================

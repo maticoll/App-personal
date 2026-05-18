@@ -36,6 +36,8 @@ import {
   AlertTriangle,
   Loader2,
   ExternalLink,
+  Target,
+  Sliders,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -57,6 +59,30 @@ type UserSettings = {
   financesApiKey?: string | null;
 };
 
+type UserGoals = {
+  sleepTargetHours: number;
+  sleepTargetBedTime: string;
+  sleepTargetWakeTime: string;
+  fitnessCurrentWeight: number | null;
+  fitnessTargetWeight: number | null;
+  fitnessTargetBodyFat: number | null;
+  fitnessTargetGymDuration: number;
+  fitnessTargetCardioWeekly: number;
+  nutritionTargetCalories: number;
+  nutritionTargetProtein: number;
+  nutritionTargetCarbs: number;
+  nutritionTargetFat: number;
+  financesMonthlyIncome: number;
+  financesMonthlyTarget: number;
+  financesMonthlyBudget: number;
+  projectsTargetTasksPerWeek: number;
+  weightSleep: number;
+  weightFitness: number;
+  weightNutrition: number;
+  weightFinances: number;
+  weightProjects: number;
+};
+
 type SessionUser = {
   name?: string | null;
   email?: string | null;
@@ -72,6 +98,7 @@ type Props = {
   user: SessionUser;
   settings: UserSettings;
   calendarStatus: CalendarStatus;
+  goals: UserGoals;
 };
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -195,7 +222,7 @@ function SaveButton({
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
-export function SettingsClient({ user, settings: initial, calendarStatus }: Props) {
+export function SettingsClient({ user, settings: initial, calendarStatus, goals: initialGoals }: Props) {
   const { theme, setTheme } = useTheme();
   const [isPending, startTransition] = useTransition();
 
@@ -216,6 +243,15 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
 
   const [financesApiKey, setFinancesApiKey] = useState(initial.financesApiKey ?? "");
 
+  // ─ Estado de Objetivos ─
+  const [goals, setGoals] = useState<UserGoals>(initialGoals);
+  const [goalsSaved, setGoalsSaved] = useState(false);
+  const [goalsPending, startGoalsTransition] = useTransition();
+
+  // ─ Estado de Pesos del score ─
+  const [weightsSaved, setWeightsSaved] = useState(false);
+  const [weightsPending, startWeightsTransition] = useTransition();
+
   // ─ Estados de guardado ─
   const [habitsSaved, setHabitsSaved] = useState(false);
   const [notifSaved, setNotifSaved] = useState(false);
@@ -228,6 +264,51 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
   const [dangerPending, startDangerTransition] = useTransition();
   const [dangerDone, setDangerDone] = useState(false);
   const [dangerError, setDangerError] = useState("");
+
+  // ─ Helper para normalizar pesos a porcentajes ─
+  function calcPercents(w: Pick<UserGoals, "weightSleep"|"weightFitness"|"weightNutrition"|"weightFinances"|"weightProjects">) {
+    const total = w.weightSleep + w.weightFitness + w.weightNutrition + w.weightFinances + w.weightProjects;
+    if (total === 0) return { sleep: 20, fitness: 20, nutrition: 20, finances: 20, projects: 20 };
+    return {
+      sleep:     Math.round((w.weightSleep     / total) * 100),
+      fitness:   Math.round((w.weightFitness   / total) * 100),
+      nutrition: Math.round((w.weightNutrition / total) * 100),
+      finances:  Math.round((w.weightFinances  / total) * 100),
+      projects:  Math.round((w.weightProjects  / total) * 100),
+    };
+  }
+
+  // ─ Guardar objetivos ─
+  async function saveGoals() {
+    startGoalsTransition(async () => {
+      await fetch("/api/goals", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(goals),
+      });
+      setGoalsSaved(true);
+      setTimeout(() => setGoalsSaved(false), 3000);
+    });
+  }
+
+  // ─ Guardar pesos ─
+  async function saveWeights() {
+    startWeightsTransition(async () => {
+      await fetch("/api/goals", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          weightSleep: goals.weightSleep,
+          weightFitness: goals.weightFitness,
+          weightNutrition: goals.weightNutrition,
+          weightFinances: goals.weightFinances,
+          weightProjects: goals.weightProjects,
+        }),
+      });
+      setWeightsSaved(true);
+      setTimeout(() => setWeightsSaved(false), 3000);
+    });
+  }
 
   // ─── Helper para guardar settings ─────────────────────────────────────────
 
@@ -656,6 +737,172 @@ export function SettingsClient({ user, settings: initial, calendarStatus }: Prop
               Reconectar con Google
             </button>
           )}
+        </div>
+      </SectionCard>
+
+      {/* ── Mis Objetivos ── */}
+      <SectionCard title="Mis objetivos" icon={Target} defaultOpen={false}>
+        <div className="space-y-1 pt-2">
+          {/* Sueño */}
+          <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-3 pb-1">😴 Sueño</p>
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Horas objetivo">
+              <input type="number" step="0.5" min="4" max="12"
+                value={goals.sleepTargetHours}
+                onChange={(e) => setGoals({ ...goals, sleepTargetHours: parseFloat(e.target.value) })}
+                className="input w-full" />
+            </Field>
+            <Field label="Hora de dormir">
+              <input type="time" value={goals.sleepTargetBedTime}
+                onChange={(e) => setGoals({ ...goals, sleepTargetBedTime: e.target.value })}
+                className="input w-full" />
+            </Field>
+            <Field label="Hora de despertar">
+              <input type="time" value={goals.sleepTargetWakeTime}
+                onChange={(e) => setGoals({ ...goals, sleepTargetWakeTime: e.target.value })}
+                className="input w-full" />
+            </Field>
+          </div>
+
+          {/* Fitness */}
+          <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-4 pb-1">💪 Fitness</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Peso actual (kg)">
+              <input type="number" step="0.1" min="30" max="200"
+                value={goals.fitnessCurrentWeight ?? ""}
+                onChange={(e) => setGoals({ ...goals, fitnessCurrentWeight: e.target.value ? parseFloat(e.target.value) : null })}
+                className="input w-full" placeholder="—" />
+            </Field>
+            <Field label="Peso objetivo (kg)">
+              <input type="number" step="0.1" min="30" max="200"
+                value={goals.fitnessTargetWeight ?? ""}
+                onChange={(e) => setGoals({ ...goals, fitnessTargetWeight: e.target.value ? parseFloat(e.target.value) : null })}
+                className="input w-full" placeholder="—" />
+            </Field>
+            <Field label="Duración min. por sesión (min)">
+              <input type="number" step="5" min="10" max="180"
+                value={goals.fitnessTargetGymDuration}
+                onChange={(e) => setGoals({ ...goals, fitnessTargetGymDuration: parseInt(e.target.value) })}
+                className="input w-full" />
+            </Field>
+            <Field label="Cardio semanal (min)">
+              <input type="number" step="10" min="0" max="600"
+                value={goals.fitnessTargetCardioWeekly}
+                onChange={(e) => setGoals({ ...goals, fitnessTargetCardioWeekly: parseInt(e.target.value) })}
+                className="input w-full" />
+            </Field>
+          </div>
+
+          {/* Nutrición */}
+          <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-4 pb-1">🥗 Nutrición</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Calorías diarias (kcal)">
+              <input type="number" step="50" min="800" max="6000"
+                value={goals.nutritionTargetCalories}
+                onChange={(e) => setGoals({ ...goals, nutritionTargetCalories: parseInt(e.target.value) })}
+                className="input w-full" />
+            </Field>
+            <Field label="Proteína (g)">
+              <input type="number" step="5" min="0" max="500"
+                value={goals.nutritionTargetProtein}
+                onChange={(e) => setGoals({ ...goals, nutritionTargetProtein: parseInt(e.target.value) })}
+                className="input w-full" />
+            </Field>
+            <Field label="Carbohidratos (g)">
+              <input type="number" step="5" min="0" max="800"
+                value={goals.nutritionTargetCarbs}
+                onChange={(e) => setGoals({ ...goals, nutritionTargetCarbs: parseInt(e.target.value) })}
+                className="input w-full" />
+            </Field>
+            <Field label="Grasas (g)">
+              <input type="number" step="5" min="0" max="300"
+                value={goals.nutritionTargetFat}
+                onChange={(e) => setGoals({ ...goals, nutritionTargetFat: parseInt(e.target.value) })}
+                className="input w-full" />
+            </Field>
+          </div>
+
+          {/* Finanzas */}
+          <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-4 pb-1">💰 Finanzas</p>
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Ingreso mensual ($)">
+              <input type="number" step="100" min="0"
+                value={goals.financesMonthlyIncome}
+                onChange={(e) => setGoals({ ...goals, financesMonthlyIncome: parseFloat(e.target.value) })}
+                className="input w-full" />
+            </Field>
+            <Field label="Ahorro objetivo ($)">
+              <input type="number" step="50" min="0"
+                value={goals.financesMonthlyTarget}
+                onChange={(e) => setGoals({ ...goals, financesMonthlyTarget: parseFloat(e.target.value) })}
+                className="input w-full" />
+            </Field>
+            <Field label="Límite de gasto ($)">
+              <input type="number" step="100" min="0"
+                value={goals.financesMonthlyBudget}
+                onChange={(e) => setGoals({ ...goals, financesMonthlyBudget: parseFloat(e.target.value) })}
+                className="input w-full" />
+            </Field>
+          </div>
+
+          {/* Proyectos */}
+          <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-4 pb-1">📋 Proyectos</p>
+          <Field label="Tareas completadas por semana">
+            <input type="number" step="1" min="1" max="100"
+              value={goals.projectsTargetTasksPerWeek}
+              onChange={(e) => setGoals({ ...goals, projectsTargetTasksPerWeek: parseInt(e.target.value) })}
+              className="input w-full" />
+          </Field>
+
+          <SaveButton onClick={saveGoals} pending={goalsPending} saved={goalsSaved} />
+          <p className="text-xs text-outline text-center mt-2">
+            Al guardar, todos los agentes reciben los nuevos objetivos y te avisamos por WhatsApp.
+          </p>
+        </div>
+      </SectionCard>
+
+      {/* ── Score Global — Pesos ── */}
+      <SectionCard title="Score global" icon={Sliders} defaultOpen={false}>
+        <div className="pt-2 space-y-4">
+          <p className="text-sm text-on-surface-variant">
+            Ajustá la importancia de cada módulo en tu score diario (1 = poco, 5 = máximo).
+          </p>
+
+          {(() => {
+            const pcts = calcPercents(goals);
+            const modules = [
+              { key: "weightSleep" as const,     label: "😴 Sueño",     pct: pcts.sleep },
+              { key: "weightFitness" as const,   label: "💪 Fitness",   pct: pcts.fitness },
+              { key: "weightNutrition" as const, label: "🥗 Nutrición", pct: pcts.nutrition },
+              { key: "weightFinances" as const,  label: "💰 Finanzas",  pct: pcts.finances },
+              { key: "weightProjects" as const,  label: "📋 Proyectos", pct: pcts.projects },
+            ];
+            return (
+              <div className="space-y-3">
+                {modules.map(({ key, label, pct }) => (
+                  <div key={key}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm text-on-surface">{label}</span>
+                      <span className="text-xs font-mono text-accent">{pct}%</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-outline w-3">1</span>
+                      <input
+                        type="range" min="1" max="5" step="1"
+                        value={goals[key]}
+                        onChange={(e) => setGoals({ ...goals, [key]: parseInt(e.target.value) })}
+                        className="flex-1 accent-[var(--accent)]"
+                      />
+                      <span className="text-xs text-outline w-3">5</span>
+                      <span className="text-xs font-semibold text-on-surface w-4 text-right">{goals[key]}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          <SaveButton onClick={saveWeights} pending={weightsPending} saved={weightsSaved} />
         </div>
       </SectionCard>
 

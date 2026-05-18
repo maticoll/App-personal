@@ -8,6 +8,7 @@ import { Settings } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { getCalendarStatus } from "@/lib/calendar";
+import { getGoals } from "@/lib/goals";
 import { SettingsClient } from "@/components/settings/SettingsClient";
 
 // ─── Valores por defecto si no existe el registro en DB ──────────────────────
@@ -36,8 +37,8 @@ export default async function SettingsPage() {
     return null; // Middleware ya protege esta ruta
   }
 
-  // Cargar settings y estado de Calendar en paralelo
-  const [settings, calendarStatus] = await Promise.all([
+  // Cargar settings, Calendar y goals en paralelo
+  const [settings, calendarStatus, goals] = await Promise.all([
     db.userSettings.findUnique({
       where: { userId: session.user.id },
     }),
@@ -45,6 +46,7 @@ export default async function SettingsPage() {
       connected: false,
       hasCalendarScope: false,
     })),
+    getGoals(session.user.id),
   ]);
 
   const settingsData = settings
@@ -88,6 +90,7 @@ export default async function SettingsPage() {
         }}
         settings={settingsData}
         calendarStatus={calendarStatus}
+        goals={goals}
       />
     </div>
   );
