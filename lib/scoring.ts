@@ -587,7 +587,7 @@ async function calcFinancesScore(
     }
 
     let score = 0;
-    const { totalExpenses, totalIncome } = report;
+    const { totalExpenses, totalIncome } = report.monthly;
     const budget  = userGoals.financesMonthlyBudget;
     const savings = userGoals.financesMonthlyTarget;
 
