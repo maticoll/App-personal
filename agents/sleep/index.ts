@@ -26,6 +26,7 @@ import {
   logBedTime,
   logWakeTime,
   getTodaySleep,
+  getSleepYesterday,
   getPendingSleepLog,
   getWeeklyStats,
   upsertSleepLog,
@@ -36,6 +37,8 @@ import {
 } from "@/lib/garmin";
 import { formatDuration, formatTime } from "@/lib/utils";
 import { detectIntentAI, detectPeriod } from "@/lib/nlp";
+import { getGoals } from "@/lib/goals";
+import { buildSleepPrompt } from "@/agents/prompts";
 
 // --- Agente principal ---
 
@@ -61,6 +64,10 @@ export const sleepAgent = {
    * Detecta la intención y ejecuta la acción correspondiente.
    */
   async process(input: AgentInput): Promise<AgentOutput> {
+    // Cargar goals del usuario para el prompt especialista (falla silenciosamente)
+    const goals = await getGoals(input.userId).catch(() => null);
+    const systemPrompt = goals ? buildSleepPrompt(goals) : undefined;
+
     const intentKey = await detectIntentAI(
       "Eres el agente de registro de sueno de una app personal.",
       {
@@ -71,7 +78,8 @@ export const sleepAgent = {
         flexible: "El usuario avisa que hoy sale tarde, no hay hora fija, o que ya te avisa despues",
         unknown: "Otro mensaje no relacionado al sueno",
       },
-      input.message
+      input.message,
+      systemPrompt
     );
 
     if (intentKey === "bed" || intentKey === "flexible") {
@@ -384,35 +392,4 @@ function extractTime(msg: string): Date | undefined {
   return undefined;
 }
 
-// --- Helper para consultar el sueño de ayer ---
-async function getSleepYesterday(userId: string) {
-  const { db } = await import("@/lib/db");
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  yesterday.setHours(0, 0, 0, 0);
-
-  const log = await db.sleepLog.findUnique({
-    where: { userId_date: { userId, date: yesterday } },
-  });
-
-  if (!log) return null;
-
-  return {
-    id: log.id,
-    date: log.date,
-    bedTime: log.bedTime,
-    wakeTime: log.wakeTime,
-    durationMinutes: log.durationMinutes,
-    garminScore: log.garminScore,
-    deepSleepMinutes: log.deepSleepMinutes,
-    lightSleepMinutes: log.lightSleepMinutes,
-    remSleepMinutes: log.remSleepMinutes,
-    awakeMinutes: log.awakeMinutes,
-    stressScore: log.stressScore,
-    spo2Avg: log.spo2Avg,
-    respirationAvg: log.respirationAvg,
-    bodyBatteryChange: log.bodyBatteryChange,
-    notes: log.notes,
-    flexible: log.flexible,
-  };
-}
+// --- Helper

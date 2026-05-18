@@ -338,7 +338,7 @@ export async function getTodayProjectsSummary(userId: string): Promise<string> {
     return "Sin proyectos activos";
   }
 
-  const names = activeProjects.map((p) => p.title).join(", ");
+  const names = activeProjects.map((p: any) => p.title).join(", ");
   const tasksPart =
     tasksToday > 0
       ? ` · ${tasksToday} tarea${tasksToday > 1 ? "s" : ""} hoy`

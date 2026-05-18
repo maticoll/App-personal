@@ -39,7 +39,7 @@ export const orchestrator = {
       };
     }
 
-    return agent.process(input);
+    return (agent as any).process(input);
   },
 
   async classifyIntent(_message: string): Promise<IntentClassification> {

@@ -17,13 +17,14 @@ async function calculate(userId: string, date: Date) {
   const result = await calculateFullScore(userId, date);
   await saveScore(userId, date, result);
   return NextResponse.json({
-    success: true,
-    global: result.global,
-    sleep: result.sleep.score,
-    fitness: result.fitness.score,
+    success:   true,
+    global:    result.global,
+    sleep:     result.sleep.score,
+    fitness:   result.fitness.score,
     nutrition: result.nutrition.score,
-    projects: result.projects.score,
-    date: date.toISOString(),
+    projects:  result.projects.score,
+    finances:  result.finances.score,
+    date:      date.toISOString(),
   });
 }
 

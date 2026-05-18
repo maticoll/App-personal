@@ -35,17 +35,19 @@ export async function GET() {
   // Retornar en formato DailyScoreData
   return NextResponse.json({
     score: {
-      sleep: result.sleep.score,
-      fitness: result.fitness.score,
+      sleep:     result.sleep.score,
+      fitness:   result.fitness.score,
       nutrition: result.nutrition.score,
-      projects: result.projects.score,
-      global: result.global,
-      date: today,
+      projects:  result.projects.score,
+      finances:  result.finances.score,
+      global:    result.global,
+      date:      today,
       details: {
-        sleep: { met: result.sleep.met, missed: result.sleep.missed },
-        fitness: { met: result.fitness.met, missed: result.fitness.missed },
+        sleep:     { met: result.sleep.met,     missed: result.sleep.missed },
+        fitness:   { met: result.fitness.met,   missed: result.fitness.missed },
         nutrition: { met: result.nutrition.met, missed: result.nutrition.missed },
-        projects: { met: result.projects.met, missed: result.projects.missed },
+        projects:  { met: result.projects.met,  missed: result.projects.missed },
+        finances:  { met: result.finances.met,  missed: result.finances.missed },
       },
     },
     cached: false,

@@ -1,12 +1,6 @@
 // ============================================================
 // Agente de Scoring
-// Sesión 2 — Implementación completa
-//
-// Responsabilidades:
-//   - Calcular score diario por categoría (/100)
-//   - Calcular score global (promedio de módulos con datos)
-//   - Proveer histórico: diario, semanal, mensual
-//   - Alimentar el dashboard con datos de scoring
+// Sesion 2 — Implementacion completa
 // ============================================================
 
 import type { AgentInput, AgentOutput, DailyScoreData } from "@/lib/types";
@@ -22,10 +16,6 @@ import {
 export const scoringAgent = {
   name: "scoring",
   description: "Calcula y gestiona el scoring diario",
-
-  // -------------------------------------------------------
-  // Proceso conversacional (WhatsApp — TODO: Sesión 8)
-  // -------------------------------------------------------
 
   async process(input: AgentInput): Promise<AgentOutput> {
     const { userId, message } = input;
@@ -65,6 +55,7 @@ export const scoringAgent = {
         result.fitness.score !== null ? "💪 Fitness: " + result.fitness.score + "/100" : "💪 Fitness: sin datos",
         result.nutrition.score !== null ? "🥗 Nutricion: " + result.nutrition.score + "/100" : "🥗 Nutricion: sin datos",
         result.projects.score !== null ? "📁 Proyectos: " + result.projects.score + "/100" : "📁 Proyectos: sin datos",
+        result.finances.score !== null ? "💰 Finanzas: " + result.finances.score + "/100" : "💰 Finanzas: sin datos",
       ];
 
       if (intent === "week") {
@@ -82,10 +73,6 @@ export const scoringAgent = {
     }
   },
 
-  // -------------------------------------------------------
-  // Calcular score completo de un día (y guardarlo en DB)
-  // -------------------------------------------------------
-
   async calculateDailyScore(userId: string, date: Date): Promise<DailyScoreData> {
     const result = await calculateFullScore(userId, date);
     await saveScore(userId, date, result);
@@ -95,6 +82,7 @@ export const scoringAgent = {
       fitness: result.fitness.score,
       nutrition: result.nutrition.score,
       projects: result.projects.score,
+      finances: result.finances.score,
       global: result.global,
       date,
       details: {
@@ -102,21 +90,14 @@ export const scoringAgent = {
         fitness: { met: result.fitness.met, missed: result.fitness.missed },
         nutrition: { met: result.nutrition.met, missed: result.nutrition.missed },
         projects: { met: result.projects.met, missed: result.projects.missed },
+        finances: { met: result.finances.met, missed: result.finances.missed },
       },
     };
   },
 
-  // -------------------------------------------------------
-  // Leer score guardado del día (sin recalcular)
-  // -------------------------------------------------------
-
   async getTodayScore(userId: string): Promise<DailyScoreData | null> {
     return getStoredScore(userId, new Date());
   },
-
-  // -------------------------------------------------------
-  // Obtener histórico (para dashboard y WhatsApp)
-  // -------------------------------------------------------
 
   async getHistorical(
     userId: string,
@@ -126,11 +107,6 @@ export const scoringAgent = {
   ): Promise<HistoricalScoreEntry[]> {
     return getScoreHistory(userId, from, to);
   },
-
-  // -------------------------------------------------------
-  // Recalcular todos los scores pendientes de la semana
-  // (útil para corregir datos retroactivamente)
-  // -------------------------------------------------------
 
   async recalculateWeek(userId: string): Promise<void> {
     const today = new Date();
@@ -149,29 +125,23 @@ export const scoringAgent = {
     await Promise.all(promises);
   },
 
-  // -------------------------------------------------------
-  // Generar texto del score para el Morning Summary (Sesión 8)
-  // -------------------------------------------------------
-
   async getSummaryText(userId: string, date: Date): Promise<string> {
     const score = await getStoredScore(userId, date);
     if (!score) return "Sin score registrado ayer.";
 
     const emoji =
-      score.global >= 80
-        ? "🔥"
-        : score.global >= 60
-        ? "✅"
-        : score.global >= 40
-        ? "🟡"
-        : "🟠";
+      score.global >= 80 ? "🔥"
+      : score.global >= 60 ? "✅"
+      : score.global >= 40 ? "🟡"
+      : "🟠";
 
     const lines = [
       `${emoji} *Score de ayer: ${score.global}/100*`,
-      score.sleep !== null ? `  🌙 Sueño: ${score.sleep}` : "  🌙 Sueño: sin datos",
+      score.sleep !== null ? `  🌙 Sueno: ${score.sleep}` : "  🌙 Sueno: sin datos",
       score.fitness !== null ? `  💪 Fitness: ${score.fitness}` : "  💪 Fitness: sin datos",
-      score.nutrition !== null ? `  🥗 Nutrición: ${score.nutrition}` : "  🥗 Nutrición: sin datos",
+      score.nutrition !== null ? `  🥗 Nutricion: ${score.nutrition}` : "  🥗 Nutricion: sin datos",
       score.projects !== null ? `  📁 Proyectos: ${score.projects}` : "  📁 Proyectos: sin datos",
+      score.finances !== null ? `  💰 Finanzas: ${score.finances}` : "  💰 Finanzas: sin datos",
     ];
 
     return lines.join("\n");

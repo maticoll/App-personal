@@ -90,9 +90,9 @@ export async function getGarminSession(userId: string): Promise<string> {
     settings?.garminSessionExp &&
     settings.garminSessionExp > new Date()
   ) {
-    _memSession = settings.garminSessionKey;
+    _memSession = settings.garminSessionKey!;
     _memSessionExp = settings.garminSessionExp;
-    return _memSession;
+    return _memSession!;
   }
 
   // 3. Autenticar con SSO

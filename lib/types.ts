@@ -19,12 +19,20 @@ export type ModuleScores = {
   fitness?: number | null;
   nutrition?: number | null;
   projects?: number | null;
+  finances?: number | null;
 };
 
 export type DailyScoreData = ModuleScores & {
   global: number;
   date: Date;
   details?: ScoreDetails;
+};
+
+// Turno de conversación para memoria de WhatsApp
+export type ConversationTurn = {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string; // ISO string
 };
 
 export type ScoreDetails = {
@@ -109,7 +117,7 @@ export type AgentOutput = {
 
 export type OrchestratorInput = AgentInput & {
   isAudio?: boolean;
-  audioUrl?: string; // Para Whisper (Sesión 8)
+  audioUrl?: string;
 };
 
 export type IntentClassification = {

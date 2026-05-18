@@ -740,11 +740,10 @@ export function SettingsClient({ user, settings: initial, calendarStatus, goals:
         </div>
       </SectionCard>
 
-      {/* ── Mis Objetivos ── */}
+      {/* Mis Objetivos */}
       <SectionCard title="Mis objetivos" icon={Target} defaultOpen={false}>
         <div className="space-y-1 pt-2">
-          {/* Sueño */}
-          <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-3 pb-1">😴 Sueño</p>
+          <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-3 pb-1">Sueno</p>
           <div className="grid grid-cols-3 gap-3">
             <Field label="Horas objetivo">
               <input type="number" step="0.5" min="4" max="12"
@@ -764,8 +763,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus, goals:
             </Field>
           </div>
 
-          {/* Fitness */}
-          <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-4 pb-1">💪 Fitness</p>
+          <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-4 pb-1">Fitness</p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Peso actual (kg)">
               <input type="number" step="0.1" min="30" max="200"
@@ -779,7 +777,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus, goals:
                 onChange={(e) => setGoals({ ...goals, fitnessTargetWeight: e.target.value ? parseFloat(e.target.value) : null })}
                 className="input w-full" placeholder="—" />
             </Field>
-            <Field label="Duración min. por sesión (min)">
+            <Field label="Duracion min por sesion (min)">
               <input type="number" step="5" min="10" max="180"
                 value={goals.fitnessTargetGymDuration}
                 onChange={(e) => setGoals({ ...goals, fitnessTargetGymDuration: parseInt(e.target.value) })}
@@ -793,16 +791,15 @@ export function SettingsClient({ user, settings: initial, calendarStatus, goals:
             </Field>
           </div>
 
-          {/* Nutrición */}
-          <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-4 pb-1">🥗 Nutrición</p>
+          <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-4 pb-1">Nutricion</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Calorías diarias (kcal)">
+            <Field label="Calorias diarias (kcal)">
               <input type="number" step="50" min="800" max="6000"
                 value={goals.nutritionTargetCalories}
                 onChange={(e) => setGoals({ ...goals, nutritionTargetCalories: parseInt(e.target.value) })}
                 className="input w-full" />
             </Field>
-            <Field label="Proteína (g)">
+            <Field label="Proteina (g)">
               <input type="number" step="5" min="0" max="500"
                 value={goals.nutritionTargetProtein}
                 onChange={(e) => setGoals({ ...goals, nutritionTargetProtein: parseInt(e.target.value) })}
@@ -822,8 +819,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus, goals:
             </Field>
           </div>
 
-          {/* Finanzas */}
-          <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-4 pb-1">💰 Finanzas</p>
+          <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-4 pb-1">Finanzas</p>
           <div className="grid grid-cols-3 gap-3">
             <Field label="Ingreso mensual ($)">
               <input type="number" step="100" min="0"
@@ -837,7 +833,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus, goals:
                 onChange={(e) => setGoals({ ...goals, financesMonthlyTarget: parseFloat(e.target.value) })}
                 className="input w-full" />
             </Field>
-            <Field label="Límite de gasto ($)">
+            <Field label="Limite de gasto ($)">
               <input type="number" step="100" min="0"
                 value={goals.financesMonthlyBudget}
                 onChange={(e) => setGoals({ ...goals, financesMonthlyBudget: parseFloat(e.target.value) })}
@@ -845,8 +841,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus, goals:
             </Field>
           </div>
 
-          {/* Proyectos */}
-          <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-4 pb-1">📋 Proyectos</p>
+          <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-4 pb-1">Proyectos</p>
           <Field label="Tareas completadas por semana">
             <input type="number" step="1" min="1" max="100"
               value={goals.projectsTargetTasksPerWeek}
@@ -856,26 +851,26 @@ export function SettingsClient({ user, settings: initial, calendarStatus, goals:
 
           <SaveButton onClick={saveGoals} pending={goalsPending} saved={goalsSaved} />
           <p className="text-xs text-outline text-center mt-2">
-            Al guardar, todos los agentes reciben los nuevos objetivos y te avisamos por WhatsApp.
+            Al guardar, todos los agentes reciben los nuevos objetivos.
           </p>
         </div>
       </SectionCard>
 
-      {/* ── Score Global — Pesos ── */}
+      {/* Score Global */}
       <SectionCard title="Score global" icon={Sliders} defaultOpen={false}>
         <div className="pt-2 space-y-4">
           <p className="text-sm text-on-surface-variant">
-            Ajustá la importancia de cada módulo en tu score diario (1 = poco, 5 = máximo).
+            Ajusta la importancia de cada modulo en tu score diario (1 = poco, 5 = maximo).
           </p>
 
           {(() => {
             const pcts = calcPercents(goals);
             const modules = [
-              { key: "weightSleep" as const,     label: "😴 Sueño",     pct: pcts.sleep },
-              { key: "weightFitness" as const,   label: "💪 Fitness",   pct: pcts.fitness },
-              { key: "weightNutrition" as const, label: "🥗 Nutrición", pct: pcts.nutrition },
-              { key: "weightFinances" as const,  label: "💰 Finanzas",  pct: pcts.finances },
-              { key: "weightProjects" as const,  label: "📋 Proyectos", pct: pcts.projects },
+              { key: "weightSleep" as const,     label: "Sueno",     pct: pcts.sleep },
+              { key: "weightFitness" as const,   label: "Fitness",   pct: pcts.fitness },
+              { key: "weightNutrition" as const, label: "Nutricion", pct: pcts.nutrition },
+              { key: "weightFinances" as const,  label: "Finanzas",  pct: pcts.finances },
+              { key: "weightProjects" as const,  label: "Proyectos", pct: pcts.projects },
             ];
             return (
               <div className="space-y-3">
@@ -906,7 +901,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus, goals:
         </div>
       </SectionCard>
 
-      {/* ── Danger Zone ── */}
+      {/* Danger Zone */}
       <div className="card border border-red-500/20">
         <button
           className="w-full flex items-center justify-between p-4 text-left"
@@ -930,13 +925,12 @@ export function SettingsClient({ user, settings: initial, calendarStatus, goals:
             {dangerDone ? (
               <div className="mt-4 flex items-center gap-2 text-green-500 text-sm">
                 <Check className="w-4 h-4" />
-                Datos del día borrados correctamente
+                Datos del dia borrados correctamente
               </div>
             ) : (
               <>
                 <p className="mt-4 text-sm text-on-surface-variant">
-                  Esta acción borra todos los datos de{" "}
-                  <strong>hoy</strong>: sueño, workouts, comidas, agua y score.
+                  Esta accion borra todos los datos de hoy: sueno, workouts, comidas, agua y score.
                   No se puede deshacer.
                 </p>
 

@@ -242,7 +242,7 @@ async function calcFitnessScore(
   met.push(`${workouts.length} actividad${workouts.length > 1 ? "es" : ""} registrada${workouts.length > 1 ? "s" : ""}`);
 
   // Gym (20 pts)
-  const hasGym = workouts.some((w) => w.type === "GYM");
+  const hasGym = workouts.some((w: any) => w.type === "GYM");
   if (hasGym) {
     score += 20;
     met.push("Fue al gym ✓");
@@ -251,7 +251,7 @@ async function calcFitnessScore(
   }
 
   // Duración vs objetivo (20 pts)
-  const totalMinutes = workouts.reduce((sum, w) => sum + (w.durationMinutes ?? 0), 0);
+  const totalMinutes = workouts.reduce((sum: any, w: any) => sum + (w.durationMinutes ?? 0), 0);
   if (totalMinutes >= targetDuration) {
     score += 20;
     met.push(`Duración: ${totalMinutes}min (objetivo: ${targetDuration}min) ✓`);
@@ -266,7 +266,7 @@ async function calcFitnessScore(
   }
 
   // Actividad cardiovascular (20 pts)
-  const hasCardio = workouts.some((w) => ["RUNNING", "SWIMMING", "CYCLING"].includes(w.type));
+  const hasCardio = workouts.some((w: any) => ["RUNNING", "SWIMMING", "CYCLING"].includes(w.type));
   if (hasCardio) {
     score += 20;
     met.push("Actividad cardiovascular ✓");
@@ -324,9 +324,9 @@ async function calcNutritionScore(
   }
 
   let score = 0;
-  const mealTypes = meals.map((m) => m.mealType);
+  const mealTypes = meals.map((m: any) => m.mealType);
   const waterGoal = settings?.dailyWaterGoalThermos ?? 1.0;
-  const totalWater = waterLogs.reduce((acc, w) => acc + w.thermos, 0);
+  const totalWater = waterLogs.reduce((acc: any, w: any) => acc + w.thermos, 0);
 
   // === Bloque Registro (20 pts) ===
   const mainMeals = ["BREAKFAST", "LUNCH", "DINNER"].filter((t) => mealTypes.includes(t as never));
@@ -342,9 +342,9 @@ async function calcNutritionScore(
   }
 
   // === Bloque Macros (60 pts) ===
-  const totalProtein  = meals.reduce((s, m) => s + (m.proteinG  ?? 0), 0);
-  const totalCalories = meals.reduce((s, m) => s + (m.calories  ?? 0), 0);
-  const totalFat      = meals.reduce((s, m) => s + (m.fatG      ?? 0), 0);
+  const totalProtein  = meals.reduce((s: any, m: any) => s + (m.proteinG  ?? 0), 0);
+  const totalCalories = meals.reduce((s: any, m: any) => s + (m.calories  ?? 0), 0);
+  const totalFat      = meals.reduce((s: any, m: any) => s + (m.fatG      ?? 0), 0);
   const hasMacros = totalProtein > 0 || totalCalories > 0;
 
   if (hasMacros) {
@@ -604,10 +604,10 @@ async function calcFinancesScore(
       score += 20;
       missed.push(`Presupuesto excedido: $${Math.round(totalExpenses)} / $${budget} (${Math.round(spendRatio * 100)}%)`);
     } else {
-      missed.push(`Presupuesto muy excedido: $${Math.round(totalExpenses)} / $${budget} (${Math.round(spendRatio * 100)}%)`);
+      missed.push(`Presupuesto muy excedido: $${Math.round(totalExpenses)} / $${budget} ($${Math.round(spendRatio * 100)}%)`);
     }
 
-    // Bloque Ahorro (40 pts) — proyección al fin de mes
+    // Bloque Ahorro (40 pts) — proyeccion al fin de mes
     const today = date.getDate();
     const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
     const projectedSavings = (totalIncome - totalExpenses) * (daysInMonth / today);
@@ -615,7 +615,7 @@ async function calcFinancesScore(
 
     if (savingsRatio >= 1.0) {
       score += 40;
-      met.push(`Ahorro proyectado: $${Math.round(projectedSavings)} (objetivo: $${savings}) ✓`);
+      met.push(`Ahorro proyectado: $${Math.round(projectedSavings)} (objetivo: $${savings}) ok`);
     } else if (savingsRatio >= 0.8) {
       score += 25;
       met.push(`Ahorro proyectado: $${Math.round(projectedSavings)} (objetivo: $${savings})`);
@@ -629,7 +629,7 @@ async function calcFinancesScore(
 
     return { score: Math.min(score, 100), met, missed };
   } catch {
-    return { score: null, met: [], missed: ["Sin conexión con la app de finanzas"] };
+    return { score: null, met: [], missed: ["Sin conexion con la app de finanzas"] };
   }
 }
 
@@ -654,14 +654,13 @@ export type FullScoreResult = {
 };
 
 // -------------------------------------------------------
-// Función principal: calcular score completo de un día
+// Funcion principal: calcular score completo de un dia
 // -------------------------------------------------------
 
 export async function calculateFullScore(
   userId: string,
   date: Date
 ): Promise<FullScoreResult> {
-  // Cargar objetivos UNA sola vez y pasarlos a todos los módulos
   const goals = await getGoals(userId);
   const weights = normalizeWeights(goals);
 
@@ -673,7 +672,6 @@ export async function calculateFullScore(
     calcFinancesScore(userId, date, goals),
   ]);
 
-  // Score global = promedio ponderado (excluye módulos null)
   const global = calcWeightedGlobal(
     { sleep: sleep.score, fitness: fitness.score, nutrition: nutrition.score, finances: finances.score, projects: projects.score },
     weights
@@ -724,21 +722,12 @@ export async function saveScore(
   });
 }
 
-// -------------------------------------------------------
-// Leer score de un día desde la DB (sin recalcular)
-// -------------------------------------------------------
-
 export async function getStoredScore(
   userId: string,
   date: Date
 ): Promise<DailyScoreData | null> {
   const score = await db.dailyScore.findUnique({
-    where: {
-      userId_date: {
-        userId,
-        date: startOfDay(date),
-      },
-    },
+    where: { userId_date: { userId, date: startOfDay(date) } },
   });
 
   if (!score) return null;
@@ -754,12 +743,8 @@ export async function getStoredScore(
   };
 }
 
-// -------------------------------------------------------
-// Leer histórico de scores (para gráficos)
-// -------------------------------------------------------
-
 export type HistoricalScoreEntry = {
-  date: string; // ISO string, para Recharts
+  date: string;
   global: number | null;
   sleep: number | null;
   fitness: number | null;
@@ -773,17 +758,11 @@ export async function getScoreHistory(
   to: Date
 ): Promise<HistoricalScoreEntry[]> {
   const scores = await db.dailyScore.findMany({
-    where: {
-      userId,
-      date: {
-        gte: startOfDay(from),
-        lte: endOfDay(to),
-      },
-    },
+    where: { userId, date: { gte: startOfDay(from), lte: endOfDay(to) } },
     orderBy: { date: "asc" },
   });
 
-  return scores.map((s) => ({
+  return scores.map((s: any) => ({
     date: s.date.toISOString().split("T")[0],
     global: s.globalScore,
     sleep: s.sleepScore,
@@ -793,11 +772,6 @@ export async function getScoreHistory(
   }));
 }
 
-// -------------------------------------------------------
-// Actividad de ideas para dashboard informativo (no entra al score global)
-// Retorna cuántas ideas se capturaron en la fecha dada
-// -------------------------------------------------------
-
 export async function getIdeasActivityForDate(
   userId: string,
   date: Date
@@ -805,18 +779,10 @@ export async function getIdeasActivityForDate(
   return db.idea.count({
     where: {
       userId,
-      createdAt: {
-        gte: startOfDay(date),
-        lte: endOfDay(date),
-      },
+      createdAt: { gte: startOfDay(date), lte: endOfDay(date) },
     },
   });
 }
-
-// -------------------------------------------------------
-// Generar datos mock para demostración visual
-// (se usa cuando no hay datos reales en la DB)
-// -------------------------------------------------------
 
 export function generateMockHistory(days: number): HistoricalScoreEntry[] {
   const entries: HistoricalScoreEntry[] = [];
@@ -827,7 +793,6 @@ export function generateMockHistory(days: number): HistoricalScoreEntry[] {
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().split("T")[0];
 
-    // Generar valores semirandom pero con tendencia (seed por fecha)
     const seed = d.getDate() + d.getMonth() * 31;
     const rand = (base: number, variance: number) =>
       Math.max(0, Math.min(100, Math.round(base + (((seed * 7 + variance) % 30) - 15))));

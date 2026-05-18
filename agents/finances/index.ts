@@ -16,10 +16,6 @@ import type { AgentInput, AgentOutput } from "@/lib/types";
 import {
   getMonthlyReport,
   getRecentTransactions,
-  getFinancesStatus,
-  getCards,
-  getCategories,
-  createTransaction,
   getFinancesSummaryText,
   formatCurrency,
   type FinancesTransaction,
@@ -160,185 +156,65 @@ export const financesAgent = {
   name: "finances",
   description: "Interfaz con la app de finanzas externa",
 
-  async onGoalsUpdate(_userId: string, _goals: import("@prisma/client").UserGoals): Promise<{ ok: boolean }> {
-    return { ok: true };
-  },
-
   async process(input: AgentInput): Promise<AgentOutput> {
     const { userId, message } = input;
-
-    // Verificar conexión
-    const status = await getFinancesStatus(userId);
-    if (!status.connected) {
-      return {
-        success: false,
-        message:
-          "La app de finanzas no está conectada. Configurá tu API key en Ajustes → Finanzas.",
-      };
-    }
-
     const intent = detectIntent(message);
 
-    switch (intent) {
-      case "query_report": {
-        const report = await getMonthlyReport(userId);
-        if (!report) {
+    try {
+      switch (intent) {
+        case "query_spending": {
+          const report = await getMonthlyReport(userId);
+          if (!report) return { success: true, message: "No pude obtener los gastos del mes. ¿Configuraste tu API key de finanzas en Ajustes?" };
+          const gastos = report.monthly.totalExpenses ?? 0;
+          return { success: true, message: `Este mes llevas ${formatCurrency(gastos)} en gastos.` };
+        }
+
+        case "query_balance": {
+          const report = await getMonthlyReport(userId);
+          if (!report) return { success: true, message: "No pude obtener tu balance. ¿Configuraste tu API key de finanzas en Ajustes?" };
+          const inc = report.monthly.totalIncome ?? 0;
+          const exp = report.monthly.totalExpenses ?? 0;
+          const balance = inc - exp;
+          const sign = balance >= 0 ? "+" : "";
+          return { success: true, message: `Balance del mes: ${sign}${formatCurrency(balance)}. Ingresos: ${formatCurrency(inc)} / Gastos: ${formatCurrency(exp)}.` };
+        }
+
+        case "query_report": {
+          const [report, txs] = await Promise.all([
+            getMonthlyReport(userId),
+            getRecentTransactions(userId, 5),
+          ]);
+          if (!report) return { success: true, message: "No pude obtener el reporte. ¿Configuraste tu API key de finanzas en Ajustes?" };
+          const inc = report.monthly.totalIncome ?? 0;
+          const exp = report.monthly.totalExpenses ?? 0;
+          const balance = inc - exp;
+          const txList = txs.length > 0 ? "\n\nÚltimas transacciones:\n" + formatTransactionList(txs) : "";
           return {
-            success: false,
-            message: "No pude obtener el reporte de finanzas. Intentá de nuevo.",
+            success: true,
+            message: `Finanzas del mes:\n• Ingresos: ${formatCurrency(inc)}\n• Gastos: ${formatCurrency(exp)}\n• Balance: ${formatCurrency(balance)}${txList}`,
           };
         }
-        const { monthly } = report;
-        const monthName = new Date().toLocaleDateString("es-UY", { month: "long" });
-        return {
-          success: true,
-          message:
-            `💰 Finanzas — ${monthName}:\n` +
-            `Ingresos: ${formatCurrency(monthly.totalIncome)}\n` +
-            `Gastos: ${formatCurrency(monthly.totalExpenses)}\n` +
-            `Balance: ${monthly.balance >= 0 ? "+" : ""}${formatCurrency(monthly.balance)}`,
-        };
+
+        case "create_expense":
+        case "create_income": {
+          // Logging transactions requires a cardId — redirect user to the web app
+          const txType = intent === "create_expense" ? "gasto" : "ingreso";
+          const parsed = await parseTransactionFromText(message, txType);
+          if (!parsed) return { success: true, message: `No pude entender el ${txType}. Registralo en la app de finanzas.` };
+          return { success: true, message: `Entendí: ${txType} de ${formatCurrency(parsed.amount)} (${parsed.description}). Registralo en finanzas-lemon.vercel.app para que quede guardado.` };
+        }
+
+        default: {
+          const summary = await getFinancesSummaryText(userId);
+          return { success: true, message: summary ?? "No hay datos de finanzas disponibles." };
+        }
       }
-
-      case "query_spending": {
-        const [report, transactions] = await Promise.all([
-          getMonthlyReport(userId),
-          getRecentTransactions(userId, 5),
-        ]);
-
-        const expensesText = report
-          ? `Gastos totales: ${formatCurrency(report.monthly.totalExpenses)}`
-          : "";
-
-        const gastos = transactions.filter((t) => t.type === "gasto");
-        const recentText =
-          gastos.length > 0
-            ? "\n\nÚltimos gastos:\n" + formatTransactionList(gastos)
-            : "";
-
-        return {
-          success: true,
-          message: expensesText + recentText || "No hay datos de gastos disponibles.",
-        };
-      }
-
-      case "query_balance": {
-        const report = await getMonthlyReport(userId);
-        if (!report) {
-          return {
-            success: false,
-            message: "No pude obtener el balance. Intentá de nuevo.",
-          };
-        }
-        const { balance, totalIncome, totalExpenses } = report.monthly;
-        const emoji = balance >= 0 ? "📈" : "📉";
-        return {
-          success: true,
-          message:
-            `${emoji} Balance del mes:\n` +
-            `Ingresos: ${formatCurrency(totalIncome)}\n` +
-            `Gastos: ${formatCurrency(totalExpenses)}\n` +
-            `Resultado: ${balance >= 0 ? "+" : ""}${formatCurrency(balance)}`,
-        };
-      }
-
-      case "create_expense":
-      case "create_income": {
-        const txType = intent === "create_expense" ? "gasto" : "ingreso";
-        const parsed = await parseTransactionFromText(message, txType);
-
-        if (!parsed) {
-          return {
-            success: false,
-            message:
-              `No pude entender el ${txType}. Intentá con algo como: ` +
-              (txType === "gasto"
-                ? '"Gasté $1500 en supermercado"'
-                : '"Cobré $50000 de sueldo"'),
-          };
-        }
-
-        // Necesitamos una tarjeta para crear la transacción
-        const cards = await getCards(userId);
-        if (cards.length === 0) {
-          return {
-            success: false,
-            message: "No tenés tarjetas configuradas en la app de finanzas. Agregá una desde la app.",
-          };
-        }
-
-        // Usar la primera tarjeta disponible (el usuario puede cambiar desde la app web)
-        const defaultCard = cards[0];
-
-        const tx = await createTransaction(userId, {
-          cardId: defaultCard.id,
-          amount: parsed.amount,
-          type: parsed.type,
-          description: parsed.description,
-          date: parsed.date,
-        });
-
-        if (!tx) {
-          return {
-            success: false,
-            message: `No pude registrar el ${txType}. Verificá la conexión con la app de finanzas.`,
-          };
-        }
-
-        const emoji = txType === "gasto" ? "📤" : "📥";
-        return {
-          success: true,
-          message:
-            `${emoji} ${txType === "gasto" ? "Gasto" : "Ingreso"} registrado:\n` +
-            `${parsed.description}: ${formatCurrency(parsed.amount)}\n` +
-            `Tarjeta: ${defaultCard.name}`,
-          data: tx,
-        };
-      }
-
-      default:
-        return {
-          success: false,
-          message:
-            "¿Qué querés saber de tus finanzas? Puedo darte el balance, resumen de gastos, o registrar una transacción.",
-        };
+    } catch {
+      return { success: false, message: "Error consultando finanzas. Verificá tu conexión." };
     }
   },
 
-  /**
-   * Genera texto resumen de finanzas para el Morning Summary.
-   */
-  async getSummaryText(userId: string): Promise<string | null> {
-    return getFinancesSummaryText(userId);
-  },
-
-  /**
-   * Verifica si hay alertas de gasto (gastos mayores que el mes pasado en alguna categoría).
-   */
-  async checkSpendingAlerts(userId: string): Promise<AgentOutput | null> {
-    const report = await getMonthlyReport(userId);
-    if (!report || report.last6.length < 2) return null;
-
-    const current = report.last6[report.last6.length - 1];
-    const previous = report.last6[report.last6.length - 2];
-
-    if (!current || !previous) return null;
-
-    const increase = current.totalExpenses - previous.totalExpenses;
-    const increasePercent = previous.totalExpenses > 0
-      ? Math.round((increase / previous.totalExpenses) * 100)
-      : 0;
-
-    // Alertar si los gastos subieron más del 20% respecto al mes anterior
-    if (increasePercent >= 20) {
-      return {
-        success: true,
-        message:
-          `⚠️ Tus gastos este mes (${formatCurrency(current.totalExpenses)}) ` +
-          `son ${increasePercent}% más altos que el mes pasado (${formatCurrency(previous.totalExpenses)}).`,
-      };
-    }
-
-    return null;
+  async onGoalsUpdate(_userId: string, _goals: import("@prisma/client").UserGoals): Promise<{ ok: boolean }> {
+    return { ok: true };
   },
 };

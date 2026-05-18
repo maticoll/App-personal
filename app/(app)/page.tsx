@@ -67,17 +67,19 @@ async function loadTodayScore(userId: string): Promise<DailyScoreData | null> {
     const result = await calculateFullScore(userId, today);
     await saveScore(userId, today, result);
     return {
-      sleep: result.sleep.score,
-      fitness: result.fitness.score,
+      sleep:     result.sleep.score,
+      fitness:   result.fitness.score,
       nutrition: result.nutrition.score,
-      projects: result.projects.score,
-      global: result.global,
-      date: today,
+      projects:  result.projects.score,
+      finances:  result.finances.score,
+      global:    result.global,
+      date:      today,
       details: {
-        sleep: { met: result.sleep.met, missed: result.sleep.missed },
-        fitness: { met: result.fitness.met, missed: result.fitness.missed },
+        sleep:     { met: result.sleep.met,     missed: result.sleep.missed },
+        fitness:   { met: result.fitness.met,   missed: result.fitness.missed },
         nutrition: { met: result.nutrition.met, missed: result.nutrition.missed },
-        projects: { met: result.projects.met, missed: result.projects.missed },
+        projects:  { met: result.projects.met,  missed: result.projects.missed },
+        finances:  { met: result.finances.met,  missed: result.finances.missed },
       },
     };
   } catch {
@@ -101,7 +103,7 @@ async function loadSummaries(userId: string) {
       db.idea.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 3 }).catch(() => []),
     ]);
 
-  const waterTotal = waterLogs.reduce((acc, w) => acc + w.thermos, 0);
+  const waterTotal = waterLogs.reduce((acc: number, w: any) => acc + w.thermos, 0);
 
   return {
     sleep: sleepLog?.durationMinutes
@@ -128,8 +130,8 @@ export default async function DashboardPage() {
   ]);
 
   const hora = new Date().getHours();
-  const saludo = hora < 12 ? "Buenos días" : hora < 19 ? "Buenas tardes" : "Buenas noches";
-  const emoji = hora < 12 ? "☀️" : hora < 19 ? "🌤️" : "🌙";
+  const saludo = hora < 12 ? "Buenos dias" : hora < 19 ? "Buenas tardes" : "Buenas noches";
+  const emoji = hora < 12 ? "☀️" : hora < 19 ? "\U0001f324️" : "\U0001f319";
 
   const dateLabel = new Date().toLocaleDateString("es-UY", {
     weekday: "long",
@@ -140,7 +142,7 @@ export default async function DashboardPage() {
   return (
     <div className="animate-fade-in">
 
-      {/* ── Saludo ─────────────────────────────────────────────── */}
+      {/* Saludo */}
       <section className="mb-10">
         <h1 className="text-2xl font-bold text-on-surface tracking-tight">
           {saludo}, {firstName} {emoji}
@@ -148,12 +150,12 @@ export default async function DashboardPage() {
         <p className="text-sm text-on-surface-variant mt-0.5 capitalize">{dateLabel}</p>
       </section>
 
-      {/* ── Score Ring ─────────────────────────────────────────── */}
+      {/* Score Ring */}
       <section className="flex flex-col items-center mb-10">
         <GlobalScoreRing score={todayScore?.global ?? null} size="lg" />
       </section>
 
-      {/* ── Bento Grid 2×3 ─────────────────────────────────────── */}
+      {/* Bento Grid 2x3 */}
       <div className="grid grid-cols-2 gap-3 mb-10">
         {MODULES.map(({ href, label, icon, color, key }) => {
           const score =
@@ -161,6 +163,7 @@ export default async function DashboardPage() {
             key === "fitness" ? todayScore?.fitness :
             key === "nutrition" ? todayScore?.nutrition :
             key === "projects" ? todayScore?.projects :
+            key === "finances" ? todayScore?.finances :
             null;
 
           const summary = summaries?.[key as keyof typeof summaries] ?? "—";
@@ -186,13 +189,13 @@ export default async function DashboardPage() {
                 </span>
               </div>
               <div>
-                {score !== null ? (
+                {score !== null && score !== undefined ? (
                   <h3 className="text-2xl font-bold text-on-surface leading-none">
                     {score}
                     <span className="text-sm font-normal text-on-surface-variant ml-1">/100</span>
                   </h3>
                 ) : (
-                  <h3 className="text-xl font-semibold text-on-surface leading-none">—</h3>
+                  <h3 className="text-xl font-semibold text-on-surface leading-none">&mdash;</h3>
                 )}
                 <p className="text-[11px] text-on-surface-variant mt-1.5 leading-snug line-clamp-2">
                   {summary}
@@ -203,7 +206,7 @@ export default async function DashboardPage() {
         })}
       </div>
 
-      {/* ── Garmin Sync ────────────────────────────────────────── */}
+      {/* Garmin Sync */}
       <div className="flex justify-center">
         <Link
           href="/sleep"

@@ -61,6 +61,21 @@ export async function getTodaySleep(
 }
 
 /**
+ * Sleep log de ayer (para el agente cuando el usuario pregunta por "anoche")
+ */
+export async function getSleepYesterday(
+  userId: string
+): Promise<SleepLogEntry | null> {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  yesterday.setHours(0, 0, 0, 0);
+  const log = await db.sleepLog.findUnique({
+    where: { userId_date: { userId, date: yesterday } },
+  });
+  return log ? mapSleepLog(log) : null;
+}
+
+/**
  * Historial de sueño de los últimos N días
  */
 export async function getSleepHistory(
@@ -247,20 +262,20 @@ export async function getWeeklyStats(userId: string): Promise<WeeklyStats> {
   }
 
   const durations = logs
-    .filter((l) => l.durationMinutes !== null)
-    .map((l) => l.durationMinutes!);
+    .filter((l: any) => l.durationMinutes !== null)
+    .map((l: any) => l.durationMinutes!);
   const garminScores = logs
-    .filter((l) => l.garminScore !== null)
-    .map((l) => l.garminScore!);
+    .filter((l: any) => l.garminScore !== null)
+    .map((l: any) => l.garminScore!);
 
   const avgDurationMinutes =
     durations.length > 0
-      ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+      ? Math.round(durations.reduce((a: any, b: any) => a + b, 0) / durations.length)
       : null;
 
   const avgGarminScore =
     garminScores.length > 0
-      ? Math.round(garminScores.reduce((a, b) => a + b, 0) / garminScores.length)
+      ? Math.round(garminScores.reduce((a: any, b: any) => a + b, 0) / garminScores.length)
       : null;
 
   let daysInIdealRange = 0;
@@ -279,7 +294,7 @@ export async function getWeeklyStats(userId: string): Promise<WeeklyStats> {
     d.setDate(d.getDate() - i);
     const dStr = d.toISOString().split("T")[0];
     const found = logs.find(
-      (l) => l.date.toISOString().split("T")[0] === dStr
+      (l: any) => l.date.toISOString().split("T")[0] === dStr
     );
     if (found) streak++;
     else break;

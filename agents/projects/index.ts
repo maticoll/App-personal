@@ -402,27 +402,12 @@ export const projectsAgent = {
   name: "projects",
   description: "Gestiona proyectos personales y tareas de trabajo",
 
+  async process(input: AgentInput): Promise<AgentOutput> {
+    const result = await processProjectsMessage(input.userId, input.message);
+    return { success: true, message: result };
+  },
+
   async onGoalsUpdate(_userId: string, _goals: import("@prisma/client").UserGoals): Promise<{ ok: boolean }> {
     return { ok: true };
-  },
-
-  async process(input: AgentInput): Promise<AgentOutput> {
-    try {
-      const response = await processProjectsMessage(input.userId, input.message);
-      return { success: true, message: response };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Error desconocido";
-      return { success: false, message: `Error en módulo de proyectos: ${message}` };
-    }
-  },
-
-  async syncNotion(userId: string): Promise<void> {
-    await syncNotionToProjects(userId);
-  },
-
-  async calculateScore(userId: string, date: Date): Promise<number> {
-    const { calcProjectsScoreForDate } = await import("@/lib/scoring");
-    const result = await calcProjectsScoreForDate(userId, date);
-    return result.score ?? 0;
   },
 };

@@ -19,6 +19,7 @@ import { sendTextMessage } from "@/lib/whatsapp";
 import { db } from "@/lib/db";
 import { scoringAgent } from "@/agents/scoring";
 import { sleepAgent } from "@/agents/sleep";
+import { synthesisAgent } from "@/agents/synthesis";
 import { getNutritionSummaryText } from "@/lib/nutrition";
 import { getTodayEventsText } from "@/lib/calendar";
 
@@ -118,6 +119,7 @@ type MessageParts = {
   sleepText: string | null;
   nutritionText: string | null;
   agendaText: string | null;
+  insightText: string | null;
   motivation: string;
 };
 
@@ -159,12 +161,18 @@ function buildMessage(parts: MessageParts): string {
     lines.push(parts.agendaText);
   }
 
+  // 7. Insight de síntesis (patrones cross-módulo)
+  if (parts.insightText) {
+    lines.push("");
+    lines.push("🔍 " + parts.insightText);
+  }
+
   // Separador antes del cierre si hay contenido antes
-  if (parts.sleepText || parts.nutritionText || parts.agendaText) {
+  if (parts.sleepText || parts.nutritionText || parts.agendaText || parts.insightText) {
     lines.push("");
   }
 
-  // 6. Cierre motivacional
+  // 8. Cierre motivacional
   lines.push("💬 " + parts.motivation);
 
   return lines.join("\n");
@@ -221,13 +229,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     yesterday.setHours(0, 0, 0, 0);
 
     // --- 3. Recopilar todas las secciones en paralelo ---
-    const [verse, scoreText, sleepText, nutritionText, agendaText] =
+    const [verse, scoreText, sleepText, nutritionText, agendaText, insightText] =
       await Promise.allSettled([
         fetchVerse(),
         scoringAgent.getSummaryText(user.id, yesterday),
         sleepAgent.getSleepSummaryText(user.id),
         getNutritionSummaryText(user.id, yesterday),
         getTodayEventsText(user.id),
+        synthesisAgent.getDailyInsight(user.id),
       ]);
 
     // Extraer valores con fallback null en caso de rechazo
@@ -241,6 +250,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       nutritionText.status === "fulfilled" ? nutritionText.value : null;
     const agendaValue =
       agendaText.status === "fulfilled" ? agendaText.value : null;
+    const insightValue =
+      insightText.status === "fulfilled" ? insightText.value : null;
 
     // Extraer score global del texto para pasar a la motivacion
     let globalScore: number | null = null;
@@ -260,6 +271,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       sleepText: sleepValue,
       nutritionText: nutritionValue,
       agendaText: agendaValue,
+      insightText: insightValue,
       motivation,
     });
 
@@ -267,6 +279,21 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     await sendTextMessage(toNumber, message);
 
     console.log("[morning-summary] Enviado a " + toNumber + " para userId=" + user.id);
+    return NextResponse.json({
+      ok: true,
+      message: "Morning summary enviado",
+      to: toNumber,
+      lines: message.split("\n").length,
+    });
+  } catch (error) {
+    console.error("[morning-summary] Error:", error);
+    return NextResponse.json(
+      { ok: false, error: "Error enviando morning summary" },
+      { status: 500 }
+    );
+  }
+}
+console.log("[morning-summary] Enviado a " + toNumber + " para userId=" + user.id);
     return NextResponse.json({
       ok: true,
       message: "Morning summary enviado",

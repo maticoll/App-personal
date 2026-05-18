@@ -264,17 +264,17 @@ export async function getWeeklyStats(userId: string): Promise<WeeklyStatEntry[]>
     });
 
     const totalMinutes = workouts.reduce(
-      (sum, w) => sum + (w.durationMinutes ?? 0),
+      (sum: any, w: any) => sum + (w.durationMinutes ?? 0),
       0
     );
     const gymMinutes = workouts
-      .filter((w) => w.type === "GYM")
-      .reduce((sum, w) => sum + (w.durationMinutes ?? 0), 0);
+      .filter((w: any) => w.type === "GYM")
+      .reduce((sum: any, w: any) => sum + (w.durationMinutes ?? 0), 0);
     const cardioMinutes = workouts
-      .filter((w) =>
+      .filter((w: any) =>
         ["RUNNING", "SWIMMING", "CYCLING", "WALKING"].includes(w.type)
       )
-      .reduce((sum, w) => sum + (w.durationMinutes ?? 0), 0);
+      .reduce((sum: any, w: any) => sum + (w.durationMinutes ?? 0), 0);
 
     stats.push({
       date: dateStr,
@@ -366,7 +366,7 @@ export async function checkSmartHabitDeviation(
   // Parsear hora esperada de gym (ej: "06:00")
   const [expHour, expMin] = settings.expectedGymTime
     .split(":")
-    .map((s) => parseInt(s, 10));
+    .map((s: any) => parseInt(s, 10));
   const gymTime = new Date(now);
   gymTime.setHours(expHour, expMin ?? 0, 0, 0);
 
@@ -492,7 +492,7 @@ export async function addExerciseSets(
     name: exercise.name,
     order: exercise.order,
     notes: exercise.notes ?? null,
-    sets: createdSets.map((s) => ({
+    sets: createdSets.map((s: any) => ({
       id: s.id,
       exerciseId: s.exerciseId,
       setNumber: s.setNumber,

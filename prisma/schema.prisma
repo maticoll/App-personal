@@ -63,6 +63,9 @@ model User {
   // Memoria de conversación WhatsApp
   conversationMemory ConversationMemory?
 
+  // WhatsApp mensajes
+  whatsAppMessages   WhatsAppMessage[]
+
   @@map("users")
 }
 
@@ -587,9 +590,14 @@ model UserHabit {
 // TODO: Sesión 8 — orquestrador completo
 // ============================================================
 
+
+// ============================================================
+// MENSAJES DEL ORQUESTRADOR (WhatsApp)
+// ============================================================
+
 enum MessageDirection {
-  INBOUND  // Usuario → App
-  OUTBOUND // App → Usuario
+  INBOUND
+  OUTBOUND
 }
 
 enum MessageStatus {
@@ -599,23 +607,23 @@ enum MessageStatus {
 }
 
 model WhatsAppMessage {
-  id        String           @id @default(cuid())
-  userId    String?
+  id          String @id @default(cuid())
+  userId      String
+  waMessageId String? @unique
+
   direction MessageDirection
-  content   String
   status    MessageStatus    @default(PENDING)
 
-  // Metadata del mensaje de WhatsApp
-  waMessageId String?  @unique
-  phoneNumber String?
-
-  // Resultado del procesamiento por el orquestrador
-  intent     String? // Intención detectada
-  module     String? // Módulo al que se derivó
-  agentResponse String? // Respuesta del sub-agente
+  body      String
+  mediaUrl  String?
+  mediaType String?
 
   processedAt DateTime?
-  createdAt   DateTime  @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("whatsapp_messages")
 }

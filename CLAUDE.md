@@ -494,3 +494,136 @@ ALTER TABLE ideas ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'idea'
 ---
 
 *Ultima actualizacion: Mayo 2026 - Ideas refactorizado con UX estilo Lumina. priority + status nativos en DB.*
+
+---
+
+## Bloque Sesion 9 — IA Avanzada (Objetivos, Memoria, Sintesis, TypeScript)
+
+> Sesion: Mayo 2026 — Sistema de objetivos dinamicos, memoria de conversacion, agente de sintesis y TypeScript limpio
+
+### 1. Schema Prisma (nuevos modelos)
+
+**`UserGoals`:** Pesos por modulo (`sleepWeight`, `fitnessWeight`, `nutritionWeight`, `projectsWeight`, `financesWeight` — todos Float @default(1.0)) + objetivos en texto libre por modulo (campos String?). `@@map("user_goals")`. Relacion 1-1 con User.
+
+**`ConversationMemory`:** Rolling window de conversacion para WhatsApp. Campos: `recentMessages Json @default("[]")` (array de ultimos K=8 turnos), `summary String?` (resumen comprimido de turnos anteriores), `turnCount Int @default(0)`. `@@map("conversation_memory")`. Relacion 1-1 con User.
+
+**`DailyScore`:** +`financesScore Int?` — modulo de finanzas ahora contribuye al score global.
+
+**SQL para aplicar en Supabase:**
+```sql
+-- UserGoals
+CREATE TABLE IF NOT EXISTS user_goals (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "userId" TEXT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  "sleepWeight" FLOAT NOT NULL DEFAULT 1.0,
+  "fitnessWeight" FLOAT NOT NULL DEFAULT 1.0,
+  "nutritionWeight" FLOAT NOT NULL DEFAULT 1.0,
+  "projectsWeight" FLOAT NOT NULL DEFAULT 1.0,
+  "financesWeight" FLOAT NOT NULL DEFAULT 1.0,
+  "sleepGoal" TEXT, "fitnessGoal" TEXT, "nutritionGoal" TEXT,
+  "projectsGoal" TEXT, "financesGoal" TEXT, "globalGoal" TEXT,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ConversationMemory
+CREATE TABLE IF NOT EXISTS conversation_memory (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "userId" TEXT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  "recentMessages" JSONB NOT NULL DEFAULT '[]',
+  summary TEXT,
+  "turnCount" INT NOT NULL DEFAULT 0,
+  "updatedAt" TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- DailyScore finances column
+ALTER TABLE daily_scores ADD COLUMN IF NOT EXISTS "financesScore" INT;
+```
+
+### 2. lib/goals.ts (nuevo)
+
+CRUD completo para objetivos del usuario. Funciones: `getGoals(userId)` (upsert — crea fila vacia si no existe), `updateGoals(userId, data)`, `getModuleWeight(userId, module)`. Los objetivos se usan en todos los prompts del sistema para personalizar las respuestas de los agentes.
+
+**API Route:** `GET/PATCH /api/goals` — requiere auth, valida campos permitidos por whitelist.
+
+### 3. Sistema de Prompts de Agentes (agents/prompts/index.ts)
+
+Prompts personalizados por modulo basados en los objetivos del usuario. Funciones exportadas:
+- `buildOrchestratorPrompt(goals, summary?)` — prompt del orquestrador con contexto de objetivos y resumen de conversacion
+- `buildSleepPrompt(goals)` — prompt del agente de sueno
+- `buildFitnessPrompt(goals)` — prompt del agente de fitness
+- `buildSynthesisPrompt(goals)` — prompt del agente de sintesis cross-modulo
+
+**Agente de sueno actualizado:** En `process()` carga goals con `getGoals(userId)` y pasa `buildSleepPrompt(goals)` como `systemPrompt` a `detectIntentAI()`.
+
+### 4. lib/scoring.ts (actualizacion)
+
+**Finanzas integrado al score global:** `calcFinancesScoreForDate()` exportada. `calculateFullScore()` ahora retorna `finances: { score, met, missed }` ademas de los 5 modulos existentes. El score global pondera finanzas junto con los demas modulos.
+
+**Pesos dinamicos:** `calculateFullScore` ahora acepta `weights` opcionales (desde UserGoals). Si no hay objetivos, usa pesos iguales para todos los modulos.
+
+### 5. lib/conversation.ts (nuevo)
+
+Memoria de conversacion rolling-window para WhatsApp, inspirada en `Core/memory_service.py`.
+
+**Constantes:** K=8 (turnos recientes), M=12 (trigger de resumen por cantidad), GAP_H=6 (trigger de resumen por tiempo).
+
+**Funciones:**
+- `getConversationContext(userId)` — carga `recentTurns` + `summary` de la DB
+- `addTurn(userId, role, content)` — agrega turno, triggerea resumen si necesario
+- `formatContextForPrompt(ctx)` — formatea para incluir en el system prompt
+- `clearConversationMemory(userId)` — reset completo
+- `summarizeTurns()` — llama Claude Haiku (≤120 palabras, tercera persona, espanol rioplatense, incorpora resumen anterior)
+
+### 6. lib/orchestrator.ts (refactor v2)
+
+**Flujo v2:**
+1. Carga contexto de conversacion + objetivos del usuario en paralelo
+2. Guarda turno user en memoria (no bloqueante)
+3. Claude Haiku clasifica modulo (rapido, barato)
+4. Agente especialista ejecuta accion y retorna datos crudos
+5. Claude Sonnet genera respuesta final con voz natural + contexto
+6. Guarda turno assistant en memoria
+
+**Nuevo modulo `synthesis`:** Detecta preguntas cross-domain ("como voy en general", "analisis de la semana").
+
+**`generateFinalResponse()`:** Claude Sonnet (claude-sonnet-4-6), max_tokens: 350. Voz rioplatense, sin asteriscos, max 3-4 oraciones para respuestas simples.
+
+### 7. agents/synthesis/index.ts (nuevo)
+
+Agente cross-modulo que detecta patrones entre sleep, fitness, nutricion, proyectos y finanzas.
+
+**`loadMultiModuleData(userId, windowDays)`:** Carga datos de todos los modulos en paralelo con `Promise.allSettled`.
+
+**`buildDataSummary(data)`:** Formatea datos para Claude: periodos, registros de sueno, workouts, comidas, scores diarios, proyectos.
+
+**`callSynthesisAI(systemPrompt, dataSummary)`:** Claude Sonnet, max 3 patrones/conexiones, recomendacion concreta, sin markdown.
+
+**API publica:**
+- `analyze(input)` — analisis completo, retorna `SynthesisOutput` con insights + summary. Requiere minimo 3 dias de datos.
+- `getDailyInsight(userId)` — version corta (2 oraciones) para Morning Summary
+- `getSynthesisText(userId, days)` — texto completo para WhatsApp
+
+**Morning Summary actualizado:** Ahora incluye seccion "🔍 Insight" desde `synthesisAgent.getDailyInsight(userId)`.
+
+### 8. Agentes con process() restaurados
+
+`financesAgent.process()`, `fitnessAgent.process()`, `projectsAgent.process()` — metodos `process` agregados/restaurados para compatibilidad con el orquestrador. Tambien `getSleepYesterday()` agregado a `lib/sleep.ts` e importado en el agente de sueno.
+
+### 9. TypeScript — 0 errores
+
+Correcciones aplicadas:
+- Duplicados `onGoalsUpdate` removidos de 3 agentes (finances, fitness, projects)
+- `content` → `body` en WhatsApp webhook (campo correcto del schema)
+- `garmin.ts` null assertion en `getGarminSession`
+- 65 anotaciones `: any` agregadas a lambdas en lib/fitness, lib/nutrition, lib/sleep, lib/scoring, lib/projects, agents/synthesis
+- `FinancesReport.monthly.totalIncome/totalExpenses` (fields correctos)
+- `fetchGarminActivities` recibe `string` no `Date`
+- `getFinancesSummaryText` puede retornar null — fallback agregado
+- `whatsAppMessages WhatsAppMessage[]` agregado al modelo User en Prisma
+
+**`npx tsc --noEmit` pasa con 0 errores.**
+
+---
+
+*Ultima actualizacion: Mayo 2026 - IA avanzada completa: objetivos, memoria de conversacion, agente de sintesis, TypeScript limpio.*

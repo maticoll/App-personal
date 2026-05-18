@@ -91,10 +91,10 @@ export async function getTodayNutritionSummary(
     db.userSettings.findUnique({ where: { userId } }),
   ]);
 
-  const totalWaterThermos = waterLogs.reduce((acc, w) => acc + w.thermos, 0);
+  const totalWaterThermos = waterLogs.reduce((acc: any, w: any) => acc + w.thermos, 0);
   const waterGoalThermos = settings?.dailyWaterGoalThermos ?? 1.0;
 
-  const mealsWithMacros = meals.map((m) => ({
+  const mealsWithMacros = meals.map((m: any) => ({
     id: m.id,
     date: m.date,
     mealType: m.mealType,
@@ -108,25 +108,25 @@ export async function getTodayNutritionSummary(
     createdAt: m.createdAt,
   }));
 
-  const mealsWithCalories = meals.filter((m) => m.calories !== null);
+  const mealsWithCalories = meals.filter((m: any) => m.calories !== null);
   const totalCalories =
     mealsWithCalories.length > 0
-      ? mealsWithCalories.reduce((acc, m) => acc + (m.calories ?? 0), 0)
+      ? mealsWithCalories.reduce((acc: any, m: any) => acc + (m.calories ?? 0), 0)
       : null;
   const totalProteinG =
-    meals.some((m) => m.proteinG !== null)
-      ? meals.reduce((acc, m) => acc + (m.proteinG ?? 0), 0)
+    meals.some((m: any) => m.proteinG !== null)
+      ? meals.reduce((acc: any, m: any) => acc + (m.proteinG ?? 0), 0)
       : null;
   const totalCarbsG =
-    meals.some((m) => m.carbsG !== null)
-      ? meals.reduce((acc, m) => acc + (m.carbsG ?? 0), 0)
+    meals.some((m: any) => m.carbsG !== null)
+      ? meals.reduce((acc: any, m: any) => acc + (m.carbsG ?? 0), 0)
       : null;
   const totalFatG =
-    meals.some((m) => m.fatG !== null)
-      ? meals.reduce((acc, m) => acc + (m.fatG ?? 0), 0)
+    meals.some((m: any) => m.fatG !== null)
+      ? meals.reduce((acc: any, m: any) => acc + (m.fatG ?? 0), 0)
       : null;
 
-  const mealTypes = meals.map((m) => m.mealType);
+  const mealTypes = meals.map((m: any) => m.mealType);
   const hasAllMainMeals =
     mealTypes.includes("BREAKFAST") &&
     mealTypes.includes("LUNCH") &&
@@ -383,7 +383,7 @@ export async function logWater(
     db.userSettings.findUnique({ where: { userId } }),
   ]);
 
-  const totalThermos = waterLogs.reduce((acc, w) => acc + w.thermos, 0);
+  const totalThermos = waterLogs.reduce((acc: any, w: any) => acc + w.thermos, 0);
   const goal = settings?.dailyWaterGoalThermos ?? 1.0;
 
   return { totalThermos, goal };
@@ -423,7 +423,7 @@ export async function getWeeklyNutritionStats(
 
   // Calorías promedio (solo días con datos)
   const dayCaloriesMap = new Map<string, number>();
-  for (const meal of meals.filter((m) => m.calories !== null)) {
+  for (const meal of meals.filter((m: any) => m.calories !== null)) {
     const key = meal.date.toISOString().split("T")[0];
     dayCaloriesMap.set(key, (dayCaloriesMap.get(key) ?? 0) + (meal.calories ?? 0));
   }
@@ -521,7 +521,7 @@ export async function getWaterReminderText(userId: string): Promise<string | nul
     db.userSettings.findUnique({ where: { userId } }),
   ]);
 
-  const totalThermos = waterLogs.reduce((acc, w) => acc + w.thermos, 0);
+  const totalThermos = waterLogs.reduce((acc: any, w: any) => acc + w.thermos, 0);
   const goal = settings?.dailyWaterGoalThermos ?? 1.0;
 
   if (totalThermos >= goal) return null; // Ya cumplió, no enviar recordatorio

@@ -73,11 +73,11 @@ export default async function SettingsPage() {
         <div className="flex items-center gap-2 mb-1">
           <Settings className="w-5 h-5 text-on-surface-variant" />
           <h2 className="text-xl font-bold text-on-surface">
-            Configuración
+            Configuracion
           </h2>
         </div>
         <p className="text-sm text-on-surface-variant">
-          Hábitos, integraciones y preferencias
+          Habitos, integraciones y preferencias
         </p>
       </div>
 

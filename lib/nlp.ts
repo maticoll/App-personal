@@ -10,15 +10,17 @@ type IntentMap = Record<string, string>; // { intent: "descripcion corta" }
  * Clasifica el mensaje del usuario dentro de los intents validos
  * usando Claude Haiku como motor de NLP.
  *
- * @param context  - Rol del agente (p.ej. "eres el agente de sueno")
- * @param intents  - Mapa de intents validos con descripcion breve
- * @param message  - Texto del usuario a clasificar
- * @returns        - Una de las keys de `intents`, o "unknown" si falla
+ * @param context     - Rol del agente (p.ej. "eres el agente de sueno"), o prompt completo si systemPrompt no se pasa
+ * @param intents     - Mapa de intents validos con descripcion breve
+ * @param message     - Texto del usuario a clasificar
+ * @param systemPrompt - (opcional) Prompt completo del agente especialista para mejor contexto
+ * @returns           - Una de las keys de `intents`, o "unknown" si falla
  */
 export async function detectIntentAI(
   context: string,
   intents: IntentMap,
-  message: string
+  message: string,
+  systemPrompt?: string
 ): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -32,6 +34,19 @@ export async function detectIntentAI(
 
   const validKeys = Object.keys(intents).join(", ");
 
+  // Si hay un prompt especialista, úsalo como system y deja el context en el user message
+  const systemContent = systemPrompt
+    ? systemPrompt + "\n\nTu tarea ahora es SOLO clasificar el intent del mensaje. Responde con UNA SOLA PALABRA."
+    : undefined;
+
+  const userContent = systemPrompt
+    ? `Clasifica este mensaje en uno de estos intents:\n${intentList}\n\nMensaje: "${message}"\n\nResponde SOLO con el nombre del intent (${validKeys}).`
+    : context + "\n\n" +
+      "Clasifica este mensaje del usuario en UNO de estos intents:\n" +
+      intentList + "\n\n" +
+      "Mensaje: \"" + message + "\"\n\n" +
+      "Responde SOLO con el nombre del intent (" + validKeys + "). Sin explicaciones.";
+
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -43,17 +58,8 @@ export async function detectIntentAI(
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 20,
-        messages: [
-          {
-            role: "user",
-            content:
-              context + "\n\n" +
-              "Clasifica este mensaje del usuario en UNO de estos intents:\n" +
-              intentList + "\n\n" +
-              "Mensaje: \"" + message + "\"\n\n" +
-              "Responde SOLO con el nombre del intent (" + validKeys + "). Sin explicaciones.",
-          },
-        ],
+        ...(systemContent ? { system: systemContent } : {}),
+        messages: [{ role: "user", content: userContent }],
       }),
     });
 
