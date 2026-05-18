@@ -20,6 +20,8 @@
 
 import type { AgentInput, AgentOutput } from "@/lib/types";
 import { detectIntentAI } from "@/lib/nlp";
+import { getGoals } from "@/lib/goals";
+import { buildNutritionPrompt } from "@/agents/prompts";
 import {
   logMealNLP,
   logWater,
@@ -85,6 +87,8 @@ function extractDietContent(text: string): string {
 // --- Función principal ---
 
 export async function processNutritionMessage(userId: string, text: string): Promise<string> {
+  const goals = await getGoals(userId).catch(() => null);
+  const systemPrompt = goals ? buildNutritionPrompt(goals) : undefined;
   const intent = await detectIntentAI(
     "Eres el agente de nutricion de una app personal. El usuario registra lo que come y toma, consulta su resumen nutricional, o actualiza su dieta.",
     {
@@ -94,7 +98,8 @@ export async function processNutritionMessage(userId: string, text: string): Pro
       diet_update: "El usuario quiere cambiar o indicar cual es su dieta (cetogenica, vegana, sin gluten, etc.)",
       unknown: "Otro mensaje no relacionado a nutricion",
     },
-    text
+    text,
+    systemPrompt
   );
 
   try {

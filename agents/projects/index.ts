@@ -14,6 +14,8 @@ import {
 import { syncNotionToProjects } from "@/lib/notion";
 import type { AgentInput, AgentOutput } from "@/lib/types";
 import { detectIntentAI } from "@/lib/nlp";
+import { getGoals } from "@/lib/goals";
+import { buildProjectsPrompt } from "@/agents/prompts";
 
 // -------------------------------------------------------
 // Normalización de texto (sin acentos, igual que otros agentes)
@@ -44,7 +46,7 @@ type Intention =
   | "sync_notion"
   | "unknown";
 
-async function detectIntention(text: string): Promise<Intention> {
+async function detectIntention(text: string, systemPrompt?: string): Promise<Intention> {
   const intent = await detectIntentAI(
     `Eres el agente de proyectos de una app personal.
 IMPORTANTE: una TAREA es una acción concreta que pertenece a un proyecto (ej: "hacer el mockup", "llamar al cliente"). Un PROYECTO es un objetivo mayor o iniciativa (ej: "lanzar la web", "rediseñar la app").`,
@@ -57,7 +59,8 @@ IMPORTANTE: una TAREA es una acción concreta que pertenece a un proyecto (ej: "
       sync_notion: "El usuario quiere sincronizar con Notion",
       unknown: "Otro mensaje no relacionado a proyectos",
     },
-    text
+    text,
+    systemPrompt
   );
   return intent as Intention;
 }
@@ -356,7 +359,9 @@ export async function processProjectsMessage(
   userId: string,
   text: string
 ): Promise<string> {
-  const intention = await detectIntention(text);
+  const goals = await getGoals(userId).catch(() => null);
+  const systemPrompt = goals ? buildProjectsPrompt(goals) : undefined;
+  const intention = await detectIntention(text, systemPrompt);
 
   switch (intention) {
     case "create_project":

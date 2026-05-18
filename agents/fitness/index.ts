@@ -22,6 +22,8 @@ import {
 import { checkGarminStatus, fetchGarminActivities } from "@/lib/garmin";
 import { calcFitnessScoreForDate } from "@/lib/scoring";
 import { detectIntentAI } from "@/lib/nlp";
+import { getGoals } from "@/lib/goals";
+import { buildFitnessPrompt } from "@/agents/prompts";
 
 // ─── Parser de actividad cardio desde texto ──────────────────────────────────
 
@@ -102,6 +104,11 @@ export const fitnessAgent = {
   async process(input: AgentInput): Promise<AgentOutput> {
     const { userId, message } = input;
     const text = message.toLowerCase();
+
+    // Cargar objetivos para contexto del agente
+    const goals = await getGoals(userId).catch(() => null);
+    const systemPrompt = goals ? buildFitnessPrompt(goals) : undefined;
+    void systemPrompt; // usado por detectIntentAI si se refactoriza a NLP
 
     try {
       // Sync Garmin

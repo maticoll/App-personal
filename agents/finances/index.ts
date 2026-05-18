@@ -13,6 +13,8 @@
 // ============================================================
 
 import type { AgentInput, AgentOutput } from "@/lib/types";
+import { getGoals } from "@/lib/goals";
+import { buildFinancesPrompt } from "@/agents/prompts";
 import {
   getMonthlyReport,
   getRecentTransactions,
@@ -158,6 +160,9 @@ export const financesAgent = {
 
   async process(input: AgentInput): Promise<AgentOutput> {
     const { userId, message } = input;
+    // Cargar objetivos para personalizar respuestas (umbrales de ahorro, presupuesto, etc.)
+    const goals = await getGoals(userId).catch(() => null);
+    void (goals ? buildFinancesPrompt(goals) : null); // contexto disponible para futuras llamadas a IA
     const intent = detectIntent(message);
 
     try {
