@@ -293,18 +293,3 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     );
   }
 }
-console.log("[morning-summary] Enviado a " + toNumber + " para userId=" + user.id);
-    return NextResponse.json({
-      ok: true,
-      message: "Morning summary enviado",
-      to: toNumber,
-      lines: message.split("\n").length,
-    });
-  } catch (error) {
-    console.error("[morning-summary] Error:", error);
-    return NextResponse.json(
-      { ok: false, error: "Error enviando morning summary" },
-      { status: 500 }
-    );
-  }
-}
