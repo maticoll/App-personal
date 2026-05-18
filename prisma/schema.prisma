@@ -615,8 +615,6 @@ model WhatsAppMessage {
   status    MessageStatus    @default(PENDING)
 
   content   String
-  mediaUrl  String?
-  mediaType String?
 
   processedAt DateTime?
 
