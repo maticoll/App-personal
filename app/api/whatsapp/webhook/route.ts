@@ -123,7 +123,7 @@ async function processIncomingMessage(body: any): Promise<void> {
       data: {
         userId,
         direction: "INBOUND",
-        body: messageText,
+        content: messageText,
         status: "PENDING",
         waMessageId: messageId,
       },
@@ -147,7 +147,7 @@ async function processIncomingMessage(body: any): Promise<void> {
       data: {
         userId,
         direction: "OUTBOUND",
-        body: response,
+        content: response,
         status: "PROCESSED",
         processedAt: new Date(),
       },

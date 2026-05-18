@@ -614,7 +614,7 @@ model WhatsAppMessage {
   direction MessageDirection
   status    MessageStatus    @default(PENDING)
 
-  body      String
+  content   String
   mediaUrl  String?
   mediaType String?
 
