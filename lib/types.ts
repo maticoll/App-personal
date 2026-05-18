@@ -32,6 +32,7 @@ export type ScoreDetails = {
   fitness?: { met: string[]; missed: string[] };
   nutrition?: { met: string[]; missed: string[] };
   projects?: { met: string[]; missed: string[] };
+  finances?: { met: string[]; missed: string[] };
 };
 
 // --- Módulos ---
