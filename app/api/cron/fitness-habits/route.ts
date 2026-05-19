@@ -16,7 +16,8 @@ import { db } from "@/lib/db";
 import { checkSmartHabitDeviation } from "@/lib/fitness";
 import { verifyCronSecret } from "@/lib/cron";
 import { findFreeSlots } from "@/lib/calendar";
-import { sendTextMessage } from "@/lib/whatsapp";
+import { sendTemplateMessage, sendTextMessage } from "@/lib/whatsapp";
+import { logger } from "@/lib/logger";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -33,8 +34,11 @@ function formatTime(date: Date): string {
 
 export async function GET(req: NextRequest) {
   if (!verifyCronSecret(req)) {
+    logger.warn("cron/fitness-habits", { event: "unauthorized" });
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
+
+  logger.info("cron/fitness-habits", { event: "start" });
 
   try {
     const users = await db.userSettings.findMany({
@@ -60,56 +64,69 @@ export async function GET(req: NextRequest) {
       const status = await checkSmartHabitDeviation(user.userId);
       if (!status.shouldNotify) continue;
 
-      console.log(`[fitness-habits] Desvío para userId=${user.userId}: ${status.message}`);
+      logger.info("cron/fitness-habits", { event: "deviation_detected", userId: user.userId });
 
       // 2. Buscar huecos libres en Google Calendar para hoy (90 min de gym)
       const today = new Date();
-      let suggestionText = "";
+      let slotSuggestion: string | null = null;
 
       try {
         const freeSlots = await findFreeSlots(user.userId, today, 90);
-
         if (freeSlots.length > 0) {
           const bestSlot = freeSlots[0];
-          const slotStart = formatTime(bestSlot.start);
-          const slotEnd = formatTime(bestSlot.end);
-          suggestionText =
-            `\n\nTenés un hueco libre a las ${slotStart}-${slotEnd}. ` +
-            `¿Querés que te lo agendo? Respondé "sí agendame" para confirmarlo.`;
+          slotSuggestion =
+            `Tenés un hueco libre a las ${formatTime(bestSlot.start)}-${formatTime(bestSlot.end)}. ` +
+            `¿Querés que te lo agendo?`;
         }
       } catch (calErr) {
-        // Calendar no conectado o error — igualmente mandamos la notificación base
-        console.warn(`[fitness-habits] No se pudo consultar Calendar para userId=${user.userId}:`, calErr);
+        logger.warn("cron/fitness-habits", { event: "calendar_error", userId: user.userId, error: String(calErr) });
       }
 
-      // 3. Armar mensaje y enviar por WhatsApp
-      const baseMessage =
-        `💪 ${status.message}` + suggestionText;
-
+      // 3. Enviar template aprobado + sugerencia de slot como texto libre
       let sentWhatsApp = false;
       if (user.whatsappNumber) {
         try {
-          await sendTextMessage(user.whatsappNumber, baseMessage);
+          // Template con botón Quick Reply — abre ventana de 24hs
+          await sendTemplateMessage(
+            user.whatsappNumber,
+            "gym_habit_reminder",
+            [], // sin variables en el body
+            [
+              {
+                type: "button",
+                sub_type: "quick_reply",
+                index: 0,
+                parameters: [{ type: "payload", payload: "AGENDAR_GYM" }],
+              },
+            ]
+          );
+
+          // Si hay hueco en Calendar, mandarlo como texto libre dentro de la ventana abierta
+          if (slotSuggestion) {
+            await sendTextMessage(user.whatsappNumber, slotSuggestion);
+          }
+
           sentWhatsApp = true;
         } catch (waErr) {
-          console.error(`[fitness-habits] Error enviando WhatsApp a userId=${user.userId}:`, waErr);
+          logger.error("cron/fitness-habits", { event: "whatsapp_error", userId: user.userId, error: String(waErr) });
         }
       }
 
       notifications.push({
         userId: user.userId,
-        message: baseMessage,
+        message: slotSuggestion ?? "gym_habit_reminder template enviado",
         sentWhatsApp,
       });
     }
 
+    logger.info("cron/fitness-habits", { event: "complete", users: users.length, deviations: notifications.length });
     return NextResponse.json({
       ok: true,
       message: `${users.length} usuarios revisados — ${notifications.length} desvíos detectados`,
       notifications,
     });
   } catch (err) {
-    console.error("[fitness-habits cron] Error:", err);
+    logger.error("cron/fitness-habits", { event: "error", error: String(err) });
     return NextResponse.json(
       { ok: false, error: "Error en cron de fitness habits" },
       { status: 500 }

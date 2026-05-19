@@ -63,6 +63,9 @@ model User {
   // Memoria de conversación WhatsApp
   conversationMemory ConversationMemory?
 
+  // Transacción pendiente de confirmación (finanzas)
+  pendingTransaction PendingTransaction?
+
   // WhatsApp mensajes
   whatsAppMessages   WhatsAppMessage[]
 
@@ -586,10 +589,31 @@ model UserHabit {
 }
 
 // ============================================================
-// MENSAJES DEL ORQUESTRADOR (WhatsApp)
-// TODO: Sesión 8 — orquestrador completo
+// PENDING TRANSACTION (Finanzas / HERMES)
+// Estado del flujo de confirmacion de transacciones via WhatsApp.
+//   step "select_card" -> usuario elige tarjeta
+//   step "confirm"     -> usuario confirma con si/no
 // ============================================================
 
+model PendingTransaction {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+
+  // Datos de la transacción parseada (amount, type, description, cardId, etc.)
+  data      Json
+
+  // Estado del flujo: "select_card" | "confirm"
+  step      String   @default("confirm")
+
+  // Lista de tarjetas disponibles (sólo cuando step = "select_card")
+  cards     Json?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("pending_transactions")
+}
 
 // ============================================================
 // MENSAJES DEL ORQUESTRADOR (WhatsApp)

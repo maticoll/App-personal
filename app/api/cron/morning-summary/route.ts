@@ -15,13 +15,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyCronSecret } from "@/lib/cron";
-import { sendTextMessage } from "@/lib/whatsapp";
+import { sendTextMessage, sendTemplateMessage } from "@/lib/whatsapp";
 import { db } from "@/lib/db";
 import { scoringAgent } from "@/agents/scoring";
 import { sleepAgent } from "@/agents/sleep";
 import { synthesisAgent } from "@/agents/synthesis";
 import { getNutritionSummaryText } from "@/lib/nutrition";
 import { getTodayEventsText } from "@/lib/calendar";
+import { logger } from "@/lib/logger";
 
 // -------------------------------------------------------
 // Tipos para la Bible API
@@ -184,8 +185,12 @@ function buildMessage(parts: MessageParts): string {
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!verifyCronSecret(req)) {
+    logger.warn("cron/morning-summary", { event: "unauthorized" });
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
+
+  const start = Date.now();
+  logger.info("cron/morning-summary", { event: "start" });
 
   try {
     // --- 1. Resolver usuario destinatario ---
@@ -276,9 +281,31 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     });
 
     // --- 6. Enviar por WhatsApp ---
+    // Primero: template aprobado para abrir ventana de 24hs ({{1}} = fecha de ayer)
+    const dateLabel = yesterday.toLocaleDateString("es-UY", {
+      day: "numeric",
+      month: "long",
+      timeZone: "America/Montevideo",
+    });
+    await sendTemplateMessage(toNumber, "morning_summary", [
+      { type: "text", text: dateLabel },
+    ]);
+    // Segundo: mensaje completo como texto libre (gratis dentro de la ventana abierta)
     await sendTextMessage(toNumber, message);
 
-    console.log("[morning-summary] Enviado a " + toNumber + " para userId=" + user.id);
+    logger.info("cron/morning-summary", {
+      event: "sent",
+      to: toNumber,
+      userId: user.id,
+      globalScore,
+      hasSleep: !!sleepValue,
+      hasNutrition: !!nutritionValue,
+      hasAgenda: !!agendaValue,
+      hasInsight: !!insightValue,
+      lines: message.split("\n").length,
+      durationMs: Date.now() - start,
+    });
+
     return NextResponse.json({
       ok: true,
       message: "Morning summary enviado",
@@ -286,7 +313,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       lines: message.split("\n").length,
     });
   } catch (error) {
-    console.error("[morning-summary] Error:", error);
+    logger.error("cron/morning-summary", { event: "error", error: String(error), durationMs: Date.now() - start });
     return NextResponse.json(
       { ok: false, error: "Error enviando morning summary" },
       { status: 500 }

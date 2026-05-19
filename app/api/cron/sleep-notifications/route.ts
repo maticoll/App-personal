@@ -9,13 +9,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyCronSecret } from "@/lib/cron";
-import { sendTextMessage } from "@/lib/whatsapp";
+import { sendTemplateMessage } from "@/lib/whatsapp";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
   if (!verifyCronSecret(req)) {
+    logger.warn("cron/sleep-notifications", { event: "unauthorized" });
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
 
+  logger.info("cron/sleep-notifications", { event: "start" });
   const now = new Date();
   const sent: string[] = [];
   const errors: string[] = [];
@@ -34,7 +37,7 @@ export async function GET(req: NextRequest) {
     for (const user of users) {
       if (!user.whatsappNumber) continue;
 
-      const notifications: Array<{ type: string; message: string }> = [];
+      const notifications: Array<{ type: "bedtime_reminder" | "wakeup_alert" }> = [];
 
       // --- Notificación 1: Recordatorio de dormir ---
       if (user.expectedSleepTime) {
@@ -55,10 +58,7 @@ export async function GET(req: NextRequest) {
           });
 
           if (!hasTodaySleep) {
-            notifications.push({
-              type: "bedtime_reminder",
-              message: `🌙 Es casi hora de dormir (${user.expectedSleepTime}). Que descanses bien!`,
-            });
+            notifications.push({ type: "bedtime_reminder" });
           }
         }
       }
@@ -79,35 +79,33 @@ export async function GET(req: NextRequest) {
         });
 
         if (pendingSleep) {
-          notifications.push({
-            type: "wake_reminder",
-            message: `☀️ Buenos dias! No olvides registrar que te despertaste para completar tu sueno de anoche.`,
-          });
+          notifications.push({ type: "wakeup_alert" });
         }
       }
 
-      // --- Enviar notificaciones por WhatsApp ---
+      // --- Enviar notificaciones por WhatsApp usando templates aprobados ---
       for (const notification of notifications) {
         try {
-          await sendTextMessage(user.whatsappNumber, notification.message);
+          if (notification.type === "bedtime_reminder") {
+            // {{1}} = hora esperada de sueño (ej: "23:00")
+            await sendTemplateMessage(user.whatsappNumber, "bedtime_reminder", [
+              { type: "text", text: user.expectedSleepTime ?? "tu hora configurada" },
+            ]);
+          } else if (notification.type === "wakeup_alert") {
+            // Sin variables — template estático
+            await sendTemplateMessage(user.whatsappNumber, "wakeup_alert");
+          }
           sent.push(`${user.userId}:${notification.type}`);
-          console.log(
-            `[sleep-notifications] Enviado ${notification.type} a userId=${user.userId}`
-          );
+          console.log(`[sleep-notifications] Enviado ${notification.type} a userId=${user.userId}`);
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
           errors.push(`${user.userId}:${notification.type} → ${errMsg}`);
-          console.error(
-            `[sleep-notifications] Error enviando ${notification.type} a userId=${user.userId}:`,
-            err
-          );
+          logger.error("cron/sleep-notifications", { event: "send_error", userId: user.userId, type: notification.type, error: errMsg });
         }
       }
     }
 
-    console.log(
-      `[sleep-notifications] Resumen: ${sent.length} enviadas, ${errors.length} errores`
-    );
+    logger.info("cron/sleep-notifications", { event: "complete", sent: sent.length, errors: errors.length });
 
     return NextResponse.json({
       ok: true,
@@ -116,7 +114,7 @@ export async function GET(req: NextRequest) {
       detail: sent,
     });
   } catch (error) {
-    console.error("[sleep-notifications cron] Error:", error);
+    logger.error("cron/sleep-notifications", { event: "error", error: String(error) });
     return NextResponse.json(
       { ok: false, error: "Error en cron de notificaciones" },
       { status: 500 }

@@ -9,11 +9,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { syncGarminSleepRange } from "@/lib/garmin";
 import { verifyCronSecret } from "@/lib/cron";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
   if (!verifyCronSecret(req)) {
+    logger.warn("cron/sleep-sync", { event: "unauthorized" });
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
+
+  const start = Date.now();
+  logger.info("cron/sleep-sync", { event: "start" });
 
   const results: Array<{
     userId: string;
@@ -40,19 +45,28 @@ export async function GET(req: NextRequest) {
         const result = await syncGarminSleepRange(userId, from, to);
         results.push({ userId, ...result });
       } catch (err) {
-        console.error(`[sleep-sync cron] Error para userId ${userId}:`, err);
+        logger.error("cron/sleep-sync", { event: "user_error", userId, error: String(err) });
         results.push({ userId, synced: 0, errors: 1, skipped: 0 });
       }
     }
 
-    console.log("[sleep-sync cron] Completado:", results);
+    const totalSynced = results.reduce((a, r) => a + r.synced, 0);
+    const totalErrors = results.reduce((a, r) => a + r.errors, 0);
+    logger.info("cron/sleep-sync", {
+      event: "complete",
+      users: usersWithGarmin.length,
+      totalSynced,
+      totalErrors,
+      durationMs: Date.now() - start,
+    });
+
     return NextResponse.json({
       ok: true,
       message: `Sync completado — ${usersWithGarmin.length} usuarios procesados`,
       results,
     });
   } catch (error) {
-    console.error("[sleep-sync cron] Error general:", error);
+    logger.error("cron/sleep-sync", { event: "error", error: String(error), durationMs: Date.now() - start });
     return NextResponse.json(
       { ok: false, error: "Error en cron de sleep sync" },
       { status: 500 }

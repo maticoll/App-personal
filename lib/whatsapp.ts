@@ -87,6 +87,76 @@ export async function downloadAudio(audioId: string): Promise<Buffer> {
   return Buffer.from(arrayBuffer);
 }
 
+// -------------------------------------------------------
+// sendTemplateMessage
+// Envía un template aprobado por Meta (necesario para mensajes
+// proactivos fuera de la ventana de 24hs del usuario).
+//
+// Uso básico (sin botones):
+//   await sendTemplateMessage(to, "wakeup_alert", [])
+//
+// Con variables:
+//   await sendTemplateMessage(to, "bedtime_reminder", [
+//     { type: "text", text: "23:00" }
+//   ])
+//
+// Con botón Quick Reply (gym):
+//   await sendTemplateMessage(to, "gym_habit_reminder", [], [
+//     { type: "button", sub_type: "quick_reply", index: 0,
+//       parameters: [{ type: "payload", payload: "AGENDAR_GYM" }] }
+//   ])
+// -------------------------------------------------------
+
+export type TemplateTextParam = { type: "text"; text: string };
+export type TemplateButtonParam = {
+  type: "button";
+  sub_type: "quick_reply" | "url";
+  index: number;
+  parameters: Array<{ type: "payload"; payload: string } | { type: "text"; text: string }>;
+};
+
+export async function sendTemplateMessage(
+  to: string,
+  templateName: string,
+  bodyParams: TemplateTextParam[] = [],
+  buttonComponents: TemplateButtonParam[] = [],
+  languageCode = "es"
+): Promise<void> {
+  const phoneId = process.env.WHATSAPP_PHONE_ID;
+  const token = process.env.WHATSAPP_TOKEN;
+  if (!phoneId || !token) throw new Error("[whatsapp] WHATSAPP_PHONE_ID o WHATSAPP_TOKEN no configurados");
+
+  // Construir array de componentes
+  const components: object[] = [];
+  if (bodyParams.length > 0) {
+    components.push({ type: "body", parameters: bodyParams });
+  }
+  for (const btn of buttonComponents) {
+    components.push(btn);
+  }
+
+  const url = "https://graph.facebook.com/v21.0/" + phoneId + "/messages";
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: languageCode },
+        components: components.length > 0 ? components : undefined,
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.text();
+    throw new Error("[whatsapp] Error enviando template '" + templateName + "' " + res.status + ": " + errorBody);
+  }
+}
+
 export async function transcribeAudio(buffer: Buffer): Promise<string> {
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) throw new Error("[whatsapp] OPENAI_API_KEY no configurada");

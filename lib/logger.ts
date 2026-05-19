@@ -23,7 +23,6 @@ function log(level: LogLevel, source: string, data: Record<string, unknown>): vo
     _time: new Date().toISOString(),
     level,
     source,
-    env: process.env.NODE_ENV ?? "development",
     ...data,
   };
 

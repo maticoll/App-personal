@@ -35,6 +35,7 @@ import {
   addTurn,
   formatContextForPrompt,
 } from "@/lib/conversation";
+import { getPending } from "@/lib/pending-transaction";
 
 type Module =
   | "sleep"
@@ -253,6 +254,25 @@ async function generateFinalResponse(
 export async function orchestrate(userId: string, text: string): Promise<string> {
   console.log(`[orchestrator] userId=${userId} texto="${text}"`);
 
+  // 0. Chequear transacción pendiente ANTES de clasificar módulo.
+  //    Si hay un pending activo, el mensaje es una respuesta al flujo de
+  //    confirmación de finanzas (selección de tarjeta o sí/no).
+  //    Se bypasea Haiku + Sonnet y se responde directo.
+  const pending = await getPending(userId).catch(() => null);
+  if (pending) {
+    console.log(`[orchestrator] Pending transaction encontrada (step: ${pending.step}) — desviando a financesAgent.handleConfirmation`);
+    const response = await financesAgent.handleConfirmation(userId, text, pending);
+    await Promise.all([
+      addTurn(userId, "user", text).catch((err) =>
+        console.error("[orchestrator] Error guardando turno user (pending):", err)
+      ),
+      addTurn(userId, "assistant", response).catch((err) =>
+        console.error("[orchestrator] Error guardando turno assistant (pending):", err)
+      ),
+    ]);
+    return response;
+  }
+
   // 1. Cargar contexto de conversación + objetivos del usuario en paralelo
   const [ctx, goals] = await Promise.all([
     getConversationContext(userId),
@@ -285,7 +305,6 @@ export async function orchestrate(userId: string, text: string): Promise<string>
       agentData
     );
   } else {
-    // Fallback si no hay goals: usar respuesta del agente directamente
     finalResponse = agentData;
   }
 

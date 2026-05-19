@@ -62,7 +62,7 @@ async function processIncomingMessage(body: any): Promise<void> {
     if (!parsed) return; // status update u otro evento no relevante
 
     const { from, messageId, type, text, audioId, timestamp } = parsed;
-    logger.info("whatsapp/webhook", { event: "message_received", from, messageId, type, timestamp });
+    logger.info("whatsapp/webhook", { event: "message_received", type, timestamp });
 
     // 2. Marcar como leido (best-effort)
     void markAsRead(messageId);
@@ -105,7 +105,7 @@ async function processIncomingMessage(body: any): Promise<void> {
         logger.info("whatsapp/webhook", { event: "audio_transcription_start", audioId });
         const audioBuffer = await downloadAudio(audioId);
         messageText = await transcribeAudio(audioBuffer);
-        logger.info("whatsapp/webhook", { event: "audio_transcription_ok", text: messageText });
+        logger.info("whatsapp/webhook", { event: "audio_transcription_ok", userMessage: messageText });
       } catch (err) {
         logger.error("whatsapp/webhook", { event: "audio_transcription_error", error: String(err) });
         await sendTextMessage(from, "No pude procesar el audio. Podes escribirlo?");
@@ -133,10 +133,10 @@ async function processIncomingMessage(body: any): Promise<void> {
     const orchestrateStart = Date.now();
     const response = await orchestrate(userId, messageText);
     logger.info("whatsapp/webhook", {
-      event: "orchestrate_ok",
-      userId,
+      event: "conversation",
+      userMessage: messageText,
+      agentResponse: response,
       durationMs: Date.now() - orchestrateStart,
-      responseLength: response.length,
     });
 
     // 7. Enviar respuesta al usuario

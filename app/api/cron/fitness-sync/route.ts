@@ -10,11 +10,16 @@ import { db } from "@/lib/db";
 import { fetchGarminActivities } from "@/lib/garmin";
 import { upsertWorkoutFromGarmin } from "@/lib/fitness";
 import { verifyCronSecret } from "@/lib/cron";
+import { logger } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
   if (!verifyCronSecret(req)) {
+    logger.warn("cron/fitness-sync", { event: "unauthorized" });
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
+
+  const start = Date.now();
+  logger.info("cron/fitness-sync", { event: "start" });
 
   try {
     const users = await db.userSettings.findMany({
@@ -40,7 +45,7 @@ export async function GET(req: NextRequest) {
             synced++;
           }
         } catch (err) {
-          console.error(`[fitness-sync] Error userId=${userId} date=${dateStr}:`, err);
+          logger.error("cron/fitness-sync", { event: "user_error", userId, date: dateStr, error: String(err) });
           errors++;
         }
 
@@ -51,7 +56,8 @@ export async function GET(req: NextRequest) {
     }
 
     const totalSynced = results.reduce((sum, r) => sum + r.synced, 0);
-    console.log(`[fitness-sync] Completado: ${totalSynced} actividades en ${users.length} usuarios`);
+    const totalErrors = results.reduce((sum, r) => sum + r.errors, 0);
+    logger.info("cron/fitness-sync", { event: "complete", users: users.length, totalSynced, totalErrors, durationMs: Date.now() - start });
 
     return NextResponse.json({
       ok: true,
@@ -59,7 +65,7 @@ export async function GET(req: NextRequest) {
       results,
     });
   } catch (err) {
-    console.error("[fitness-sync cron] Error:", err);
+    logger.error("cron/fitness-sync", { event: "error", error: String(err), durationMs: Date.now() - start });
     return NextResponse.json({ ok: false, error: "Error en cron de fitness sync" }, { status: 500 });
   }
 }
