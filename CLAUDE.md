@@ -627,3 +627,132 @@ Correcciones aplicadas:
 ---
 
 *Ultima actualizacion: Mayo 2026 - IA avanzada completa: objetivos, memoria de conversacion, agente de sintesis, TypeScript limpio.*
+
+---
+
+## Bloque Sesion 10 - Finanzas: Flujo WhatsApp + UI Estadisticas
+
+> Sesion: Mayo 2026 - Registro de gastos por WhatsApp con confirmacion + pagina de estadisticas con diseno Stitch "Precision Ledger"
+
+### 1. Schema Prisma - PendingTransaction
+
+Nuevo modelo para guardar estado del flujo de confirmacion de transacciones:
+
+```prisma
+model PendingTransaction {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  data      Json
+  step      String   @default("confirm")
+  cards     Json?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("pending_transactions")
+}
+```
+
+SQL para aplicar en Supabase:
+```sql
+CREATE TABLE IF NOT EXISTS pending_transactions (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "userId" TEXT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  data JSONB NOT NULL,
+  step TEXT NOT NULL DEFAULT 'confirm',
+  cards JSONB,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Accion requerida:** `npm run db:generate` en la maquina del usuario para regenerar el Prisma client.
+
+### 2. lib/pending-transaction.ts (nuevo)
+
+Tipos y funciones para el estado de transaccion pendiente:
+
+- `PendingStep = "select_card" | "confirm"`
+- `PendingTransactionData` - datos extraidos de la transaccion
+- `PendingRecord` - lo que devuelve `getPending`
+- `savePending(userId, data, step, cards?)` - upsert
+- `getPending(userId): Promise<PendingRecord | null>`
+- `clearPending(userId): Promise<void>`
+
+### 3. agents/finances/index.ts (reescritura completa, 475 lineas)
+
+**Tipos nuevos:** `ExtractedTransaction` con campos: `type`, `amount`, `currency`, `categoryHint`, `cardHint`, `description`, `date`, `confidence`.
+
+**Funciones internas:**
+- `extractTransaction(text, categories)`: Claude Haiku con lista completa de categorias en el prompt. Extrae la transaccion en JSON estructurado.
+- `fuzzyMatchCard(hint, cards)`: match por substring, luego primera palabra.
+- `fuzzyMatchCategory(hint, categories, type)`: exacto -> parcial -> parcial inverso -> "Otros" -> primero disponible.
+- `buildConfirmMessage(tx, card, category)`: mensaje de confirmacion con emoji, monto, fecha, categoria, tarjeta.
+- `handleCreateTransaction(userId, text, type)`: fetch cards+categories en paralelo, extrae, fuzzy match, si no encuentra tarjeta lista opciones y guarda en `select_card`, si encuentra todo guarda en `confirm`.
+- `handleConfirmation(userId, text, pending)` (exportada): maneja `select_card` (numero o nombre) y `confirm` (si/no). Llamada directamente desde el orquestrador.
+
+**5 intenciones en `financesAgent.process()`:** `query_spending`, `query_balance`, `query_report`, `create_expense`, `create_income`.
+
+### 4. lib/orchestrator.ts - Paso 0 (pending bypass)
+
+Antes de clasificar el modulo con Claude Haiku, el orquestrador chequea si hay una transaccion pendiente:
+
+```typescript
+const pending = await getPending(userId).catch(() => null);
+if (pending) {
+  const response = await financesAgent.handleConfirmation(userId, text, pending);
+  // guardar turnos en memoria...
+  return response; // bypass total de Haiku + Sonnet
+}
+```
+
+Esto asegura que "si", "no", "1", "2" etc. se intercepten correctamente sin que Haiku los clasifique como otro modulo.
+
+### 5. lib/finances.ts - Tipos extendidos
+
+Nuevos tipos agregados:
+- `FinancesCategoryBreakdown`: `{ name, emoji?, color?, total, currency? }`
+- `FinancesMonthlyReport`: +`expenseByCategory`, +`incomeByCategory`, +`topCategories`, +`expenseByCard`, +`dailyBalance`, +`openingBalance`
+- `FinancesReport.last6`: acepta tanto `income`/`expenses` como `totalIncome`/`totalExpenses` (compatibilidad con distintas versiones de la API)
+
+### 6. components/finances/FinancesModuleClient.tsx (reescritura, 491 lineas)
+
+Diseno basado en Stitch "Precision Ledger" (dark obsidian, #0D0F14 bg, #1A1D27 cards, #c0c1ff primary indigo).
+
+**Sub-componentes internos:**
+- `SectionLabel`: label en caps gris
+- `TrendChip`: capsule verde/rojo con flecha y porcentaje
+- `StatCard`: tarjeta de stat con label, valor y trend chip
+- `TopCategories`: barras de progreso proporcionales por categoria
+- `DonutChart`: CSS conic-gradient calculado desde porcentajes reales de la API
+- `DailyEvolution`: SVG inline con area chart desde `dailyBalance` (Record<string, number>)
+- `Last6Months`: barras agrupadas ingresos/gastos de los ultimos 6 meses
+- `CardExpenses`: barras proporcionales de gastos por tarjeta
+- `TransactionRow`: fila de transaccion con icono tipo, descripcion, monto coloreado
+
+**Helper `normalizeLast6()`:** normaliza los distintos nombres de campo que puede devolver la API (income/totalIncome, expenses/totalExpenses).
+
+Todas las secciones son condicionales - se omiten si no hay datos (empty states con texto neutral).
+
+### 7. Flujo completo de registro de gasto por WhatsApp
+
+```
+Usuario: "gaste 500 en el super con visa"
+  -> orchestrator: chequea pending (ninguno)
+  -> Haiku: clasifica "finances"
+  -> financesAgent.process(create_expense)
+    -> extractTransaction: { amount: 500, cardHint: "visa", categoryHint: "supermercado" }
+    -> getCards() + getCategories() en paralelo
+    -> fuzzyMatchCard("visa", cards) -> Visa Credito
+    -> fuzzyMatchCategory("supermercado", ...) -> Supermercados
+    -> savePending(step: "confirm")
+  -> Sonnet genera: "Confirmas gasto de $500 en Supermercados con Visa Credito el 19/05?"
+  
+Usuario: "si"
+  -> orchestrator: getPending() -> hay pending!
+  -> financesAgent.handleConfirmation(pending.step="confirm", "si")
+    -> createTransaction(...)
+    -> clearPending()
+  -> devuelve: "Listo! Gasto de $500 registrado."
+```
+
+Si la tarjeta no se encuentra: lista las tarjetas numeradas, guarda `step: "select_card"` con `cards` en la DB.
+
+*Ultima actualizacion: Mayo 2026 - Flujo WhatsApp completo para gastos/ingresos + UI estadisticas Precision Ledger.*

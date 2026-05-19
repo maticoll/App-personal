@@ -34,15 +34,29 @@ export type FinancesCategory = {
   icon?: string | null;
 };
 
+export type FinancesCategoryBreakdown = {
+  name: string;
+  emoji?: string | null;
+  color?: string | null;
+  total: number;
+  currency?: string;
+};
+
 export type FinancesMonthlyReport = {
   totalIncome: number;
   totalExpenses: number;
   balance: number;
-  byCategory?: Array<{
-    categoryName: string;
-    total: number;
-    count: number;
-  }>;
+  openingBalance?: number;
+  // Breakdown por categoría
+  expenseByCategory?: FinancesCategoryBreakdown[];
+  incomeByCategory?: Array<{ name: string; total: number }>;
+  topCategories?: FinancesCategoryBreakdown[];
+  // Breakdown por tarjeta
+  expenseByCard?: Array<{ name: string; total: number; currency?: string }>;
+  // Evolución diaria del saldo (YYYY-MM-DD -> monto)
+  dailyBalance?: Record<string, number>;
+  // Campo legacy
+  byCategory?: Array<{ categoryName: string; total: number; count: number }>;
 };
 
 export type FinancesReport = {
@@ -50,9 +64,13 @@ export type FinancesReport = {
   last6: Array<{
     month: number;
     year: number;
-    totalIncome: number;
-    totalExpenses: number;
-    balance: number;
+    label?: string;
+    // Campos que puede devolver la API (distintos nombres según versión)
+    totalIncome?: number;
+    totalExpenses?: number;
+    income?: number;
+    expenses?: number;
+    balance?: number;
   }>;
 };
 
