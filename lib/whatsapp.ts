@@ -7,6 +7,7 @@ export type WhatsAppIncomingMessage = {
   text?: string;
   audioId?: string;
   timestamp: Date;
+  forwarded?: boolean;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -22,11 +23,12 @@ export function parseIncomingWebhook(body: any): WhatsAppIncomingMessage | null 
     const timestamp = new Date(parseInt(msg.timestamp, 10) * 1000);
     const rawType: string = msg.type;
     if (!from || !messageId || !rawType) return null;
-    if (rawType === "text") return { from, messageId, type: "text", text: msg.text?.body ?? undefined, timestamp };
-    if (rawType === "audio") return { from, messageId, type: "audio", audioId: msg.audio?.id ?? undefined, timestamp };
-    if (rawType === "image") return { from, messageId, type: "image", timestamp };
-    if (rawType === "document") return { from, messageId, type: "document", timestamp };
-    return { from, messageId, type: "unknown", timestamp };
+    const forwarded: boolean = !!(msg.context?.forwarded || msg.context?.frequently_forwarded);
+    if (rawType === "text") return { from, messageId, type: "text", text: msg.text?.body ?? undefined, timestamp, forwarded };
+    if (rawType === "audio") return { from, messageId, type: "audio", audioId: msg.audio?.id ?? undefined, timestamp, forwarded };
+    if (rawType === "image") return { from, messageId, type: "image", timestamp, forwarded };
+    if (rawType === "document") return { from, messageId, type: "document", timestamp, forwarded };
+    return { from, messageId, type: "unknown", timestamp, forwarded };
   } catch (err) {
     console.error("[whatsapp] Error parseando webhook:", err);
     return null;

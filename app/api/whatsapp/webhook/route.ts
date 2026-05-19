@@ -61,11 +61,26 @@ async function processIncomingMessage(body: any): Promise<void> {
     const parsed = parseIncomingWebhook(body);
     if (!parsed) return; // status update u otro evento no relevante
 
-    const { from, messageId, type, text, audioId, timestamp } = parsed;
-    logger.info("whatsapp/webhook", { event: "message_received", type, timestamp });
+    const { from, messageId, type, text, audioId, timestamp, forwarded } = parsed;
+    logger.info("whatsapp/webhook", { event: "message_received", type, timestamp, forwarded });
 
     // 2. Marcar como leido (best-effort)
     void markAsRead(messageId);
+
+    // 2b. Audio reenviado: transcribir y devolver texto directamente, sin guardar en DB
+    if (forwarded && type === "audio" && audioId) {
+      try {
+        logger.info("whatsapp/webhook", { event: "forwarded_audio_transcription_start", audioId });
+        const audioBuffer = await downloadAudio(audioId);
+        const transcription = await transcribeAudio(audioBuffer);
+        logger.info("whatsapp/webhook", { event: "forwarded_audio_transcription_ok" });
+        await sendTextMessage(from, transcription || "No pude transcribir el audio.");
+      } catch (err) {
+        logger.error("whatsapp/webhook", { event: "forwarded_audio_transcription_error", error: String(err) });
+        await sendTextMessage(from, "No pude transcribir el audio reenviado. Intenta de nuevo.");
+      }
+      return;
+    }
 
     // 3. Resolver userId
     //    Primero buscar por numero de WhatsApp en UserSettings
