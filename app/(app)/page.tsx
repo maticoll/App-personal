@@ -131,7 +131,7 @@ export default async function DashboardPage() {
 
   const hora = new Date().getHours();
   const saludo = hora < 12 ? "Buenos dias" : hora < 19 ? "Buenas tardes" : "Buenas noches";
-  const emoji = hora < 12 ? "☀️" : hora < 19 ? "\U0001f324️" : "\U0001f319";
+  const emoji = hora < 12 ? "☀️" : hora < 19 ? "🌤️" : "🌙";
 
   const dateLabel = new Date().toLocaleDateString("es-UY", {
     weekday: "long",
