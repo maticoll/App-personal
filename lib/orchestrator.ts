@@ -209,7 +209,14 @@ async function generateFinalResponse(
     ? `\n\n${conversationContext}\n\n---`
     : "";
 
+  const nowUY = new Date().toLocaleString("es-UY", {
+    timeZone: "America/Montevideo",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
   const userContent =
+    `[Hora actual en Uruguay: ${nowUY}]\n\n` +
     `El usuario te envió: "${userMessage}"\n\n` +
     `El sistema procesó la solicitud y obtuvo estos datos:\n${agentData}\n\n` +
     `Generá una respuesta natural en español rioplatense. ` +

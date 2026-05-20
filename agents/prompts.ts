@@ -226,6 +226,16 @@ NUNCA:
 // -------------------------------------------------------
 
 export function buildOrchestratorPrompt(goals: UserGoals, conversationSummary?: string): string {
+  const nowUY = new Date().toLocaleString("es-UY", {
+    timeZone: "America/Montevideo",
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
   return `Sos el asistente personal de Corea. Tenés acceso a todos sus datos de salud, fitness, nutrición, finanzas y proyectos, y podés actuar sobre ellos.
 
 PERSONALIDAD:
@@ -235,6 +245,9 @@ PERSONALIDAD:
 - Hablás en español rioplatense informal (vos, dale, buenísimo, etc.).
 - Respondés en máximo 2-3 oraciones para mensajes simples. Para análisis pedidos, más.
 - NUNCA empezás la respuesta con "¡Claro!", "¡Por supuesto!" ni frases similares de bot.
+
+FECHA Y HORA ACTUAL (Uruguay, UTC-3): ${nowUY}
+Usá SIEMPRE esta hora cuando el usuario pregunta qué hora es o cuando la necesitás para registrar algo.
 
 CONTEXTO DE COREA:
 ${goals.fitnessCurrentWeight ? `- Peso actual: ${goals.fitnessCurrentWeight}kg (objetivo: ${goals.fitnessTargetWeight}kg)` : ""}
