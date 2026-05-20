@@ -129,9 +129,11 @@ export default async function DashboardPage() {
     userId ? loadSummaries(userId) : Promise.resolve(null),
   ]);
 
-  const hora = new Date().getHours();
-  const saludo = hora < 12 ? "Buenos dias" : hora < 19 ? "Buenas tardes" : "Buenas noches";
-  const emoji = hora < 12 ? "☀️" : hora < 19 ? "🌤️" : "🌙";
+  const hora = parseInt(
+    new Date().toLocaleString("es-UY", { timeZone: "America/Montevideo", hour: "numeric", hour12: false })
+  );
+  const saludo = hora < 13 ? "Buenos dias" : hora < 20 ? "Buenas tardes" : "Buenas noches";
+  const emoji = hora < 13 ? "☀️" : hora < 20 ? "🌤️" : "🌙";
 
   const dateLabel = new Date().toLocaleDateString("es-UY", {
     weekday: "long",
