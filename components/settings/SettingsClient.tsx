@@ -7,21 +7,17 @@
 //   - Hábitos (hora de dormir, días de gym, hora de gym)
 //   - Notificaciones (toggle WhatsApp)
 //   - WhatsApp (número de teléfono)
-//   - Tema (dark/light mode)
 //   - Notion (token + dbId)
 //   - Google Calendar (estado de conexión)
 //   - DangerZone (borrar datos del día)
 // ============================================================
 
 import { useState, useTransition } from "react";
-import { useTheme } from "next-themes";
 import { signOut } from "next-auth/react";
 import {
   User,
   Bell,
   MessageCircle,
-  Moon,
-  Sun,
   Dumbbell,
   Database,
   CalendarDays,
@@ -223,7 +219,6 @@ function SaveButton({
 // ─── Componente principal ────────────────────────────────────────────────────
 
 export function SettingsClient({ user, settings: initial, calendarStatus, goals: initialGoals }: Props) {
-  const { theme, setTheme } = useTheme();
   const [isPending, startTransition] = useTransition();
 
   // ─ Estado de cada sección ─
@@ -574,47 +569,6 @@ export function SettingsClient({ user, settings: initial, calendarStatus, goals:
           pending={isPending}
           saved={whatsappSaved}
         />
-      </SectionCard>
-
-      {/* ── Tema ── */}
-      <SectionCard title="Apariencia" icon={Moon}>
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <button
-            onClick={() => setTheme("dark")}
-            className={cn(
-              "flex flex-col items-center gap-2 p-4 rounded-xl border transition-all",
-              theme === "dark"
-                ? "border-accent bg-accent/10"
-                : "border-outline-variant/20 hover:border-accent/40"
-            )}
-          >
-            <Moon className="w-5 h-5 text-on-surface" />
-            <span className="text-sm font-medium text-on-surface">
-              Oscuro
-            </span>
-            {theme === "dark" && (
-              <Check className="w-4 h-4 text-accent" />
-            )}
-          </button>
-
-          <button
-            onClick={() => setTheme("light")}
-            className={cn(
-              "flex flex-col items-center gap-2 p-4 rounded-xl border transition-all",
-              theme === "light"
-                ? "border-accent bg-accent/10"
-                : "border-outline-variant/20 hover:border-accent/40"
-            )}
-          >
-            <Sun className="w-5 h-5 text-on-surface" />
-            <span className="text-sm font-medium text-on-surface">
-              Claro
-            </span>
-            {theme === "light" && (
-              <Check className="w-4 h-4 text-accent" />
-            )}
-          </button>
-        </div>
       </SectionCard>
 
       {/* ── Notion ── */}
