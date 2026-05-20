@@ -110,30 +110,30 @@ export async function downloadAudio(audioId: string): Promise<Buffer> {
 // -------------------------------------------------------
 
 export type TemplateTextParam = { type: "text"; text: string };
-export type TemplateButtonParam = {
+
+export type TemplateQuickReplyButton = {
   type: "button";
-  sub_type: "quick_reply" | "url";
+  sub_type: "QUICK_REPLY";
   index: number;
-  parameters: Array<{ type: "payload"; payload: string } | { type: "text"; text: string }>;
 };
 
 export async function sendTemplateMessage(
   to: string,
   templateName: string,
   bodyParams: TemplateTextParam[] = [],
-  buttonComponents: TemplateButtonParam[] = [],
-  languageCode = "es"
+  buttons: TemplateQuickReplyButton[] = [],
+  languageCode = "es_AR"
 ): Promise<void> {
   const phoneId = process.env.WHATSAPP_PHONE_ID;
   const token = process.env.WHATSAPP_TOKEN;
   if (!phoneId || !token) throw new Error("[whatsapp] WHATSAPP_PHONE_ID o WHATSAPP_TOKEN no configurados");
 
-  // Construir array de componentes
+  // Construir components: body (si hay variables) + botones
   const components: object[] = [];
   if (bodyParams.length > 0) {
     components.push({ type: "body", parameters: bodyParams });
   }
-  for (const btn of buttonComponents) {
+  for (const btn of buttons) {
     components.push(btn);
   }
 
@@ -143,13 +143,16 @@ export async function sendTemplateMessage(
     headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
     body: JSON.stringify({
       messaging_product: "whatsapp",
+      recipient_type: "individual",
       to,
       type: "template",
-      template: {
-        name: templateName,
-        language: { code: languageCode },
-        components: components.length > 0 ? components : undefined,
-      },
+      template: [
+        {
+          name: templateName,
+          language: { code: languageCode },
+          components: components.length > 0 ? components : undefined,
+        },
+      ],
     }),
   });
 

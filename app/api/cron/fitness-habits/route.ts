@@ -87,18 +87,13 @@ export async function GET(req: NextRequest) {
       if (user.whatsappNumber) {
         try {
           // Template con botón Quick Reply — abre ventana de 24hs
+          // Template "gym" en inglés, sin variables, con botón Quick Reply
           await sendTemplateMessage(
             user.whatsappNumber,
-            "gym_habit_reminder",
-            [], // sin variables en el body
-            [
-              {
-                type: "button",
-                sub_type: "quick_reply",
-                index: 0,
-                parameters: [{ type: "payload", payload: "AGENDAR_GYM" }],
-              },
-            ]
+            "gym",
+            [],
+            [{ type: "button", sub_type: "QUICK_REPLY", index: 0 }],
+            "en"
           );
 
           // Si hay hueco en Calendar, mandarlo como texto libre dentro de la ventana abierta

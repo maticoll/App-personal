@@ -88,12 +88,11 @@ export async function GET(req: NextRequest) {
         try {
           if (notification.type === "bedtime_reminder") {
             // {{1}} = hora esperada de sueño (ej: "23:00")
-            await sendTemplateMessage(user.whatsappNumber, "bedtime_reminder", [
+            await sendTemplateMessage(user.whatsappNumber, "bedtime", [
               { type: "text", text: user.expectedSleepTime ?? "tu hora configurada" },
             ]);
           } else if (notification.type === "wakeup_alert") {
-            // Sin variables — template estático
-            await sendTemplateMessage(user.whatsappNumber, "wakeup_alert");
+            // Template no creado en Meta — notificación desactivada
           }
           sent.push(`${user.userId}:${notification.type}`);
           console.log(`[sleep-notifications] Enviado ${notification.type} a userId=${user.userId}`);

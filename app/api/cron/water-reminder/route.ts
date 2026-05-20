@@ -50,10 +50,10 @@ export async function GET(req: NextRequest) {
 
       // Template: {{1}} termos actuales, {{2}} meta, {{3}} restantes
       try {
-        await sendTemplateMessage(user.whatsappNumber, "water_reminder", [
+        // Template "water": {{1}} termos actuales, {{2}} meta (sin variable de restantes)
+        await sendTemplateMessage(user.whatsappNumber, "water", [
           { type: "text", text: totalThermos.toFixed(1) },
           { type: "text", text: goal.toFixed(1) },
-          { type: "text", text: remaining },
         ]);
         sent.push(user.userId);
         logger.info("cron/water-reminder", { event: "sent", userId: user.userId, totalThermos, goal });

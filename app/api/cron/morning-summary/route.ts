@@ -287,7 +287,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       month: "long",
       timeZone: "America/Montevideo",
     });
-    await sendTemplateMessage(toNumber, "morning_summary", [
+    await sendTemplateMessage(toNumber, "servicios", [
       { type: "text", text: dateLabel },
     ]);
     // Segundo: mensaje completo como texto libre (gratis dentro de la ventana abierta)
