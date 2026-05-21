@@ -2,7 +2,8 @@
 // agents/calendar/index.ts — Agente de Google Calendar
 // Responsabilidades:
 //   - Responder consultas de agenda (hoy / semana)
-//   - Crear eventos en Google Calendar con confirmación del usuario
+//   - Crear eventos en Google Calendar
+//   - Mover / actualizar eventos existentes
 //   - Proveer contexto de agenda al orquestrador y al Morning Summary
 //   - Buscar huecos libres para reagendado de gym (smart habits)
 // ============================================================
@@ -12,11 +13,18 @@ import {
   getTodayEvents,
   getWeekEvents,
   createEvent,
+  updateEvent,
+  findEventByTitle,
   findFreeSlots,
   getTodayEventsText,
   getCalendarStatus,
   type CalendarEvent,
 } from "@/lib/calendar";
+import {
+  createReminder,
+  parseReminderRequest,
+  formatTimeLabel,
+} from "@/lib/reminders";
 import { detectIntentAI } from "@/lib/nlp";
 
 // ─── Tipos de intención ───────────────────────────────────────────────────────
@@ -25,6 +33,8 @@ type CalendarIntent =
   | "query_today"    // consultar agenda de hoy
   | "query_week"     // consultar agenda de la semana
   | "create_event"   // crear un evento en el calendario
+  | "update_event"   // mover / cambiar hora de un evento existente
+  | "remind_me"      // crear recordatorio personal ("recordame en X que...")
   | "status"         // verificar estado de conexión
   | "unknown";
 
@@ -36,7 +46,9 @@ async function detectIntent(text: string): Promise<CalendarIntent> {
     {
       query_today:  "El usuario quiere saber qué tiene hoy en su agenda o calendario",
       query_week:   "El usuario quiere saber qué tiene esta semana o los próximos días",
-      create_event: "El usuario quiere crear, agendar o agregar un evento al calendario",
+      create_event: "El usuario quiere crear, agendar o agregar un evento nuevo al calendario",
+      update_event: "El usuario quiere mover, cambiar la hora, reagendar o modificar un evento ya existente (palabras clave: movelo, cambialo, reagendalo, cambiale la hora, pasalo, re-agendar)",
+      remind_me:    "El usuario quiere que se le recuerde algo en X tiempo o en determinado momento (palabras clave: recordame, avisame, acordame, remindme, recordatorio)",
       status:       "El usuario pregunta si el calendario está conectado o vinculado",
       unknown:      "Otro mensaje no relacionado al calendario",
     },
@@ -45,15 +57,17 @@ async function detectIntent(text: string): Promise<CalendarIntent> {
   return intent as CalendarIntent;
 }
 
-// ─── Parseo de evento desde texto ─────────────────────────────────────────────
+// ─── Parseo de evento nuevo desde texto ───────────────────────────────────────
 
 /**
  * Usa Claude Haiku para extraer título, fecha y hora de un texto libre.
- * Retorna null si no puede parsear.
+ * Siempre devuelve tiempos con offset -03:00 (Uruguay).
+ * Acepta contexto de conversación opcional para resolver referencias anafóricas.
  */
 async function parseEventFromText(
   text: string,
-  referenceDate: Date
+  referenceDate: Date,
+  context?: string
 ): Promise<{ title: string; start: Date; end: Date } | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
@@ -66,6 +80,10 @@ async function parseEventFromText(
     timeZone: "America/Montevideo",
   });
 
+  const contextSection = context
+    ? `\nContexto de la conversación reciente:\n${context}\n\n`
+    : "";
+
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -76,15 +94,18 @@ async function parseEventFromText(
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 120,
+        max_tokens: 150,
         messages: [
           {
             role: "user",
             content:
-              `Hoy es ${dateStr}. Extrae del siguiente texto: título del evento, fecha y hora de inicio, fecha y hora de fin. ` +
+              `Hoy es ${dateStr}.${contextSection}\n` +
+              `Extrae del siguiente texto: título del evento, fecha y hora de inicio, fecha y hora de fin. ` +
               `Si no se menciona duración, asumir 1 hora. ` +
+              `Si el texto hace referencia a un evento mencionado antes en el contexto, usá esa información para completar los datos faltantes. ` +
+              `IMPORTANTE: Devuelve las horas en formato de Uruguay (UTC-3), usando el offset -03:00. ` +
               `Responde SOLO con JSON con este formato exacto: ` +
-              `{"title":"...","start":"ISO8601","end":"ISO8601"} ` +
+              `{"title":"...","start":"YYYY-MM-DDTHH:MM:SS-03:00","end":"YYYY-MM-DDTHH:MM:SS-03:00"} ` +
               `Texto: "${text}"`,
           },
         ],
@@ -112,6 +133,93 @@ async function parseEventFromText(
       title: parsed.title,
       start: new Date(parsed.start),
       end: new Date(parsed.end),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ─── Parseo de actualización de evento desde texto ────────────────────────────
+
+/**
+ * Usa Claude Haiku para extraer qué evento se quiere mover y la nueva hora.
+ * Devuelve tiempos con offset -03:00 (Uruguay).
+ */
+async function parseEventUpdateFromText(
+  text: string,
+  referenceDate: Date,
+  context?: string
+): Promise<{
+  searchTitle: string;
+  newStart: Date;
+  newEnd: Date;
+} | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+
+  const dateStr = referenceDate.toLocaleDateString("es-UY", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "America/Montevideo",
+  });
+
+  const contextSection = context
+    ? `\nContexto de la conversación reciente:\n${context}\n\n`
+    : "";
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 150,
+        messages: [
+          {
+            role: "user",
+            content:
+              `Hoy es ${dateStr}.${contextSection}\n` +
+              `El usuario quiere modificar la hora de un evento de su Google Calendar. ` +
+              `Basándote en el contexto de la conversación (si está disponible), identificá:\n` +
+              `1. El título o palabras clave del evento a modificar\n` +
+              `2. La nueva fecha y hora de inicio\n` +
+              `3. La nueva fecha y hora de fin (si no se menciona duración, mantener 1 hora)\n\n` +
+              `IMPORTANTE: Devuelve las horas en formato de Uruguay (UTC-3), usando el offset -03:00. ` +
+              `Responde SOLO con JSON con este formato exacto: ` +
+              `{"searchTitle":"...","newStart":"YYYY-MM-DDTHH:MM:SS-03:00","newEnd":"YYYY-MM-DDTHH:MM:SS-03:00"} ` +
+              `Texto: "${text}"`,
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as {
+      content: Array<{ type: string; text: string }>;
+    };
+    const raw = data.content?.[0]?.text?.trim() ?? "";
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    const parsed = JSON.parse(jsonMatch[0]) as {
+      searchTitle: string;
+      newStart: string;
+      newEnd: string;
+    };
+
+    if (!parsed.searchTitle || !parsed.newStart || !parsed.newEnd) return null;
+
+    return {
+      searchTitle: parsed.searchTitle,
+      newStart: new Date(parsed.newStart),
+      newEnd: new Date(parsed.newEnd),
     };
   } catch {
     return null;
@@ -160,7 +268,7 @@ export const calendarAgent = {
   description: "Gestiona el Google Calendar del usuario",
 
   async process(input: AgentInput): Promise<AgentOutput> {
-    const { userId, message } = input;
+    const { userId, message, context } = input;
     const intent = await detectIntent(message);
 
     switch (intent) {
@@ -228,7 +336,7 @@ export const calendarAgent = {
       }
 
       case "create_event": {
-        const parsed = await parseEventFromText(message, new Date());
+        const parsed = await parseEventFromText(message, new Date(), context);
         if (!parsed) {
           return {
             success: false,
@@ -265,11 +373,79 @@ export const calendarAgent = {
         };
       }
 
+      case "update_event": {
+        const parsed = await parseEventUpdateFromText(message, new Date(), context);
+        if (!parsed) {
+          return {
+            success: false,
+            message:
+              "No pude entender qué evento querés mover ni a qué hora. " +
+              'Intentá con algo como: "Mové la reunión con Marcos a las 15:00"',
+          };
+        }
+
+        // Buscar el evento por título
+        const event = await findEventByTitle(userId, parsed.searchTitle);
+        if (!event) {
+          return {
+            success: false,
+            message:
+              `No encontré ningún evento que coincida con "${parsed.searchTitle}" en tu agenda. ` +
+              "¿Podés darme más detalles del evento?",
+          };
+        }
+
+        const ok = await updateEvent(userId, event.id, parsed.newStart, parsed.newEnd);
+        if (!ok) {
+          return {
+            success: false,
+            message:
+              "No pude actualizar el evento. Verificá que Google Calendar esté conectado en Configuración.",
+          };
+        }
+
+        const newStartTime = formatTime(parsed.newStart);
+        const newEndTime = formatTime(parsed.newEnd);
+        const dateLabel = formatDateShort(parsed.newStart);
+
+        return {
+          success: true,
+          message:
+            `✅ Evento actualizado: "${event.title}"\n` +
+            `📅 ${dateLabel}, ${newStartTime}-${newEndTime}`,
+        };
+      }
+
+      case "remind_me": {
+        const parsed = await parseReminderRequest(message, new Date(), context);
+        if (!parsed) {
+          return {
+            success: false,
+            message:
+              "No pude entender el recordatorio. Intentá con algo como: " +
+              '"Recordame en 2 horas que tengo dentista" o "Avisame mañana a las 10 que es el cumple de mamá".',
+          };
+        }
+
+        await createReminder(userId, parsed.message, parsed.fireAt);
+
+        const timeLabel = formatTimeLabel(parsed.fireAt);
+        const fireDate = formatDateShort(parsed.fireAt);
+        const fireTime = formatTime(parsed.fireAt);
+
+        return {
+          success: true,
+          message:
+            `✅ Recordatorio guardado: "${parsed.message}"\n` +
+            `⏰ Te aviso el ${fireDate} a las ${fireTime} (en ${timeLabel})`,
+        };
+      }
+
       default:
         return {
           success: false,
           message:
-            "¿Qué querés saber de tu agenda? Puedo decirte qué tenés hoy, esta semana, o crear un evento.",
+            "¿Qué querés saber de tu agenda? Puedo decirte qué tenés hoy, esta semana, crear un evento, mover uno o configurar un recordatorio.",
         };
     }
   },

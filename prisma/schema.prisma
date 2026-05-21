@@ -66,6 +66,9 @@ model User {
   // Transacción pendiente de confirmación (finanzas)
   pendingTransaction PendingTransaction?
 
+  // Recordatorios personales
+  reminders          Reminder[]
+
   // WhatsApp mensajes
   whatsAppMessages   WhatsAppMessage[]
 
@@ -613,6 +616,38 @@ model PendingTransaction {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("pending_transactions")
+}
+
+// ============================================================
+// RECORDATORIOS PERSONALES
+// Creados por el usuario via WhatsApp ("recordame en X que...")
+// o generados automáticamente desde Google Calendar (2hs antes)
+// ============================================================
+
+model Reminder {
+  id         String   @id @default(cuid())
+  userId     String
+
+  // Qué recordar — se usa como {{2}} en la plantilla recordatorios_personales
+  message    String
+
+  // Cuándo disparar el recordatorio (hora exacta en UTC)
+  fireAt     DateTime
+
+  // Si ya se envió
+  sent       Boolean  @default(false)
+
+  // ID externo para evitar duplicados de Calendar (ej: "cal:eventId_20260522T110000")
+  // NULL = recordatorio manual del usuario; dos NULL en mismo userId son OK (PostgreSQL)
+  externalId String?
+
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Un usuario no puede tener dos recordatorios con el mismo externalId
+  @@unique([userId, externalId])
+  @@map("reminders")
 }
 
 // ============================================================

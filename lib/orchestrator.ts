@@ -56,7 +56,7 @@ const MODULE_DESCRIPTIONS: Record<Module, string> = {
   projects:  "El usuario habla de proyectos, tareas, trabajo, Notion, pendientes o deadlines",
   ideas:     "El usuario quiere capturar, anotar o explorar una idea, pensamiento u ocurrencia",
   scoring:   "El usuario pregunta por su score, puntaje, rendimiento o estadísticas del día",
-  calendar:  "El usuario habla de agenda, calendario, eventos, reuniones, o quiere agendar algo",
+  calendar:  "El usuario habla de agenda, calendario, eventos, reuniones, quiere agendar algo, o pide un recordatorio (recordame, avisame, acordame)",
   finances:  "El usuario habla de dinero, gastos, ingresos, balance, plata, compras, pagos o finanzas",
   synthesis: "El usuario pide un análisis global, patrones entre módulos, recomendaciones generales o un resumen de su semana",
   general:   "Saludos, preguntas generales, ayuda, o mensajes que no encajan en otro módulo",
@@ -131,9 +131,10 @@ async function classifyModule(text: string): Promise<Module> {
 async function callSpecialistAgent(
   module: Module,
   userId: string,
-  text: string
+  text: string,
+  conversationContext?: string
 ): Promise<string> {
-  const input = { userId, message: text, timestamp: new Date() };
+  const input = { userId, message: text, timestamp: new Date(), context: conversationContext };
 
   const GENERAL_HELP =
     "HERMES puede ayudar con: sueño (registrar, Garmin), fitness (gym, cardio), " +
@@ -295,14 +296,16 @@ export async function orchestrate(userId: string, text: string): Promise<string>
   const module = await classifyModule(text);
   console.log(`[orchestrator] Módulo detectado: ${module}`);
 
-  // 4. Ejecutar agente especialista
-  const agentData = await callSpecialistAgent(module, userId, text);
+  // Formatear contexto una vez — se usa tanto en el agente como en Sonnet
+  const conversationContext = formatContextForPrompt(ctx);
+
+  // 4. Ejecutar agente especialista (pasa contexto para módulos que lo necesitan)
+  const agentData = await callSpecialistAgent(module, userId, text, conversationContext);
 
   // 5. Generar respuesta natural con Claude Sonnet (si hay goals cargados)
   let finalResponse: string;
 
   if (goals) {
-    const conversationContext = formatContextForPrompt(ctx);
     const systemPrompt = buildOrchestratorPrompt(goals, ctx.summary ?? undefined);
 
     finalResponse = await generateFinalResponse(

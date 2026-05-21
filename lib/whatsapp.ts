@@ -28,6 +28,11 @@ export function parseIncomingWebhook(body: any): WhatsAppIncomingMessage | null 
     if (rawType === "audio") return { from, messageId, type: "audio", audioId: msg.audio?.id ?? undefined, timestamp, forwarded };
     if (rawType === "image") return { from, messageId, type: "image", timestamp, forwarded };
     if (rawType === "document") return { from, messageId, type: "document", timestamp, forwarded };
+    // Botón de template Quick Reply — tratar como texto con el label del botón
+    if (rawType === "button") {
+      const buttonText: string = msg.button?.text ?? msg.button?.payload ?? "";
+      return { from, messageId, type: "text", text: buttonText, timestamp, forwarded };
+    }
     return { from, messageId, type: "unknown", timestamp, forwarded };
   } catch (err) {
     console.error("[whatsapp] Error parseando webhook:", err);
@@ -158,6 +163,33 @@ export async function sendTemplateMessage(
     const errorBody = await res.text();
     throw new Error("[whatsapp] Error enviando template '" + templateName + "' " + res.status + ": " + errorBody);
   }
+}
+
+/**
+ * Envía la plantilla "recordatorios_personales" de WhatsApp.
+ * Plantilla (language: en, tipo servicio):
+ *   "Dentro de {{1}} tenes {{2}}.\n¿Queres re-agendar?"
+ *   Botón Quick Reply: "Re-agendar"
+ *
+ * @param to           Número de WhatsApp del destinatario
+ * @param timeLabel    {{1}} — tiempo restante, ej: "2 horas", "30 minutos"
+ * @param eventLabel   {{2}} — qué tiene pendiente, ej: "dentista", "gym"
+ */
+export async function sendReminderTemplate(
+  to: string,
+  timeLabel: string,
+  eventLabel: string
+): Promise<void> {
+  await sendTemplateMessage(
+    to,
+    "recordatorios_personales",
+    [
+      { type: "text", text: timeLabel },
+      { type: "text", text: eventLabel },
+    ],
+    [{ type: "button", sub_type: "QUICK_REPLY", index: 0 }],
+    "en"
+  );
 }
 
 export async function transcribeAudio(buffer: Buffer): Promise<string> {

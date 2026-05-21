@@ -281,6 +281,82 @@ export async function createEvent(
 }
 
 /**
+ * Actualiza la fecha/hora de un evento existente en Google Calendar.
+ * Devuelve true si el update fue exitoso.
+ */
+export async function updateEvent(
+  userId: string,
+  eventId: string,
+  start: Date,
+  end: Date
+): Promise<boolean> {
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) return false;
+
+  const calendarId = process.env.GOOGLE_CALENDAR_ID ?? "primary";
+
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          start: { dateTime: start.toISOString(), timeZone: "America/Montevideo" },
+          end: { dateTime: end.toISOString(), timeZone: "America/Montevideo" },
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      console.error("[calendar] updateEvent error:", res.status, await res.text());
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error("[calendar] updateEvent exception:", err);
+    return false;
+  }
+}
+
+/**
+ * Busca un evento en los próximos N días por coincidencia de título.
+ * Busca también desde ayer para atrapar eventos recién creados.
+ */
+export async function findEventByTitle(
+  userId: string,
+  searchTitle: string,
+  windowDays = 14
+): Promise<CalendarEvent | null> {
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) return null;
+
+  const calendarId = process.env.GOOGLE_CALENDAR_ID ?? "primary";
+
+  // Incluir desde ayer para atrapar eventos recién creados en el día
+  const timeMin = new Date();
+  timeMin.setDate(timeMin.getDate() - 1);
+  timeMin.setHours(0, 0, 0, 0);
+  const timeMax = new Date(timeMin);
+  timeMax.setDate(timeMax.getDate() + windowDays);
+
+  const events = await fetchEvents(accessToken, calendarId, timeMin, timeMax, 50);
+
+  const q = searchTitle.toLowerCase().trim();
+  // Primero buscar coincidencia exacta, luego parcial
+  return (
+    events.find((e) => e.title.toLowerCase() === q) ??
+    events.find((e) => e.title.toLowerCase().includes(q)) ??
+    events.find((e) => q.includes(e.title.toLowerCase())) ??
+    null
+  );
+}
+
+/**
  * Busca huecos libres en el calendario del usuario para un día dado.
  * Busca dentro de la ventana 6 AM – 10 PM.
  * Devuelve hasta 3 slots libres de la duración indicada.

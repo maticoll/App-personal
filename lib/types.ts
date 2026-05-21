@@ -106,6 +106,8 @@ export type AgentInput = {
   message: string;
   timestamp: Date;
   whatsappMessageId?: string;
+  /** Contexto de conversación formateado (últimos N turnos + resumen) */
+  context?: string;
 };
 
 export type AgentOutput = {
