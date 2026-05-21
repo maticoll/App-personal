@@ -137,11 +137,11 @@ export const scoringAgent = {
 
     const lines = [
       `${emoji} *Score de ayer: ${score.global}/100*`,
-      score.sleep !== null ? `  🌙 Sueno: ${score.sleep}` : "  🌙 Sueno: sin datos",
-      score.fitness !== null ? `  💪 Fitness: ${score.fitness}` : "  💪 Fitness: sin datos",
-      score.nutrition !== null ? `  🥗 Nutricion: ${score.nutrition}` : "  🥗 Nutricion: sin datos",
-      score.projects !== null ? `  📁 Proyectos: ${score.projects}` : "  📁 Proyectos: sin datos",
-      score.finances !== null ? `  💰 Finanzas: ${score.finances}` : "  💰 Finanzas: sin datos",
+      score.sleep != null ? `  🌙 Sueno: ${score.sleep}` : "  🌙 Sueno: sin datos",
+      score.fitness != null ? `  💪 Fitness: ${score.fitness}` : "  💪 Fitness: sin datos",
+      score.nutrition != null ? `  🥗 Nutricion: ${score.nutrition}` : "  🥗 Nutricion: sin datos",
+      score.projects != null ? `  📁 Proyectos: ${score.projects}` : "  📁 Proyectos: sin datos",
+      score.finances != null ? `  💰 Finanzas: ${score.finances}` : "  💰 Finanzas: sin datos",
     ];
 
     return lines.join("\n");

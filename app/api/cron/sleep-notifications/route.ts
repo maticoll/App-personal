@@ -42,10 +42,13 @@ export async function GET(req: NextRequest) {
       // --- Notificación 1: Recordatorio de dormir ---
       if (user.expectedSleepTime) {
         const [hours, minutes] = user.expectedSleepTime.split(":").map(Number);
-        const expectedTime = new Date(now);
+
+        // Comparar en hora de Uruguay (UTC-3) para que "23:00" sea 23:00 UY
+        const nowUY = new Date(now.toLocaleString("en-US", { timeZone: "America/Montevideo" }));
+        const expectedTime = new Date(nowUY);
         expectedTime.setHours(hours, minutes, 0, 0);
 
-        const diffMs = expectedTime.getTime() - now.getTime();
+        const diffMs = expectedTime.getTime() - nowUY.getTime();
         const diffMin = diffMs / (1000 * 60);
 
         // Avisar en la ventana de 0–15 min antes de la hora esperada
@@ -64,7 +67,8 @@ export async function GET(req: NextRequest) {
       }
 
       // --- Notificación 2: Despertar no registrado ---
-      if (now.getHours() >= 7) {
+      const nowUYHour = new Date(now.toLocaleString("en-US", { timeZone: "America/Montevideo" })).getHours();
+      if (nowUYHour >= 7) {
         const cutoff = new Date(now);
         cutoff.setHours(0, 0, 0, 0);
 

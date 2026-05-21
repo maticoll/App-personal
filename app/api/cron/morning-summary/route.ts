@@ -146,13 +146,13 @@ function buildMessage(parts: MessageParts): string {
     lines.push("");
   }
 
-  // 4. Sueno de anoche
-  if (parts.sleepText && parts.sleepText !== "Sin datos de sueno registrados.") {
+  // 4. Sueno de anoche (omitir si no hay datos)
+  if (parts.sleepText && !parts.sleepText.toLowerCase().startsWith("sin datos")) {
     lines.push("🌙 Sueno: " + parts.sleepText);
   }
 
-  // 5. Nutricion / hidratacion de ayer
-  if (parts.nutritionText) {
+  // 5. Nutricion / hidratacion de ayer (omitir si todo está en cero)
+  if (parts.nutritionText && !parts.nutritionText.includes("Sin comidas registradas")) {
     lines.push(parts.nutritionText);
   }
 
