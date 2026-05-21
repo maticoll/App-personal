@@ -20,10 +20,15 @@ export function formatDate(date: Date | string): string {
   return format(d, "d 'de' MMMM", { locale: es });
 }
 
-// Formatear hora
+// Formatear hora en timezone Uruguay (America/Montevideo)
 export function formatTime(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return format(d, "HH:mm");
+  return d.toLocaleTimeString("es-UY", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "America/Montevideo",
+  });
 }
 
 // Tiempo relativo ("hace 2 horas")
