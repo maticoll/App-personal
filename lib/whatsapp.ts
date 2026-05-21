@@ -146,13 +146,11 @@ export async function sendTemplateMessage(
       recipient_type: "individual",
       to,
       type: "template",
-      template: [
-        {
-          name: templateName,
-          language: { code: languageCode },
-          components: components.length > 0 ? components : undefined,
-        },
-      ],
+      template: {
+        name: templateName,
+        language: { code: languageCode },
+        components: components.length > 0 ? components : undefined,
+      },
     }),
   });
 
