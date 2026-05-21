@@ -18,10 +18,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     ...authConfig.callbacks,
     // Con JWT strategy, el user.id viene del token, no del adapter
-    jwt({ token, user }) {
+    jwt({ token, user, account }) {
       if (user) {
         token.id = user.id;
       }
+
+      // Cada vez que el usuario inicia sesión con Google, actualizamos los tokens
+      // en la DB. Con strategy: "jwt", PrismaAdapter solo crea el registro la
+      // primera vez (linkAccount no hace update), por lo que sin esto los tokens
+      // viejos (sin scopes de Calendar) persisten indefinidamente.
+      if (account && token.id && account.provider === "google") {
+        db.account
+          .updateMany({
+            where: { userId: token.id as string, provider: "google" },
+            data: {
+              access_token: account.access_token,
+              refresh_token: account.refresh_token ?? undefined,
+              expires_at: account.expires_at ?? undefined,
+              scope: account.scope ?? undefined,
+            },
+          })
+          .catch((err) =>
+            console.error("[auth] Error actualizando tokens de Google:", err)
+          );
+      }
+
       return token;
     },
     session({ session, token }) {
