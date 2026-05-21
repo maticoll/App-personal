@@ -82,9 +82,8 @@ async function processIncomingMessage(body: any): Promise<void> {
       return;
     }
 
-    // 3. Resolver userId
-    //    Primero buscar por numero de WhatsApp en UserSettings
-    //    Fallback: primer usuario con el email permitido
+    // 3. Resolver userId — buscar por número de WhatsApp en UserSettings
+    //    Si el número no está vinculado, se rechaza el mensaje más abajo.
     let userId: string | null = null;
 
     const settings = await db.userSettings.findFirst({
@@ -94,15 +93,6 @@ async function processIncomingMessage(body: any): Promise<void> {
 
     if (settings) {
       userId = settings.userId;
-    } else {
-      const allowedEmail = process.env.ALLOWED_EMAIL;
-      if (allowedEmail) {
-        const user = await db.user.findFirst({
-          where: { email: allowedEmail },
-          select: { id: true },
-        });
-        if (user) userId = user.id;
-      }
     }
 
     if (!userId) {

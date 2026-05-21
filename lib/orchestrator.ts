@@ -30,6 +30,7 @@ import { financesAgent } from "@/agents/finances";
 import { synthesisAgent } from "@/agents/synthesis";
 import { getGoals } from "@/lib/goals";
 import { buildOrchestratorPrompt } from "@/agents/prompts";
+import { db } from "@/lib/db";
 import {
   getConversationContext,
   addTurn,
@@ -281,11 +282,15 @@ export async function orchestrate(userId: string, text: string): Promise<string>
     return response;
   }
 
-  // 1. Cargar contexto de conversación + objetivos del usuario en paralelo
-  const [ctx, goals] = await Promise.all([
+  // 1. Cargar contexto de conversación + objetivos + nombre del usuario en paralelo
+  const [ctx, goals, userRecord] = await Promise.all([
     getConversationContext(userId),
     getGoals(userId).catch(() => null),
+    db.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null),
   ]);
+
+  // Primer nombre del usuario para los prompts (fallback a "vos")
+  const userName = userRecord?.name?.split(" ")[0] ?? "vos";
 
   // 2. Guardar el turno del usuario en memoria (no bloqueante en paralelo con el resto)
   const saveUserTurn = addTurn(userId, "user", text).catch((err) =>
@@ -306,7 +311,7 @@ export async function orchestrate(userId: string, text: string): Promise<string>
   let finalResponse: string;
 
   if (goals) {
-    const systemPrompt = buildOrchestratorPrompt(goals, ctx.summary ?? undefined);
+    const systemPrompt = buildOrchestratorPrompt(goals, ctx.summary ?? undefined, userName);
 
     finalResponse = await generateFinalResponse(
       systemPrompt,

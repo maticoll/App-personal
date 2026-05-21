@@ -32,10 +32,14 @@ export const authConfig = {
     error: "/login",
   },
   callbacks: {
-    // Solo permitir al usuario propietario
+    // Permitir solo los emails configurados en ALLOWED_EMAILS (separados por coma)
+    // Ejemplo: ALLOWED_EMAILS="usuario1@gmail.com,usuario2@gmail.com"
     signIn({ user }) {
-      const allowedEmail = process.env.ALLOWED_EMAIL;
-      if (allowedEmail && user.email !== allowedEmail) {
+      const allowedEmails = process.env.ALLOWED_EMAILS
+        ?.split(",")
+        .map((e) => e.trim())
+        .filter(Boolean) ?? [];
+      if (allowedEmails.length > 0 && !allowedEmails.includes(user.email ?? "")) {
         return false;
       }
       return true;

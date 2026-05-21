@@ -114,6 +114,7 @@ async function generateMotivation(globalScore: number | null): Promise<string> {
 // -------------------------------------------------------
 
 type MessageParts = {
+  userName: string;
   verse: { reference: string; text: string } | null;
   scoreText: string | null;
   globalScore: number | null;
@@ -127,8 +128,8 @@ type MessageParts = {
 function buildMessage(parts: MessageParts): string {
   const lines: string[] = [];
 
-  // 1. Saludo
-  lines.push("Buenos dias Corea! ☀️");
+  // 1. Saludo con nombre dinámico
+  lines.push(`Buenos dias ${parts.userName}! ☀️`);
   lines.push("");
 
   // 2. Versiculo biblico
@@ -193,124 +194,122 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   logger.info("cron/morning-summary", { event: "start" });
 
   try {
-    // --- 1. Resolver usuario destinatario ---
-    const allowedEmail = process.env.ALLOWED_EMAIL;
-    if (!allowedEmail) {
-      return NextResponse.json(
-        { ok: false, error: "ALLOWED_EMAIL no configurado" },
-        { status: 500 }
-      );
-    }
-
-    const user = await db.user.findFirst({
-      where: { email: allowedEmail },
-      select: { id: true, name: true },
+    // --- 1. Buscar todos los usuarios con WhatsApp configurado y notificaciones activas ---
+    const activeSettings = await db.userSettings.findMany({
+      where: {
+        whatsappNumber: { not: null },
+        notificationsEnabled: true,
+      },
+      select: { userId: true, whatsappNumber: true },
     });
 
-    if (!user) {
-      return NextResponse.json(
-        { ok: false, error: "Usuario no encontrado para " + allowedEmail },
-        { status: 404 }
-      );
+    if (activeSettings.length === 0) {
+      logger.info("cron/morning-summary", { event: "no_recipients" });
+      return NextResponse.json({ ok: true, message: "No hay usuarios con WhatsApp activo" });
     }
 
-    const settings = await db.userSettings.findUnique({
-      where: { userId: user.id },
-      select: { whatsappNumber: true },
-    });
-
-    const toNumber = settings?.whatsappNumber ?? null;
-    if (!toNumber) {
-      console.warn("[morning-summary] No hay whatsappNumber para userId=" + user.id);
-      return NextResponse.json(
-        { ok: false, error: "whatsappNumber no configurado para el usuario" },
-        { status: 404 }
-      );
-    }
-
-    // --- 2. Calcular fecha de ayer ---
+    // --- 2. Fecha de ayer (calculada una sola vez) ---
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     yesterday.setHours(0, 0, 0, 0);
 
-    // --- 3. Recopilar todas las secciones en paralelo ---
-    const [verse, scoreText, sleepText, nutritionText, agendaText, insightText] =
-      await Promise.allSettled([
-        fetchVerse(),
-        scoringAgent.getSummaryText(user.id, yesterday),
-        sleepAgent.getSleepSummaryText(user.id),
-        getNutritionSummaryText(user.id, yesterday),
-        getTodayEventsText(user.id),
-        synthesisAgent.getDailyInsight(user.id),
-      ]);
-
-    // Extraer valores con fallback null en caso de rechazo
-    const verseValue =
-      verse.status === "fulfilled" ? verse.value : null;
-    const scoreValue =
-      scoreText.status === "fulfilled" ? scoreText.value : null;
-    const sleepValue =
-      sleepText.status === "fulfilled" ? sleepText.value : null;
-    const nutritionValue =
-      nutritionText.status === "fulfilled" ? nutritionText.value : null;
-    const agendaValue =
-      agendaText.status === "fulfilled" ? agendaText.value : null;
-    const insightValue =
-      insightText.status === "fulfilled" ? insightText.value : null;
-
-    // Extraer score global del texto para pasar a la motivacion
-    let globalScore: number | null = null;
-    if (scoreValue) {
-      const match = scoreValue.match(/(\d+)\/100/);
-      if (match) globalScore = parseInt(match[1], 10);
-    }
-
-    // --- 4. Generar motivacion con Claude Haiku ---
-    const motivation = await generateMotivation(globalScore);
-
-    // --- 5. Ensamblar mensaje ---
-    const message = buildMessage({
-      verse: verseValue,
-      scoreText: scoreValue,
-      globalScore,
-      sleepText: sleepValue,
-      nutritionText: nutritionValue,
-      agendaText: agendaValue,
-      insightText: insightValue,
-      motivation,
-    });
-
-    // --- 6. Enviar por WhatsApp ---
-    // Primero: template aprobado para abrir ventana de 24hs ({{1}} = fecha de ayer)
     const dateLabel = yesterday.toLocaleDateString("es-UY", {
       day: "numeric",
       month: "long",
       timeZone: "America/Montevideo",
     });
-    await sendTemplateMessage(toNumber, "servicios", [
-      { type: "text", text: dateLabel },
-    ]);
-    // Segundo: mensaje completo como texto libre (gratis dentro de la ventana abierta)
-    await sendTextMessage(toNumber, message);
 
+    // --- 3. Enviar a cada usuario ---
+    const results: Array<{ userId: string; to: string; ok: boolean; error?: string }> = [];
+
+    for (const s of activeSettings) {
+      const toNumber = s.whatsappNumber!;
+      try {
+        // Cargar nombre del usuario
+        const userRecord = await db.user.findUnique({
+          where: { id: s.userId },
+          select: { name: true },
+        });
+        // Usar solo el primer nombre, fallback a "vos"
+        const userName = userRecord?.name?.split(" ")[0] ?? "vos";
+
+        // Recopilar secciones en paralelo para este usuario
+        const [verse, scoreText, sleepText, nutritionText, agendaText, insightText] =
+          await Promise.allSettled([
+            fetchVerse(),
+            scoringAgent.getSummaryText(s.userId, yesterday),
+            sleepAgent.getSleepSummaryText(s.userId),
+            getNutritionSummaryText(s.userId, yesterday),
+            getTodayEventsText(s.userId),
+            synthesisAgent.getDailyInsight(s.userId),
+          ]);
+
+        const verseValue     = verse.status       === "fulfilled" ? verse.value       : null;
+        const scoreValue     = scoreText.status   === "fulfilled" ? scoreText.value   : null;
+        const sleepValue     = sleepText.status   === "fulfilled" ? sleepText.value   : null;
+        const nutritionValue = nutritionText.status === "fulfilled" ? nutritionText.value : null;
+        const agendaValue    = agendaText.status  === "fulfilled" ? agendaText.value  : null;
+        const insightValue   = insightText.status === "fulfilled" ? insightText.value : null;
+
+        let globalScore: number | null = null;
+        if (scoreValue) {
+          const match = scoreValue.match(/(\d+)\/100/);
+          if (match) globalScore = parseInt(match[1], 10);
+        }
+
+        const motivation = await generateMotivation(globalScore);
+
+        const message = buildMessage({
+          userName,
+          verse: verseValue,
+          scoreText: scoreValue,
+          globalScore,
+          sleepText: sleepValue,
+          nutritionText: nutritionValue,
+          agendaText: agendaValue,
+          insightText: insightValue,
+          motivation,
+        });
+
+        // Template para abrir ventana 24hs + mensaje completo
+        await sendTemplateMessage(toNumber, "servicios", [
+          { type: "text", text: dateLabel },
+        ]);
+        await sendTextMessage(toNumber, message);
+
+        logger.info("cron/morning-summary", {
+          event: "sent",
+          to: toNumber,
+          userId: s.userId,
+          userName,
+          globalScore,
+          lines: message.split("\n").length,
+        });
+
+        results.push({ userId: s.userId, to: toNumber, ok: true });
+      } catch (userError) {
+        logger.error("cron/morning-summary", {
+          event: "user_error",
+          userId: s.userId,
+          to: toNumber,
+          error: String(userError),
+        });
+        results.push({ userId: s.userId, to: toNumber, ok: false, error: String(userError) });
+      }
+    }
+
+    const sent = results.filter((r) => r.ok).length;
     logger.info("cron/morning-summary", {
-      event: "sent",
-      to: toNumber,
-      userId: user.id,
-      globalScore,
-      hasSleep: !!sleepValue,
-      hasNutrition: !!nutritionValue,
-      hasAgenda: !!agendaValue,
-      hasInsight: !!insightValue,
-      lines: message.split("\n").length,
+      event: "done",
+      sent,
+      total: results.length,
       durationMs: Date.now() - start,
     });
 
     return NextResponse.json({
       ok: true,
-      message: "Morning summary enviado",
-      to: toNumber,
-      lines: message.split("\n").length,
+      message: `Morning summary enviado a ${sent}/${results.length} usuarios`,
+      results,
     });
   } catch (error) {
     logger.error("cron/morning-summary", { event: "error", error: String(error), durationMs: Date.now() - start });

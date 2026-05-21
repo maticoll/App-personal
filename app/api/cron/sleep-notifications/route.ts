@@ -34,10 +34,13 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    const debug: Record<string, unknown>[] = [];
+
     for (const user of users) {
       if (!user.whatsappNumber) continue;
 
-      const notifications: Array<{ type: "bedtime_reminder" | "wakeup_alert" }> = [];
+      const notifications: Array<{ type: "bedtime_reminder" }> = [];
+      const userDebug: Record<string, unknown> = { userId: user.userId };
 
       // --- Notificación 1: Recordatorio de dormir ---
       if (user.expectedSleepTime) {
@@ -49,7 +52,12 @@ export async function GET(req: NextRequest) {
         expectedTime.setHours(hours, minutes, 0, 0);
 
         const diffMs = expectedTime.getTime() - nowUY.getTime();
-        const diffMin = diffMs / (1000 * 60);
+        const diffMin = Math.round(diffMs / (1000 * 60));
+
+        userDebug.nowUY = nowUY.toTimeString().slice(0, 5);
+        userDebug.expectedSleepTime = user.expectedSleepTime;
+        userDebug.diffMin = diffMin;
+        userDebug.inWindow = diffMin >= 0 && diffMin <= 15;
 
         // Avisar en la ventana de 0–15 min antes de la hora esperada
         if (diffMin >= 0 && diffMin <= 15) {
@@ -60,46 +68,26 @@ export async function GET(req: NextRequest) {
             },
           });
 
+          userDebug.hasTodaySleep = !!hasTodaySleep;
           if (!hasTodaySleep) {
             notifications.push({ type: "bedtime_reminder" });
           }
         }
       }
 
-      // --- Notificación 2: Despertar no registrado ---
-      const nowUYHour = new Date(now.toLocaleString("en-US", { timeZone: "America/Montevideo" })).getHours();
-      if (nowUYHour >= 7) {
-        const cutoff = new Date(now);
-        cutoff.setHours(0, 0, 0, 0);
+      debug.push(userDebug);
 
-        const pendingSleep = await db.sleepLog.findFirst({
-          where: {
-            userId: user.userId,
-            wakeTime: null,
-            flexible: false,
-            bedTime: { lt: cutoff },
-          },
-          orderBy: { bedTime: "desc" },
-        });
-
-        if (pendingSleep) {
-          notifications.push({ type: "wakeup_alert" });
-        }
-      }
 
       // --- Enviar notificaciones por WhatsApp usando templates aprobados ---
       for (const notification of notifications) {
         try {
           if (notification.type === "bedtime_reminder") {
-            // {{1}} = hora esperada de sueño (ej: "23:00")
             await sendTemplateMessage(user.whatsappNumber, "bedtime", [
               { type: "text", text: user.expectedSleepTime ?? "tu hora configurada" },
             ]);
-          } else if (notification.type === "wakeup_alert") {
-            // Template no creado en Meta — notificación desactivada
+            sent.push(`${user.userId}:bedtime_reminder`);
+            console.log(`[sleep-notifications] Enviado bedtime_reminder a userId=${user.userId}`);
           }
-          sent.push(`${user.userId}:${notification.type}`);
-          console.log(`[sleep-notifications] Enviado ${notification.type} a userId=${user.userId}`);
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
           errors.push(`${user.userId}:${notification.type} → ${errMsg}`);
@@ -115,6 +103,7 @@ export async function GET(req: NextRequest) {
       sent: sent.length,
       errors: errors.length > 0 ? errors : undefined,
       detail: sent,
+      debug,
     });
   } catch (error) {
     logger.error("cron/sleep-notifications", { event: "error", error: String(error) });
