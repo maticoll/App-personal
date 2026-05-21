@@ -13,7 +13,7 @@ export async function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="flex min-h-screen bg-background">
       {/* Desktop: Sidebar */}
-      <Sidebar />
+      <Sidebar userName={session?.user?.name} />
 
       {/* Contenido principal */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -23,7 +23,7 @@ export async function AppLayout({ children }: AppLayoutProps) {
           userName={session?.user?.name}
         />
 
-        {/* Página */}
+        {/* Pagina */}
         <main className="flex-1 px-4 pt-4 pb-32 md:px-6 md:pt-6 md:pb-8 max-w-lg mx-auto w-full md:max-w-none">
           {children}
         </main>

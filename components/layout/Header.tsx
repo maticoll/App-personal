@@ -24,7 +24,9 @@ export function Header({ userImage, userName }: HeaderProps = {}) {
               </div>
             )}
           </div>
-          <span className="font-bold tracking-tighter text-primary text-2xl">CLAUDIO</span>
+          <span className="font-bold tracking-tighter text-primary text-2xl">
+            {userName?.split(" ")[0] ?? "CLAUDIO"}
+          </span>
         </div>
         <Link
           href="/settings"

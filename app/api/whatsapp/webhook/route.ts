@@ -59,7 +59,7 @@ async function processIncomingMessage(body: any): Promise<void> {
   try {
     // 1. Parsear payload de Meta
     const parsed = parseIncomingWebhook(body);
-    if (!parsed) return; // status update u otro evento no relevante
+    if (!parsed) return;
 
     const { from, messageId, type, text, audioId, timestamp, forwarded } = parsed;
     logger.info("whatsapp/webhook", { event: "message_received", type, timestamp, forwarded });
@@ -67,7 +67,7 @@ async function processIncomingMessage(body: any): Promise<void> {
     // 2. Marcar como leido (best-effort)
     void markAsRead(messageId);
 
-    // 2b. Audio reenviado: transcribir y devolver texto directamente, sin guardar en DB
+    // 2b. Audio reenviado: transcribir y devolver texto directamente
     if (forwarded && type === "audio" && audioId) {
       try {
         logger.info("whatsapp/webhook", { event: "forwarded_audio_transcription_start", audioId });
@@ -82,12 +82,15 @@ async function processIncomingMessage(body: any): Promise<void> {
       return;
     }
 
-    // 3. Resolver userId — buscar por número de WhatsApp en UserSettings
-    //    Si el número no está vinculado, se rechaza el mensaje más abajo.
+    // 3. Resolver userId — buscar por numero en UserSettings
+    //    Buscamos con y sin "+" para que no importe como lo guardo el usuario.
     let userId: string | null = null;
 
+    const fromNormalized = from.replace(/^\+/, "");
+    const fromWithPlus   = "+" + fromNormalized;
+
     const settings = await db.userSettings.findFirst({
-      where: { whatsappNumber: from },
+      where: { whatsappNumber: { in: [fromNormalized, fromWithPlus] } },
       select: { userId: true },
     });
 
@@ -170,6 +173,5 @@ async function processIncomingMessage(body: any): Promise<void> {
     logger.info("whatsapp/webhook", { event: "message_processed_ok", msgId: waMsg.id });
   } catch (err) {
     logger.error("whatsapp/webhook", { event: "message_processing_error", error: String(err) });
-    // No lanzar - el 200 ya fue enviado a Meta
   }
 }
