@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getProject, updateProject, deleteProject } from "@/lib/projects";
+import { updateNotionProjectStatus } from "@/lib/notion";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -41,6 +42,14 @@ export async function PATCH(req: Request, { params }: Params) {
       ...(color !== undefined && { color }),
       ...(order !== undefined && { order }),
     });
+
+    // Si el proyecto tiene notionId y cambió el status → sync a Notion (fire-and-forget)
+    if (status !== undefined && project.notionId) {
+      void updateNotionProjectStatus(session.user.id, project.notionId, status).catch(
+        (err) => console.error("[projects] Error actualizando Notion:", err)
+      );
+    }
+
     return NextResponse.json({ project });
   } catch (err) {
     console.error("[PATCH /api/projects/[id]]", err);

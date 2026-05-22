@@ -9,6 +9,103 @@ import { db } from "@/lib/db";
 import type { ProjectStatus } from "@prisma/client";
 
 // -------------------------------------------------------
+// Mapeo inverso: ProjectStatus → nombre de opción en Notion
+// Busca la mejor coincidencia entre las opciones disponibles
+// -------------------------------------------------------
+
+function findNotionStatusOption(
+  options: Array<{ id: string; name: string }>,
+  appStatus: ProjectStatus
+): { id: string; name: string } | null {
+  const lower = options.map((o) => ({ ...o, l: o.name.toLowerCase() }));
+
+  if (appStatus === "DONE") {
+    return (
+      lower.find(
+        (o) =>
+          o.l.includes("completado") ||
+          o.l.includes("done") ||
+          o.l.includes("hecho") ||
+          o.l.includes("completed")
+      ) ?? null
+    );
+  }
+
+  if (appStatus === "IN_PROGRESS") {
+    return (
+      lower.find(
+        (o) =>
+          o.l.includes("progreso") ||
+          o.l.includes("in progress") ||
+          o.l.includes("doing") ||
+          o.l.includes("testear")
+      ) ?? null
+    );
+  }
+
+  // TODO
+  return (
+    lower.find(
+      (o) =>
+        o.l.includes("no empezado") ||
+        o.l.includes("not started") ||
+        o.l.includes("todo") ||
+        o.l.includes("por hacer") ||
+        o.l.includes("pendiente")
+    ) ?? null
+  );
+}
+
+// -------------------------------------------------------
+// Actualizar status de un proyecto en Notion
+// -------------------------------------------------------
+
+export async function updateNotionProjectStatus(
+  userId: string,
+  notionPageId: string,
+  newStatus: ProjectStatus
+): Promise<void> {
+  const settings = await db.userSettings.findUnique({
+    where: { userId },
+    select: { notionToken: true, notionDbId: true },
+  });
+
+  const token = settings?.notionToken ?? process.env.NOTION_TOKEN;
+  const databaseId = settings?.notionDbId ?? process.env.NOTION_DB_ID;
+
+  if (!token || !databaseId) return;
+
+  const client = getNotionClient(token);
+
+  // Obtener esquema de la DB para encontrar el nombre real de la propiedad status
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dbSchema = await (client.dataSources as any).retrieve({ data_source_id: databaseId });
+
+  const statusEntry = Object.entries(dbSchema.properties).find(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ([_, p]: [string, any]) => p.type === "status"
+  ) as [string, { status: { options: Array<{ id: string; name: string }> } }] | undefined;
+
+  if (!statusEntry) return;
+
+  const [statusPropName, statusProp] = statusEntry;
+  const options = statusProp.status?.options ?? [];
+
+  const targetOption = findNotionStatusOption(options, newStatus);
+  if (!targetOption) return;
+
+  await client.pages.update({
+    page_id: notionPageId,
+    properties: {
+      [statusPropName]: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...(({ type: "status", status: { name: targetOption.name } }) as any),
+      },
+    },
+  });
+}
+
+// -------------------------------------------------------
 // Tipos
 // -------------------------------------------------------
 

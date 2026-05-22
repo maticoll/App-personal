@@ -110,6 +110,24 @@ export async function getProject(
 }
 
 // -------------------------------------------------------
+// Cleanup: elimina proyectos DONE de días anteriores
+// Solo proyectos con notionId (sincronizados desde Notion)
+// -------------------------------------------------------
+
+export async function cleanupOldDoneProjects(userId: string): Promise<number> {
+  const startOfToday = startOfDay(new Date());
+  const result = await db.project.deleteMany({
+    where: {
+      userId,
+      status: "DONE",
+      notionId: { not: null },
+      updatedAt: { lt: startOfToday },
+    },
+  });
+  return result.count;
+}
+
+// -------------------------------------------------------
 // Creación
 // -------------------------------------------------------
 
