@@ -1,0 +1,394 @@
+{
+  "meta": {
+    "app": "App Personal",
+    "version": "1.0",
+    "date": "2026-05-15",
+    "description": "Super-app personal que centraliza sueño, fitness, nutrición, proyectos, ideas y finanzas. Canal principal de entrada: WhatsApp. Frontend: dashboard web PWA.",
+    "repo": "github.com/maticoll/App-personal",
+    "deploy_url": "app-personal-ten.vercel.app",
+    "status": "En producción activa"
+  },
+
+  "stack": {
+    "framework": "Next.js 15 (App Router)",
+    "language": "TypeScript",
+    "styles": "Tailwind CSS 3 — dark/light mode, mobile-first",
+    "database": "Supabase (PostgreSQL)",
+    "orm": "Prisma 5",
+    "auth": "NextAuth v5 (Google OAuth, PrismaAdapter, sesiones en DB)",
+    "deploy": "Vercel (Hobby plan)",
+    "pwa": "next-pwa (manifest, service worker, display: standalone, iPhone 14)",
+    "charts": "Recharts",
+    "ai_primary": "Claude API (Anthropic) — Haiku para clasificación/NLP rápido",
+    "ai_audio": "Whisper API (OpenAI) — transcripción de audios de WhatsApp",
+    "dependencies_notable": [
+      "@hello-pangea/dnd — Kanban drag-and-drop (SSR disabled)",
+      "@notionhq/client v5 — integración Notion",
+      "date-fns — manipulación de fechas",
+      "lucide-react — iconografía",
+      "next-themes — dark/light mode"
+    ]
+  },
+
+  "design_system": {
+    "dark_bg": "#0D0F14",
+    "dark_surface": "#1A1D27",
+    "light_bg": "#F8FAFC",
+    "light_surface": "#FFFFFF",
+    "accent": "#6366F1",
+    "score_gradient": "verde #22C55E → rojo #EF4444",
+    "module_colors": {
+      "sleep": "violet",
+      "fitness": "cyan",
+      "nutrition": "emerald",
+      "projects": "amber",
+      "ideas": "pink",
+      "finances": "blue",
+      "scoring": "indigo"
+    }
+  },
+
+  "folder_structure": {
+    "/app/(app)": "Rutas protegidas del dashboard (requieren auth)",
+    "/app/(auth)": "Rutas públicas de autenticación",
+    "/app/api": "API Routes de Next.js (REST endpoints)",
+    "/agents": "Sub-agentes de IA (uno por módulo + orchestrator)",
+    "/components": "Componentes React organizados por módulo",
+    "/lib": "Lógica de negocio, clientes de API, scoring",
+    "/prisma": "Schema de base de datos",
+    "/public": "Assets estáticos, PWA manifest, icons",
+    "/skills": "Documentación de sesiones de construcción"
+  },
+
+  "pages": [
+    { "route": "/", "file": "app/(app)/page.tsx", "description": "Dashboard principal — score global, cards de módulos, resúmenes", "status": "built" },
+    { "route": "/sleep", "file": "app/(app)/sleep/page.tsx", "description": "Módulo de sueño — logs, gráficos, sync Garmin", "status": "built" },
+    { "route": "/fitness", "file": "app/(app)/fitness/page.tsx", "description": "Módulo de fitness — workouts, rutinas, cardio, smart habits", "status": "built" },
+    { "route": "/nutrition", "file": "app/(app)/nutrition/page.tsx", "description": "Módulo de nutrición — comidas NLP, agua, dieta, macros", "status": "built" },
+    { "route": "/projects", "file": "app/(app)/projects/page.tsx", "description": "Módulo de proyectos — Kanban, timeline, sync Notion", "status": "built" },
+    { "route": "/ideas", "file": "app/(app)/ideas/page.tsx", "description": "Módulo de ideas — captura NLP, prioridad, status (estilo Lumina)", "status": "built" },
+    { "route": "/finances", "file": "app/(app)/finances/page.tsx", "description": "Módulo de finanzas — proxy a app externa finanzas-lemon.vercel.app", "status": "built" },
+    { "route": "/scoring", "file": "app/(app)/scoring/page.tsx", "description": "Historial de scoring — diario/semanal/mensual, gráficos", "status": "built" },
+    { "route": "/settings", "file": "app/(app)/settings/page.tsx", "description": "Configuración — hábitos, WhatsApp, Notion, Calendar, Finanzas API key, Danger Zone", "status": "built" },
+    { "route": "/login", "file": "app/(auth)/login/page.tsx", "description": "Página de login con Google OAuth", "status": "built" }
+  ],
+
+  "api_routes": {
+    "auth": [
+      { "path": "/api/auth/[...nextauth]", "methods": ["GET","POST"], "description": "NextAuth handler (Google OAuth)" }
+    ],
+    "sleep": [
+      { "path": "/api/sleep/log", "methods": ["POST"], "description": "Registrar hora de dormir/despertar/manual" },
+      { "path": "/api/sleep/today", "methods": ["GET"], "description": "Obtener log de sueño de hoy" },
+      { "path": "/api/sleep/history", "methods": ["GET"], "description": "Historial de sueño" },
+      { "path": "/api/sleep/sync-garmin", "methods": ["POST"], "description": "Sincronización manual con Garmin" },
+      { "path": "/api/sleep/[id]", "methods": ["PATCH","DELETE"], "description": "Editar/borrar log específico" },
+      { "path": "/api/garmin/status", "methods": ["GET"], "description": "Estado de conexión Garmin" }
+    ],
+    "fitness": [
+      { "path": "/api/fitness/today", "methods": ["GET"], "description": "Workouts de hoy" },
+      { "path": "/api/fitness/workout", "methods": ["GET","POST"], "description": "Listar/crear workout" },
+      { "path": "/api/fitness/workout/[id]", "methods": ["GET","PATCH","DELETE"], "description": "CRUD workout" },
+      { "path": "/api/fitness/workout/[id]/exercise", "methods": ["POST"], "description": "Agregar ejercicio a workout" },
+      { "path": "/api/fitness/weekly-stats", "methods": ["GET"], "description": "Stats semanales de fitness" },
+      { "path": "/api/fitness/routines", "methods": ["GET","POST"], "description": "CRUD rutinas de gym" },
+      { "path": "/api/fitness/routines/[id]", "methods": ["PATCH","DELETE"], "description": "Editar/borrar rutina" },
+      { "path": "/api/fitness/log-exercise", "methods": ["POST"], "description": "Loggear ejercicio en NLP" },
+      { "path": "/api/fitness/sync-garmin", "methods": ["POST"], "description": "Sync manual Garmin actividades" }
+    ],
+    "nutrition": [
+      { "path": "/api/nutrition/today", "methods": ["GET"], "description": "Resumen nutricional de hoy" },
+      { "path": "/api/nutrition/meal", "methods": ["POST"], "description": "Registrar comida (NLP)" },
+      { "path": "/api/nutrition/meal/[id]", "methods": ["DELETE"], "description": "Borrar comida" },
+      { "path": "/api/nutrition/water", "methods": ["POST"], "description": "Registrar agua" },
+      { "path": "/api/nutrition/diet", "methods": ["GET","POST"], "description": "Obtener/guardar dieta del usuario" },
+      { "path": "/api/nutrition/history", "methods": ["GET"], "description": "Historial de comidas" },
+      { "path": "/api/nutrition/weekly-stats", "methods": ["GET"], "description": "Stats semanales de nutrición" }
+    ],
+    "projects": [
+      { "path": "/api/projects", "methods": ["GET","POST"], "description": "Listar/crear proyectos" },
+      { "path": "/api/projects/[id]", "methods": ["GET","PATCH","DELETE"], "description": "CRUD proyecto" },
+      { "path": "/api/projects/reorder", "methods": ["POST"], "description": "Reordenar proyectos (transacción atómica)" },
+      { "path": "/api/projects/[id]/tasks", "methods": ["POST"], "description": "Crear tarea en proyecto" },
+      { "path": "/api/projects/tasks/[taskId]", "methods": ["PATCH","DELETE"], "description": "Editar/borrar tarea" },
+      { "path": "/api/projects/weekly-stats", "methods": ["GET"], "description": "Stats semanales de proyectos" },
+      { "path": "/api/projects/sync-notion", "methods": ["POST"], "description": "Sincronizar tareas desde Notion (read-only)" }
+    ],
+    "ideas": [
+      { "path": "/api/ideas", "methods": ["GET","POST"], "description": "Listar (con filtros)/capturar idea NLP" },
+      { "path": "/api/ideas/[id]", "methods": ["GET","PATCH","DELETE"], "description": "CRUD idea (acepta cycleStatus, priority, status)" },
+      { "path": "/api/ideas/stats", "methods": ["GET"], "description": "Stats de ideas (total, activas, hechas)" }
+    ],
+    "finances": [
+      { "path": "/api/finances/summary", "methods": ["GET"], "description": "Dashboard completo de finanzas (proxy a finanzas-lemon)" },
+      { "path": "/api/finances/transactions", "methods": ["GET","POST"], "description": "Transacciones (proxy a finanzas-lemon)" }
+    ],
+    "calendar": [
+      { "path": "/api/calendar/today", "methods": ["GET"], "description": "Eventos de Google Calendar de hoy" },
+      { "path": "/api/calendar/week", "methods": ["GET"], "description": "Eventos de la semana" },
+      { "path": "/api/calendar/event", "methods": ["POST"], "description": "Crear evento en Google Calendar" }
+    ],
+    "scoring": [
+      { "path": "/api/scoring/today", "methods": ["GET"], "description": "Calcular y obtener score de hoy" },
+      { "path": "/api/scoring/history", "methods": ["GET"], "description": "Historial de scores (period: daily/weekly/monthly)" },
+      { "path": "/api/scoring/calculate", "methods": ["POST"], "description": "Recalcular score forzado" }
+    ],
+    "settings": [
+      { "path": "/api/settings", "methods": ["GET","PATCH"], "description": "Leer/actualizar UserSettings (whitelist de campos)" },
+      { "path": "/api/settings/day-data", "methods": ["DELETE"], "description": "Borrar todos los datos de hoy (requiere confirm: true)" }
+    ],
+    "whatsapp": [
+      { "path": "/api/whatsapp/webhook", "methods": ["GET","POST"], "description": "GET: Meta challenge handshake. POST: recibir mensajes, transcribir audio (Whisper), orquestar, responder" }
+    ],
+    "cron": [
+      { "path": "/api/cron/sleep-sync", "schedule": "0 8 * * * (UTC)", "description": "Sincronizar Garmin sueño (últimos 2 días)" },
+      { "path": "/api/cron/sleep-notifications", "schedule": "cada 30min 20-23hs (cron-job.org)", "description": "Recordatorio de bedtime + alerta despertar no registrado" },
+      { "path": "/api/cron/fitness-sync", "schedule": "0 6 * * * (UTC)", "description": "Sincronizar actividades Garmin de todos los usuarios" },
+      { "path": "/api/cron/fitness-habits", "schedule": "10 7 * * * (UTC)", "description": "Detectar desvío de gym, proponer hueco libre en Calendar" },
+      { "path": "/api/cron/water-reminder", "schedule": "0 12,17 * * * (cron-job.org)", "description": "Recordatorio de hidratación 12 PM y 5 PM" },
+      { "path": "/api/cron/morning-summary", "schedule": "30 10 * * * (UTC = 7:30 AM Uruguay)", "description": "Enviar resumen matutino por WhatsApp (versículo + score + sueño + nutrición + agenda)" }
+    ]
+  },
+
+  "agents": {
+    "orchestrator": {
+      "file": "agents/orchestrator/index.ts",
+      "description": "Único canal que habla con WhatsApp. Recibe texto del webhook, usa Claude Haiku para clasificar intención en 7 módulos, deriva al sub-agente correcto, formatea y envía la respuesta.",
+      "modules_detected": ["sleep", "fitness", "nutrition", "projects", "ideas", "finances", "calendar", "sync"]
+    },
+    "sleep": {
+      "file": "agents/sleep/index.ts",
+      "intents": ["bed", "wake", "query", "sync", "unknown"],
+      "exports": ["sleepAgent.getSleepSummaryText()", "sleepAgent.getBedTimeReminderText()"]
+    },
+    "fitness": {
+      "file": "agents/fitness/index.ts",
+      "intents": ["gym_start", "gym_log", "cardio_log", "query", "sync_garmin", "unknown"],
+      "exports": ["fitnessAgent.getSummaryText()", "fitnessAgent.checkSmartHabits()"]
+    },
+    "nutrition": {
+      "file": "agents/nutrition/index.ts",
+      "intents": ["meal_log", "water_log", "query", "diet_update"],
+      "exports": ["processNutritionMessage()", "getNutritionSummaryText()", "getWaterReminderText()"]
+    },
+    "projects": {
+      "file": "agents/projects/index.ts",
+      "intents": ["create", "update_status", "task_done", "query", "sync_notion", "unknown"],
+      "exports": ["processProjectsMessage()", "getProjectsSummaryText()"]
+    },
+    "ideas": {
+      "file": "agents/ideas/index.ts",
+      "intents": ["capture", "query", "expand"],
+      "exports": ["processIdeasMessage()"]
+    },
+    "finances": {
+      "file": "agents/finances/index.ts",
+      "intents": ["query_spending", "query_balance", "query_report", "create_expense", "create_income"],
+      "exports": ["financesAgent.processMessage()", "financesAgent.checkSpendingAlerts()"]
+    },
+    "calendar": {
+      "file": "agents/calendar/index.ts",
+      "intents": ["query_today", "query_week", "create_event", "status"],
+      "exports": ["calendarAgent.getTodayEventsText()", "calendarAgent.findFreeSlots()", "calendarAgent.createEvent()"]
+    },
+    "scoring": {
+      "file": "agents/scoring/index.ts",
+      "exports": ["scoringAgent.calculateDailyScore()", "scoringAgent.getTodayScore()", "scoringAgent.getHistorical()", "scoringAgent.getSummaryText()"]
+    }
+  },
+
+  "lib_modules": {
+    "lib/sleep.ts": "CRUD de SleepLog, stats semanales, summary para WA",
+    "lib/garmin.ts": "SSO Garmin (3 pasos), cache sesión en DB, fetchGarminSleepData, fetchGarminActivities, syncGarminSleepRange",
+    "lib/fitness.ts": "CRUD workouts/rutinas, NLP ejercicios (Claude), smart habits, upsertWorkoutFromGarmin",
+    "lib/nutrition.ts": "CRUD meals/water, logMealNLP (Claude Haiku calcula macros), diet alignment, stats",
+    "lib/ideas.ts": "CRUD ideas, captureIdeaNLP (Claude Haiku estructura), cycleIdeaStatus, priority/status",
+    "lib/projects.ts": "CRUD proyectos/tareas, reorder (transacción atómica), weekly stats",
+    "lib/notion.ts": "Cliente read-only Notion (@notionhq/client v5), fetchNotionTasks, syncNotionToProjects",
+    "lib/calendar.ts": "Google Calendar (fetch REST directo, sin SDK). getTodayEvents, createEvent, findFreeSlots (6-22hs), token refresh automático desde tabla accounts",
+    "lib/finances.ts": "Proxy client a finanzas-lemon.vercel.app. getMonthlyReport, getRecentTransactions, createTransaction, getFinancesDashboard, getFinancesSummaryText",
+    "lib/whatsapp.ts": "parseIncomingWebhook, sendTextMessage, markAsRead, downloadAudio, transcribeAudio (Whisper)",
+    "lib/scoring.ts": "calculateFullScore, calcSleepScoreForDate, calcFitnessScoreForDate, calcNutritionScoreForDate, calcProjectsScoreForDate, saveScore, getScoreHistory",
+    "lib/db.ts": "Prisma client singleton"
+  },
+
+  "database_models": {
+    "auth": ["User", "Account", "Session", "VerificationToken"],
+    "sleep": ["SleepLog — userId, date(despertar), bedTime, wakeTime, durationMinutes, garminSleepId, garminScore, deepSleepMinutes, lightSleepMinutes, remSleepMinutes, awakeMinutes, stressScore, spo2Avg, respirationAvg, bodyBatteryChange"],
+    "fitness": ["Workout — userId, date, type(GYM/RUNNING/SWIMMING/WALKING/CYCLING/OTHER), durationMinutes, distanceKm, calories, title, source(MANUAL/GARMIN), steps, garminActivityId", "WorkoutExercise", "WorkoutSet", "GymRoutine", "GymRoutineExercise"],
+    "nutrition": ["Meal — userId, date, type(BREAKFAST/LUNCH/DINNER/SNACK), description, calories, protein, carbs, fat, dietAlignmentScore", "WaterLog", "UserDiet"],
+    "projects": ["Project — userId, title, description, status(TODO/IN_PROGRESS/DONE), priority, deadline, color, notionId, order", "ProjectTask"],
+    "ideas": ["Idea — userId, title, content, tags[], priority(baja/media/alta/urgente), status(idea/progreso/hecha)"],
+    "scoring": ["DailyScore — userId, date, sleepScore, fitnessScore, nutritionScore, projectsScore, globalScore"],
+    "config": ["UserSettings — whatsappNumber, garminSessionKey, garminSessionExp, expectedSleepTime, expectedWakeTime, expectedGymTime, gymDays, dailyWaterGoalThermos, notificationsEnabled, notionToken, notionDbId, financesApiKey", "UserHabit", "WhatsAppMessage"]
+  },
+
+  "integrations": {
+    "whatsapp_business_api": {
+      "status": "activo",
+      "waba_id": "1291248383180052",
+      "phone_number_id": "1175554135632045",
+      "phone": "+59892182606",
+      "auth": "System User token permanente (Meta Business Manager)",
+      "webhook_subscribed_to": "messages",
+      "env_vars": ["WHATSAPP_TOKEN", "WHATSAPP_PHONE_ID", "WHATSAPP_WABA_ID", "WEBHOOK_VERIFY_TOKEN"]
+    },
+    "garmin_connect_api": {
+      "status": "activo",
+      "auth": "SSO en 3 pasos (embed → signin → ticket). Cache sesión en DB (TTL 23h)",
+      "endpoints_used": ["wellness endpoint (sueño)", "activitylist-service (actividades)"],
+      "env_vars": ["GARMIN_EMAIL", "GARMIN_PASSWORD"]
+    },
+    "google_calendar_api": {
+      "status": "activo",
+      "auth": "OAuth Google — scopes calendar.readonly + calendar.events. Tokens guardados en tabla accounts por NextAuth. Refresh automático si expira en <60s.",
+      "env_vars": ["AUTH_GOOGLE_ID", "AUTH_GOOGLE_SECRET", "GOOGLE_CALENDAR_ID"],
+      "note": "Usuario debe re-autenticar para que Google otorgue nuevos scopes"
+    },
+    "notion_api": {
+      "status": "activo (read-only)",
+      "client": "@notionhq/client v5",
+      "use": "Sincronizar tareas IT del trabajo (paginación con cursor)",
+      "env_vars": ["NOTION_TOKEN", "NOTION_DB_ID"],
+      "note": "Credenciales también configurables por usuario en UserSettings"
+    },
+    "anthropic_claude_api": {
+      "status": "activo",
+      "model_used": "claude-haiku-* (clasificación, NLP, macros, estructuración de ideas)",
+      "env_vars": ["ANTHROPIC_API_KEY"],
+      "uses": ["Orquestrador — clasificar intención de WhatsApp", "Agente fitness — parsear ejercicios NLP", "Agente nutrition — calcular macros + diet alignment", "Agente ideas — estructurar idea (title + content + tags)", "Agente calendar — parsear fecha/hora de texto libre", "Agente finances — parsear transacciones NLP", "Morning summary — cierre motivacional (max 60 tokens)"]
+    },
+    "openai_whisper_api": {
+      "status": "activo",
+      "use": "Transcripción de audios de WhatsApp (audio.ogg → texto)",
+      "env_vars": ["OPENAI_API_KEY"]
+    },
+    "finances_app": {
+      "status": "activo",
+      "url": "finanzas-lemon.vercel.app",
+      "auth": "Bearer token (financesApiKey en UserSettings)",
+      "proxy": "Todos los calls server-side vía /api/finances/*",
+      "env_vars": ["FINANCES_APP_URL", "FINANCES_API_KEY"]
+    },
+    "bible_api": {
+      "status": "activo",
+      "url": "bible-api.com/?random=verse&translation=rv1960",
+      "use": "Versículo del día en Morning Summary",
+      "auth": "Sin auth requerida (API gratuita)"
+    },
+    "supabase": {
+      "status": "activo",
+      "use": "PostgreSQL — base de datos principal",
+      "env_vars": ["DATABASE_URL", "DIRECT_URL"]
+    }
+  },
+
+  "cron_jobs": [
+    { "name": "sleep-sync", "platform": "Vercel", "schedule": "0 8 * * *", "route": "/api/cron/sleep-sync" },
+    { "name": "sleep-notifications", "platform": "cron-job.org", "schedule": "cada 30min 20:00-23:00", "route": "/api/cron/sleep-notifications" },
+    { "name": "fitness-sync", "platform": "Vercel", "schedule": "0 6 * * *", "route": "/api/cron/fitness-sync" },
+    { "name": "fitness-habits", "platform": "Vercel", "schedule": "10 7 * * *", "route": "/api/cron/fitness-habits" },
+    { "name": "water-reminder", "platform": "cron-job.org", "schedule": "0 12,17 * * *", "route": "/api/cron/water-reminder" },
+    { "name": "morning-summary", "platform": "Vercel", "schedule": "30 10 * * *", "route": "/api/cron/morning-summary", "note": "7:30 AM Uruguay (UTC-3)" }
+  ],
+
+  "scoring_logic": {
+    "global": "Promedio de scores de módulos con datos (null = sin datos, 0 = datos pero criterios no cumplidos)",
+    "modules_scored": ["sleep", "fitness", "nutrition", "projects"],
+    "not_scored": ["ideas — módulo creativo, no penaliza"],
+    "sleep_criteria": {
+      "registro": "30pts",
+      "duracion": "40pts (7–9h ideal)",
+      "calidad": "30pts (hora acostarse si no hay Garmin, score Garmin proporcional si hay)"
+    },
+    "fitness_criteria": {
+      "base": "40pts",
+      "gym": "20pts",
+      "duracion": "20pts",
+      "cardio": "20pts",
+      "note": "null si no es día de gym configurado"
+    },
+    "nutrition_criteria": "Registro de comidas + alineación con dieta + hidratación",
+    "projects_criteria": {
+      "actividad": "40+20pts por tareas completadas",
+      "estado_in_progress": "20pts",
+      "deadlines_sanos": "20pts"
+    }
+  },
+
+  "auth": {
+    "provider": "Google OAuth (NextAuth v5)",
+    "restriction": "Solo el email definido en ALLOWED_EMAIL puede acceder",
+    "session_storage": "Base de datos Supabase",
+    "middleware": "middleware.ts protege todas las rutas excepto /login y /api/whatsapp/webhook",
+    "env_vars": ["AUTH_SECRET", "AUTH_GOOGLE_ID", "AUTH_GOOGLE_SECRET", "ALLOWED_EMAIL"]
+  },
+
+  "whatsapp_flow": {
+    "inbound": [
+      "Usuario envía mensaje (texto o audio)",
+      "POST /api/whatsapp/webhook recibe payload Meta",
+      "after() ejecuta processIncomingMessage (Vercel serverless safe)",
+      "parseIncomingWebhook → markAsRead",
+      "Resolver userId por whatsappNumber en UserSettings",
+      "Si audio → downloadAudio → transcribeAudio (Whisper)",
+      "Guardar mensaje como INBOUND en DB",
+      "orchestrate(userId, text) → sub-agente correspondiente",
+      "sendTextMessage(respuesta)",
+      "Guardar OUTBOUND en DB + marcar INBOUND como PROCESSED"
+    ],
+    "outbound_proactive": [
+      "Cron job o evento interno dispara sub-agente",
+      "Sub-agente genera texto de notificación",
+      "sendTextMessage directamente",
+      "Ejemplos: morning summary, bedtime reminder, gym habit alert, water reminder"
+    ]
+  },
+
+  "morning_summary_pipeline": [
+    "Resolver userId por ALLOWED_EMAIL → whatsappNumber",
+    "Fetch versículo aleatorio (bible-api.com)",
+    "scoringAgent.getSummaryText(userId, yesterday)",
+    "sleepAgent.getSleepSummaryText(userId)",
+    "getNutritionSummaryText(userId, yesterday)",
+    "calendarAgent.getTodayEventsText(userId)",
+    "Claude Haiku — cierre motivacional (max 60 tokens, sin markdown)",
+    "Promise.allSettled — secciones omitidas si fallan silenciosamente",
+    "sendTextMessage(summary)"
+  ],
+
+  "components_by_module": {
+    "layout": ["AppLayout", "Sidebar", "Header", "BottomNav"],
+    "ui": ["ScoreBar", "ThemeToggle"],
+    "providers": ["ThemeProvider"],
+    "dashboard": ["ModuleSummaryCard"],
+    "scoring": ["GlobalScoreRing", "ScoreCardModule", "ScoreTrendChart", "PeriodSelector", "ModuleToggle", "DailyScoreCard", "ScoringDashboard", "ScoringHistoryClient"],
+    "sleep": ["SleepModuleClient", "SleepQuickActions", "SleepTodayCard", "SleepWeekStats", "SleepDurationChart", "SleepQualityChart", "SleepTimingChart", "SleepHistoryList", "GarminSyncButton"],
+    "fitness": ["FitnessModuleClient", "TodayWorkoutCard", "GymRoutineCard", "FitnessQuickActions", "WeeklyVolumeChart", "WorkoutHistoryList", "RoutineManager", "SmartHabitAlert", "GarminSyncButton"],
+    "nutrition": ["NutritionModuleClient", "MealLogCard", "MacrosChart", "WaterTracker", "NutritionQuickActions", "MealHistoryList", "NutritionWeekStats", "DietCard", "AlignmentBadge"],
+    "projects": ["ProjectsModuleClient", "KanbanBoard (SSR disabled)", "ProjectCard", "ProjectDetail", "TimelineView", "NotionSyncButton", "ProjectsQuickActions", "WeeklyProjectStats"],
+    "ideas": ["IdeasModuleClient", "IdeaCaptureForm", "IdeaCard", "IdeaDetail", "IdeasGrid", "TagFilter", "IdeasStats"],
+    "finances": ["FinancesModuleClient"],
+    "settings": ["SettingsClient"]
+  },
+
+  "env_vars_summary": {
+    "database": ["DATABASE_URL", "DIRECT_URL"],
+    "auth": ["AUTH_SECRET", "AUTH_GOOGLE_ID", "AUTH_GOOGLE_SECRET", "ALLOWED_EMAIL"],
+    "ai": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"],
+    "whatsapp": ["WHATSAPP_TOKEN", "WHATSAPP_PHONE_ID", "WHATSAPP_WABA_ID", "WEBHOOK_VERIFY_TOKEN"],
+    "garmin": ["GARMIN_EMAIL", "GARMIN_PASSWORD"],
+    "integrations": ["NOTION_TOKEN", "NOTION_DB_ID", "GOOGLE_CALENDAR_ID", "FINANCES_APP_URL", "FINANCES_API_KEY"],
+    "cron": ["CRON_SECRET"]
+  },
+
+  "pending_and_notes": {
+    "lumina_integration": "Sin API disponible — módulo de Ideas ya reemplaza funcionalmente a Lumina dentro de la app",
+    "apple_health": "No accesible desde web. Alternativa: Garmin Connect API (fuente principal) o iPhone Shortcut con webhook",
+    "finances_webhooks": "App de finanzas tiene Telegram bot + OpenAI — webhooks de nuevas transacciones pueden disparar alertas proactivas (no implementado aún)",
+    "ventas_app": "Sesión futura — Marketplace + dashboard negocio + agente Meta",
+    "dead_code_ideas": "Archivos legacy en /components/ideas/ (IdeaCaptureForm, IdeaCard, IdeaDetail, IdeasGrid, IdeasStats, TagFilter) pueden borrarse — reemplazados por IdeasModuleClient reescrito",
+    "prisma_workaround": "Si prisma db push falla por conectividad Supabase, aplicar migraciones vía SQL directo en Supabase SQL Editor",
+    "cron_platform_note": "Vercel Hobby = 1 ejecución/día por cron. Crons frecuentes usan cron-job.org con ?secret= como query param"
+  }
+}

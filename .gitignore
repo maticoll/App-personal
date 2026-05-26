@@ -41,3 +41,6 @@ next-env.d.ts
 # Prisma
 prisma/*.db
 prisma/*.db-journal
+
+# Codex (contiene API keys)
+.codex/

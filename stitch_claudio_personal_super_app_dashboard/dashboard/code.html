@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;family=Geist+Mono:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            font-family: 'Geist', sans-serif;
+            background-color: #10131d;
+            color: #e0e2f0;
+            -webkit-font-smoothing: antialiased;
+        }
+        .glass-card {
+            background: rgba(26, 29, 39, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .score-ring-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .active-glow {
+            filter: drop-shadow(0 0 8px rgba(192, 193, 255, 0.5));
+        }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                "on-tertiary-fixed": "#301400",
+                "outline-variant": "#464554",
+                "on-primary-fixed": "#07006c",
+                "secondary-fixed-dim": "#d0bcff",
+                "primary-fixed-dim": "#c0c1ff",
+                "on-primary-container": "#0d0096",
+                "inverse-primary": "#494bd6",
+                "inverse-surface": "#e0e2f0",
+                "secondary-fixed": "#e9ddff",
+                "outline": "#908fa0",
+                "on-tertiary-fixed-variant": "#703700",
+                "on-background": "#e0e2f0",
+                "tertiary-fixed-dim": "#ffb783",
+                "surface": "#10131d",
+                "primary": "#c0c1ff",
+                "primary-container": "#8083ff",
+                "tertiary": "#ffb783",
+                "surface-container-highest": "#31343f",
+                "on-secondary": "#3c0091",
+                "on-error-container": "#ffdad6",
+                "on-secondary-fixed": "#23005c",
+                "error": "#ffb4ab",
+                "on-error": "#690005",
+                "on-secondary-container": "#c4abff",
+                "primary-fixed": "#e1e0ff",
+                "on-surface-variant": "#c7c4d7",
+                "surface-dim": "#10131d",
+                "surface-bright": "#363944",
+                "secondary": "#d0bcff",
+                "on-secondary-fixed-variant": "#5516be",
+                "surface-variant": "#31343f",
+                "surface-container-high": "#272a34",
+                "inverse-on-surface": "#2d303b",
+                "surface-container-lowest": "#0b0e17",
+                "background": "#10131d",
+                "on-primary-fixed-variant": "#2f2ebe",
+                "tertiary-fixed": "#ffdcc5",
+                "surface-container": "#1c1f29",
+                "secondary-container": "#571bc1",
+                "tertiary-container": "#d97721",
+                "on-primary": "#1000a9",
+                "surface-container-low": "#181b25",
+                "error-container": "#93000a",
+                "on-surface": "#e0e2f0",
+                "on-tertiary-container": "#452000",
+                "surface-tint": "#c0c1ff",
+                "on-tertiary": "#4f2500"
+            },
+            "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "full": "9999px"
+            },
+            "spacing": {
+                "lg": "24px",
+                "xl": "40px",
+                "margin-desktop": "32px",
+                "gutter": "16px",
+                "md": "16px",
+                "margin-mobile": "16px",
+                "unit": "4px",
+                "xs": "4px",
+                "sm": "8px"
+            },
+            "fontFamily": {
+                "label-md": ["Geist"],
+                "body-md": ["Geist"],
+                "display-lg": ["Geist"],
+                "body-lg": ["Geist"],
+                "headline-lg": ["Geist"],
+                "headline-md": ["Geist"],
+                "mono-md": ["Geist Mono"],
+                "label-sm": ["Geist"]
+            },
+            "fontSize": {
+                "label-md": ["14px", {"lineHeight": "1.4", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "700"}],
+                "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                "mono-md": ["14px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                "label-sm": ["12px", {"lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface antialiased overflow-x-hidden pb-32">
+<!-- TopAppBar -->
+<header class="sticky top-0 z-40 flex justify-between items-center px-lg h-[72px] w-full bg-surface/80 backdrop-blur-xl border-b border-outline-variant/10 shadow-lg">
+<div class="flex items-center gap-sm">
+<div class="w-10 h-10 rounded-full bg-surface-container overflow-hidden">
+<img alt="User Profile Image" class="w-full h-full object-cover" data-alt="A professional studio portrait of a young male creative professional with a friendly expression. The lighting is soft and cinematic, with a deep indigo and obsidian background that matches a high-end tech aesthetic. The overall mood is focused, modern, and technologically empowered, utilizing sharp focus and clean lines." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBsid70SigJKACZEmMFQUszlCS7ljRS4gHfvp0p1rcmPgYqk4MwBF8Kz98J18G492tslmaon7ZI9n8NsQoZTMQT-Bdumqvy-F3YasVkFwyvZYY5VOfbR1mbjaxt9t8NdtYC0LoAMVTSJktLmSSgZufNMQw-aryhWMmSVbF1WGMhH19loxaNeOqdHcIVe2ouBuBuTpocW0rTIMPm5TLyU6QV-ooAiqI0wtV8BNe-R4Lsjn0BwJHTWgIz3flXBN-WIFbH0crckDrplQ"/>
+</div>
+<span class="font-headline-md text-headline-md font-bold tracking-tighter text-primary">CLAUDIO</span>
+</div>
+<div class="flex items-center gap-md">
+<button class="material-symbols-outlined text-primary hover:bg-surface-container-highest transition-colors p-sm rounded-full active:scale-98 transition-all duration-200">
+                settings
+            </button>
+</div>
+</header>
+<main class="max-w-screen-sm mx-auto px-margin-mobile pt-lg">
+<!-- Greetings Section -->
+<section class="mb-xl">
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Buenos días, Matías ☀️</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Lunes, 12 de Junio</p>
+</section>
+<!-- Global Score Ring -->
+<section class="flex flex-col items-center justify-center mb-xl">
+<div class="score-ring-container w-64 h-64">
+<svg class="w-full h-full transform -rotate-90" viewbox="0 0 100 100">
+<circle class="text-surface-container-high" cx="50" cy="50" fill="transparent" r="45" stroke="currentColor" stroke-width="8"></circle>
+<circle cx="50" cy="50" fill="transparent" r="45" stroke="url(#gradient)" stroke-dasharray="282.7" stroke-dashoffset="45" stroke-linecap="round" stroke-width="8"></circle>
+<defs>
+<lineargradient id="gradient" x1="0%" x2="100%" y1="0%" y2="0%">
+<stop offset="0%" style="stop-color:#d97721"></stop>
+<stop offset="100%" style="stop-color:#4ade80"></stop>
+</lineargradient>
+</defs>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="font-display-lg text-display-lg text-primary tracking-tighter">84</span>
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-widest">Global Score</span>
+</div>
+</div>
+</section>
+<!-- Bento Grid Modules -->
+<div class="grid grid-cols-2 gap-md">
+<!-- Sleep Card -->
+<div class="glass-card rounded-xl p-md flex flex-col justify-between aspect-square active:scale-98 transition-all duration-200">
+<div class="flex justify-between items-start">
+<span class="font-label-sm text-label-sm text-[#d0bcff] uppercase">Sleep</span>
+<span class="material-symbols-outlined text-[#d0bcff]">bedtime</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">82<span class="text-body-md text-on-surface-variant">/100</span></h3>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-xs leading-tight">Dormiste 7h 20min • SpO2 97%</p>
+</div>
+</div>
+<!-- Fitness Card -->
+<div class="glass-card rounded-xl p-md flex flex-col justify-between aspect-square active:scale-98 transition-all duration-200">
+<div class="flex justify-between items-start">
+<span class="font-label-sm text-label-sm text-[#22d3ee] uppercase">Fitness</span>
+<span class="material-symbols-outlined text-[#22d3ee]">fitness_center</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">90<span class="text-body-md text-on-surface-variant">/100</span></h3>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-xs leading-tight">Push Day completado • 1.2k kcal</p>
+</div>
+</div>
+<!-- Nutrition Card -->
+<div class="glass-card rounded-xl p-md flex flex-col justify-between aspect-square active:scale-98 transition-all duration-200">
+<div class="flex justify-between items-start">
+<span class="font-label-sm text-label-sm text-[#10b981] uppercase">Nutrition</span>
+<span class="material-symbols-outlined text-[#10b981]">restaurant</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">75<span class="text-body-md text-on-surface-variant">/100</span></h3>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-xs leading-tight">Proteína: 160g/180g • 2.5L agua</p>
+</div>
+</div>
+<!-- Projects Card -->
+<div class="glass-card rounded-xl p-md flex flex-col justify-between aspect-square active:scale-98 transition-all duration-200">
+<div class="flex justify-between items-start">
+<span class="font-label-sm text-label-sm text-[#fbbf24] uppercase">Projects</span>
+<span class="material-symbols-outlined text-[#fbbf24]">list_alt</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">60<span class="text-body-md text-on-surface-variant">/100</span></h3>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-xs leading-tight">2 tareas pendientes en Notion</p>
+</div>
+</div>
+<!-- Ideas Card -->
+<div class="glass-card rounded-xl p-md flex flex-col justify-between aspect-square active:scale-98 transition-all duration-200">
+<div class="flex justify-between items-start">
+<span class="font-label-sm text-label-sm text-[#fb7185] uppercase">Ideas</span>
+<span class="material-symbols-outlined text-[#fb7185]">psychology</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Active</h3>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-xs leading-tight">4 nuevas ideas hoy</p>
+</div>
+</div>
+<!-- Finances Card -->
+<div class="glass-card rounded-xl p-md flex flex-col justify-between aspect-square active:scale-98 transition-all duration-200">
+<div class="flex justify-between items-start">
+<span class="font-label-sm text-label-sm text-[#60a5fa] uppercase">Finances</span>
+<span class="material-symbols-outlined text-[#60a5fa]">payments</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Safe</h3>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-xs leading-tight">Gasto diario bajo control</p>
+</div>
+</div>
+</div>
+<!-- Garmin Sync Pill -->
+<div class="mt-xl flex justify-center">
+<button class="bg-surface-container-highest px-lg py-md rounded-full flex items-center gap-sm border border-outline-variant/20 hover:bg-surface-bright transition-colors active:scale-95 duration-150">
+<span class="material-symbols-outlined text-primary">sync</span>
+<span class="font-label-md text-label-md text-on-surface">Sync with Garmin</span>
+</button>
+</div>
+</main>
+<!-- FAB -->
+<button class="fixed bottom-32 right-8 w-14 h-14 bg-primary-container text-on-primary-container rounded-full shadow-[0_8px_32px_rgba(128,131,255,0.4)] flex items-center justify-center z-50 active:scale-90 transition-transform duration-150">
+<span class="material-symbols-outlined text-[32px]">add</span>
+</button>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-lg left-1/2 -translate-x-1/2 w-[calc(100%-32px)] max-w-md z-50 flex justify-around items-center h-16 px-md py-sm bg-surface-container/60 backdrop-blur-md border border-outline-variant/20 rounded-full shadow-[0_20px_40px_rgba(0,0,0,0.4)]">
+<a class="flex flex-col items-center justify-center text-primary drop-shadow-[0_0_8px_rgba(192,193,255,0.5)] transition-opacity" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-60 hover:opacity-100 transition-opacity active:scale-90 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">fitness_center</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-60 hover:opacity-100 transition-opacity active:scale-90 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">psychology</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-60 hover:opacity-100 transition-opacity active:scale-90 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">list_alt</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-60 hover:opacity-100 transition-opacity active:scale-90 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">person</span>
+</a>
+</nav>
+</body></html>

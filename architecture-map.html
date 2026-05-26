@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>App Personal — Arquitectura</title>
+<style>
+  :root {
+    --bg: #0D0F14;
+    --surface: #1A1D27;
+    --surface2: #222636;
+    --border: #2D3148;
+    --accent: #6366F1;
+    --accent2: #818CF8;
+    --text: #E2E8F0;
+    --muted: #94A3B8;
+    --sleep: #8B5CF6;
+    --fitness: #06B6D4;
+    --nutrition: #10B981;
+    --projects: #F59E0B;
+    --ideas: #EC4899;
+    --finances: #3B82F6;
+    --scoring: #6366F1;
+    --whatsapp: #25D366;
+    --green: #22C55E;
+    --red: #EF4444;
+    --orange: #F97316;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 24px;
+  }
+  h1 { font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); margin-bottom: 32px; font-size: 13px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
+  .badge-orange { background: rgba(249,115,22,0.15); color: var(--orange); }
+  .badge-muted { background: rgba(148,163,184,0.1); color: var(--muted); }
+
+  /* ── GRID PRINCIPAL ── */
+  .grid-main { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+  @media(max-width: 1100px) { .grid-main { grid-template-columns: 1fr 1fr; } }
+  @media(max-width: 700px) { .grid-main { grid-template-columns: 1fr; } }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+  @media(max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+  @media(max-width: 900px) { .grid-3 { grid-template-columns: 1fr 1fr; } }
+  @media(max-width: 600px) { .grid-3 { grid-template-columns: 1fr; } }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .card-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+  }
+  .card-title { font-size: 14px; font-weight: 600; color: #fff; }
+  .card-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+  /* ── SECTION HEADER ── */
+  .section-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted);
+    margin-bottom: 14px; margin-top: 32px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title:first-child { margin-top: 0; }
+
+  /* ── LIST ITEMS ── */
+  .item { padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 8px; }
+  .item:last-child { border-bottom: none; }
+  .item-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+  .item-label { color: var(--text); font-size: 12px; }
+  .item-note { color: var(--muted); font-size: 11px; margin-top: 1px; }
+  .method { display: inline-block; padding: 1px 5px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-right: 4px; font-family: monospace; }
+  .get { background: rgba(34,197,94,0.15); color: #4ade80; }
+  .post { background: rgba(99,102,241,0.15); color: #a5b4fc; }
+  .patch { background: rgba(249,115,22,0.15); color: #fb923c; }
+  .delete { background: rgba(239,68,68,0.15); color: #f87171; }
+
+  /* ── FLOW DIAGRAM ── */
+  .flow {
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .flow-step {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .flow-step:last-child { border-bottom: none; }
+  .flow-num {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    font-size: 10px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .flow-arrow { color: var(--muted); font-size: 14px; text-align: center; padding: 2px 0; }
+
+  /* ── MODULE PILL ── */
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 99px;
+    font-size: 11px; font-weight: 600; margin: 3px;
+  }
+
+  /* ── ENV VAR CHIP ── */
+  .env { display: inline-block; background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; font-family: monospace; font-size: 10px; color: #93c5fd; margin: 2px; }
+
+  /* ── TABLE ── */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; padding: 7px 10px; background: var(--surface2); color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  code { font-family: monospace; font-size: 11px; background: var(--surface2); padding: 1px 5px; border-radius: 4px; color: #a5b4fc; }
+
+  /* ── BIG ARCH DIAGRAM ── */
+  .arch-diagram {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .arch-row { display: flex; justify-content: center; align-items: center; gap: 12px; margin: 8px 0; flex-wrap: wrap; }
+  .arch-box {
+    padding: 10px 16px; border-radius: 8px; border: 1px solid;
+    font-size: 12px; font-weight: 600; min-width: 110px; text-align: center;
+  }
+  .arch-arrow { color: var(--muted); font-size: 20px; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+  .arch-arrow-label { font-size: 9px; color: var(--muted); margin-top: 2px; }
+  .arch-separator { width: 100%; height: 1px; background: var(--border); margin: 12px 0; }
+
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+  .dot-green { background: var(--green); }
+  .dot-orange { background: var(--orange); }
+  .dot-muted { background: var(--muted); }
+
+  /* tag strip */
+  .tag-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .tag { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; font-size: 11px; color: var(--muted); }
+
+  /* scoring bars */
+  .score-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+  .score-label { width: 80px; font-size: 11px; color: var(--muted); flex-shrink: 0; }
+  .score-bar-bg { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  .score-bar-fill { height: 100%; border-radius: 3px; }
+  .score-val { font-size: 11px; width: 30px; text-align: right; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>App Personal — Arquitectura Completa</h1>
+<p class="subtitle">Super-app personal · Next.js 15 + Supabase + WhatsApp + Claude API · Mayo 2026 · <span class="badge badge-green">En producción</span></p>
+
+<!-- ═══ DIAGRAMA VISUAL PRINCIPAL ═══ -->
+<div class="arch-diagram">
+  <div class="arch-row">
+    <div class="arch-box" style="border-color: var(--whatsapp); color: var(--whatsapp); background: rgba(37,211,102,0.08);">
+      📱 WhatsApp<br><span style="font-size:10px; font-weight:400; color: var(--muted);">texto · audio (Whisper)</span>
+    </div>
+  </div>
+  <div class="arch-arrow">↕ <span class="arch-arrow-label">POST /api/whatsapp/webhook</span></div>
+  <div class="arch-row">
+    <div class="arch-box" style="border-color: var(--accent); color: var(--accent2); background: rgba(99,102,241,0.08);">
+      🧠 Orquestrador<br><span style="font-size:10px; font-weight:400; color: var(--muted);">Claude Haiku — clasifica intención</span>
+    </div>
+  </div>
+  <div class="arch-arrow">↓ <span class="arch-arrow-label">deriva al sub-agente</span></div>
+  <div class="arch-row">
+    <div class="arch-box" style="border-color:var(--sleep);color:var(--sleep);background:rgba(139,92,246,0.08)">😴 Sleep</div>
+    <div class="arch-box" style="border-color:var(--fitness);color:var(--fitness);background:rgba(6,182,212,0.08)">💪 Fitness</div>
+    <div class="arch-box" style="border-color:var(--nutrition);color:var(--nutrition);background:rgba(16,185,129,0.08)">🥗 Nutrition</div>
+    <div class="arch-box" style="border-color:var(--projects);color:var(--projects);background:rgba(245,158,11,0.08)">📁 Projects</div>
+    <div class="arch-box" style="border-color:var(--ideas);color:var(--ideas);background:rgba(236,72,153,0.08)">💡 Ideas</div>
+    <div class="arch-box" style="border-color:var(--finances);color:var(--finances);background:rgba(59,130,246,0.08)">💰 Finances</div>
+    <div class="arch-box" style="border-color:#34d399;color:#34d399;background:rgba(52,211,153,0.08)">📅 Calendar</div>
+    <div class="arch-box" style="border-color:var(--scoring);color:var(--scoring);background:rgba(99,102,241,0.08)">⭐ Scoring</div>
+  </div>
+  <div class="arch-arrow">↕</div>
+  <div class="arch-row">
+    <div class="arch-box" style="border-color:var(--border);color:var(--text);background:var(--surface)">
+      🐘 Supabase (PostgreSQL + Prisma)<br><span style="font-size:10px;font-weight:400;color:var(--muted)">20+ tablas · NextAuth · UserSettings</span>
+    </div>
+  </div>
+  <div class="arch-separator"></div>
+  <div class="arch-row">
+    <div class="arch-box" style="border-color:var(--border);color:var(--muted);font-size:11px;background:transparent">
+      ☀️ Cron Jobs<br><span style="font-size:10px">Vercel + cron-job.org</span>
+    </div>
+    <div class="arch-arrow" style="flex-direction:row">→</div>
+    <div class="arch-box" style="border-color:var(--border);color:var(--text);background:var(--surface)">
+      🌐 Dashboard Web (PWA)<br><span style="font-size:10px;font-weight:400;color:var(--muted)">app-personal-ten.vercel.app · iPhone 14</span>
+    </div>
+    <div class="arch-arrow" style="flex-direction:row">→</div>
+    <div class="arch-box" style="border-color:var(--border);color:var(--muted);font-size:11px;background:transparent">
+      🔗 Integraciones<br><span style="font-size:10px">Garmin · Notion · GCal · Finanzas · Bible API</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STACK ═══ -->
+<p class="section-title">🛠 Stack Tecnológico</p>
+<div class="grid-3">
+  <div class="card">
+    <div class="card-header"><div class="card-icon" style="background:rgba(99,102,241,0.15)">⚛️</div><div><div class="card-title">Frontend</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Next.js 15 (App Router)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">TypeScript — 100% tipado</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Tailwind CSS 3 — dark/light mode</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Recharts — gráficos</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">next-pwa — PWA iPhone 14</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">next-themes — toggle dark/light</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">@hello-pangea/dnd — Kanban D&D</div></div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon" style="background:rgba(16,185,129,0.15)">🐘</div><div><div class="card-title">Backend / DB</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--nutrition)"></div><div><div class="item-label">Supabase — PostgreSQL</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--nutrition)"></div><div><div class="item-label">Prisma 5 ORM</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--nutrition)"></div><div><div class="item-label">NextAuth v5 (Google OAuth)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--nutrition)"></div><div><div class="item-label">Vercel (deploy + crons)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--nutrition)"></div><div><div class="item-label">API Routes Next.js (REST)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--nutrition)"></div><div><div class="item-label">after() para webhooks async</div></div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon" style="background:rgba(236,72,153,0.15)">🤖</div><div><div class="card-title">IA</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--ideas)"></div><div><div class="item-label">Claude API (Anthropic)</div><div class="item-note">Haiku — clasificación, NLP, macros, ideas, calendario</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--ideas)"></div><div><div class="item-label">Whisper API (OpenAI)</div><div class="item-note">Transcripción audio.ogg de WhatsApp</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--ideas)"></div><div><div class="item-label">Orquestrador central</div><div class="item-note">Único que habla con WhatsApp</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--ideas)"></div><div><div class="item-label">8 sub-agentes especializados</div><div class="item-note">uno por módulo</div></div></div>
+  </div>
+</div>
+
+<!-- ═══ MÓDULOS ═══ -->
+<p class="section-title">📦 Módulos de la App</p>
+<div class="grid-main">
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon" style="background:rgba(139,92,246,0.15)">😴</div>
+      <div><div class="card-title">Módulo Sleep</div><div class="card-sub"><span class="status-dot dot-green"></span>Construido · <code>/sleep</code></div></div>
+    </div>
+    <div class="item"><div class="item-dot" style="background:var(--sleep)"></div><div><div class="item-label">Registro manual bed/wake</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--sleep)"></div><div><div class="item-label">Sync Garmin Connect API</div><div class="item-note">SpO2, Body Battery, fases, score</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--sleep)"></div><div><div class="item-label">Gráficos: duración, calidad, timing</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--sleep)"></div><div><div class="item-label">Score: registro 30pts + duración 40pts + calidad 30pts</div></div></div>
+    <div class="tag-strip">
+      <span class="tag">SleepLog</span><span class="tag">lib/sleep.ts</span><span class="tag">lib/garmin.ts</span><span class="tag">agents/sleep</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon" style="background:rgba(6,182,212,0.15)">💪</div>
+      <div><div class="card-title">Módulo Fitness</div><div class="card-sub"><span class="status-dot dot-green"></span>Construido · <code>/fitness</code></div></div>
+    </div>
+    <div class="item"><div class="item-dot" style="background:var(--fitness)"></div><div><div class="item-label">Rutinas gym CRUD + log NLP</div><div class="item-note">Claude Haiku parsea "press 100kg 4x3"</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--fitness)"></div><div><div class="item-label">Actividades cardio (run/swim/walk)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--fitness)"></div><div><div class="item-label">Smart Habits — detecta desvío de gym</div><div class="item-note">Propone hueco libre en Google Calendar</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--fitness)"></div><div><div class="item-label">Sync Garmin actividades</div></div></div>
+    <div class="tag-strip">
+      <span class="tag">Workout</span><span class="tag">GymRoutine</span><span class="tag">lib/fitness.ts</span><span class="tag">agents/fitness</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon" style="background:rgba(16,185,129,0.15)">🥗</div>
+      <div><div class="card-title">Módulo Nutrition</div><div class="card-sub"><span class="status-dot dot-green"></span>Construido · <code>/nutrition</code></div></div>
+    </div>
+    <div class="item"><div class="item-dot" style="background:var(--nutrition)"></div><div><div class="item-label">Log comidas en NLP</div><div class="item-note">Claude Haiku calcula macros + alignment score</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--nutrition)"></div><div><div class="item-label">Registro de agua (termos de 2L)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--nutrition)"></div><div><div class="item-label">Dieta del usuario — referencia para IA</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--nutrition)"></div><div><div class="item-label">MacrosChart + AlignmentBadge</div></div></div>
+    <div class="tag-strip">
+      <span class="tag">Meal</span><span class="tag">WaterLog</span><span class="tag">UserDiet</span><span class="tag">agents/nutrition</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon" style="background:rgba(245,158,11,0.15)">📁</div>
+      <div><div class="card-title">Módulo Projects</div><div class="card-sub"><span class="status-dot dot-green"></span>Construido · <code>/projects</code></div></div>
+    </div>
+    <div class="item"><div class="item-dot" style="background:var(--projects)"></div><div><div class="item-label">Kanban — To Do / In Progress / Done</div><div class="item-note">Drag & drop (@hello-pangea/dnd, SSR disabled)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--projects)"></div><div><div class="item-label">Timeline view con deadlines</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--projects)"></div><div><div class="item-label">Sync Notion (read-only)</div><div class="item-note">Tareas IT del trabajo, paginación cursor</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--projects)"></div><div><div class="item-label">Reorder atómico (Prisma transaction)</div></div></div>
+    <div class="tag-strip">
+      <span class="tag">Project</span><span class="tag">ProjectTask</span><span class="tag">lib/notion.ts</span><span class="tag">agents/projects</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon" style="background:rgba(236,72,153,0.15)">💡</div>
+      <div><div class="card-title">Módulo Ideas</div><div class="card-sub"><span class="status-dot dot-green"></span>Construido (estilo Lumina) · <code>/ideas</code></div></div>
+    </div>
+    <div class="item"><div class="item-dot" style="background:var(--ideas)"></div><div><div class="item-label">Captura en NLP — Claude Haiku estructura</div><div class="item-note">Genera title + content expandido + tags</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--ideas)"></div><div><div class="item-label">Priority: baja / media / alta / urgente</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--ideas)"></div><div><div class="item-label">Status: idea → progreso → hecha (cycle)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--ideas)"></div><div><div class="item-label">NO entra al score global (módulo creativo)</div></div></div>
+    <div class="tag-strip">
+      <span class="tag">Idea</span><span class="tag">lib/ideas.ts</span><span class="tag">agents/ideas</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon" style="background:rgba(59,130,246,0.15)">💰</div>
+      <div><div class="card-title">Módulo Finances</div><div class="card-sub"><span class="status-dot dot-green"></span>Construido (proxy) · <code>/finances</code></div></div>
+    </div>
+    <div class="item"><div class="item-dot" style="background:var(--finances)"></div><div><div class="item-label">Proxy a finanzas-lemon.vercel.app</div><div class="item-note">Bearer token en UserSettings.financesApiKey</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--finances)"></div><div><div class="item-label">Balance mensual, transacciones, tarjetas</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--finances)"></div><div><div class="item-label">Spending alerts por WhatsApp</div><div class="item-note">Alerta si gastos suben >20% vs mes anterior</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--finances)"></div><div><div class="item-label">Todos los calls son server-side (seguro)</div></div></div>
+    <div class="tag-strip">
+      <span class="tag">lib/finances.ts</span><span class="tag">agents/finances</span><span class="tag">/api/finances/*</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon" style="background:rgba(99,102,241,0.15)">⭐</div>
+      <div><div class="card-title">Módulo Scoring</div><div class="card-sub"><span class="status-dot dot-green"></span>Construido · <code>/scoring</code></div></div>
+    </div>
+    <div class="score-row"><div class="score-label">😴 Sleep</div><div class="score-bar-bg"><div class="score-bar-fill" style="width:100%;background:var(--sleep)"></div></div><div class="score-val">/100</div></div>
+    <div class="score-row"><div class="score-label">💪 Fitness</div><div class="score-bar-bg"><div class="score-bar-fill" style="width:100%;background:var(--fitness)"></div></div><div class="score-val">/100</div></div>
+    <div class="score-row"><div class="score-label">🥗 Nutrition</div><div class="score-bar-bg"><div class="score-bar-fill" style="width:100%;background:var(--nutrition)"></div></div><div class="score-val">/100</div></div>
+    <div class="score-row"><div class="score-label">📁 Projects</div><div class="score-bar-bg"><div class="score-bar-fill" style="width:100%;background:var(--projects)"></div></div><div class="score-val">/100</div></div>
+    <div style="margin-top:10px; font-size:11px; color:var(--muted)">Global = promedio de non-null · null vs 0 (sin datos vs datos sin cumplir) · Vistas: diario / semanal / mensual</div>
+    <div class="tag-strip">
+      <span class="tag">DailyScore</span><span class="tag">lib/scoring.ts</span><span class="tag">GlobalScoreRing</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon" style="background:rgba(52,211,153,0.15)">📅</div>
+      <div><div class="card-title">Módulo Calendar</div><div class="card-sub"><span class="status-dot dot-green"></span>Construido · integrado</div></div>
+    </div>
+    <div class="item"><div class="item-dot" style="background:#34d399"></div><div><div class="item-label">Google Calendar API (fetch REST directo)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:#34d399"></div><div><div class="item-label">Token refresh automático</div><div class="item-note">Lee/actualiza tabla accounts (NextAuth)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:#34d399"></div><div><div class="item-label">findFreeSlots(6-22hs) — para smart habits gym</div></div></div>
+    <div class="item"><div class="item-dot" style="background:#34d399"></div><div><div class="item-label">Incluido en Morning Summary</div></div></div>
+    <div class="item"><div class="item-dot" style="background:#34d399"></div><div><div class="item-label">Scopes: calendar.readonly + calendar.events</div></div></div>
+    <div class="tag-strip">
+      <span class="tag">lib/calendar.ts</span><span class="tag">agents/calendar</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon" style="background:rgba(148,163,184,0.1)">⚙️</div>
+      <div><div class="card-title">Settings</div><div class="card-sub"><span class="status-dot dot-green"></span>Construido · <code>/settings</code></div></div>
+    </div>
+    <div class="item"><div class="item-dot" style="background:var(--muted)"></div><div><div class="item-label">Perfil (Google), hábitos, notificaciones</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--muted)"></div><div><div class="item-label">WhatsApp number, dark/light mode</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--muted)"></div><div><div class="item-label">Notion token + DB ID</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--muted)"></div><div><div class="item-label">Google Calendar status + reconectar</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--muted)"></div><div><div class="item-label">Finanzas API key</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--red)"></div><div><div class="item-label">Danger Zone — borrar datos del día</div></div></div>
+    <div class="tag-strip">
+      <span class="tag">UserSettings</span><span class="tag">SettingsClient</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══ WHATSAPP FLOW ═══ -->
+<p class="section-title">📱 Flujo WhatsApp</p>
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><div class="card-icon" style="background:rgba(37,211,102,0.15)">📥</div><div><div class="card-title">Inbound (usuario → app)</div></div></div>
+    <div class="flow">
+      <div class="flow-step"><div class="flow-num">1</div><div>Usuario envía mensaje (texto o audio)</div></div>
+      <div class="flow-step"><div class="flow-num">2</div><div><code>POST /api/whatsapp/webhook</code> recibe payload Meta</div></div>
+      <div class="flow-step"><div class="flow-num">3</div><div>Devuelve 200 inmediato · <code>after()</code> ejecuta lógica pesada</div></div>
+      <div class="flow-step"><div class="flow-num">4</div><div>parseIncomingWebhook → markAsRead</div></div>
+      <div class="flow-step"><div class="flow-num">5</div><div>Resolver userId por <code>whatsappNumber</code> en UserSettings</div></div>
+      <div class="flow-step"><div class="flow-num">6</div><div>Si audio → downloadAudio → <strong>Whisper API</strong> → texto</div></div>
+      <div class="flow-step"><div class="flow-num">7</div><div>Guardar mensaje como INBOUND en DB</div></div>
+      <div class="flow-step"><div class="flow-num">8</div><div><strong>orchestrate(userId, text)</strong> → sub-agente</div></div>
+      <div class="flow-step"><div class="flow-num">9</div><div>sendTextMessage(respuesta) → WhatsApp</div></div>
+      <div class="flow-step"><div class="flow-num">10</div><div>Guardar OUTBOUND + marcar INBOUND como PROCESSED</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon" style="background:rgba(37,211,102,0.15)">📤</div><div><div class="card-title">Outbound Proactivo (app → usuario)</div></div></div>
+    <div class="flow">
+      <div class="flow-step"><div class="flow-num">1</div><div>Cron job o evento interno dispara sub-agente</div></div>
+      <div class="flow-step"><div class="flow-num">2</div><div>Sub-agente genera texto de notificación</div></div>
+      <div class="flow-step"><div class="flow-num">3</div><div>sendTextMessage() directo a WhatsApp</div></div>
+    </div>
+    <div style="margin-top:14px; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:8px;">Notificaciones activas:</div>
+    <div class="item"><div class="item-dot" style="background:var(--sleep)"></div><div><div class="item-label">😴 Recordatorio bedtime (8–11 PM)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--sleep)"></div><div><div class="item-label">😴 Alerta despertar no registrado</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--fitness)"></div><div><div class="item-label">💪 Smart habit gym — propone hueco Calendar</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--nutrition)"></div><div><div class="item-label">🥤 Recordatorio de agua (12 PM + 5 PM)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--scoring)"></div><div><div class="item-label">☀️ Morning Summary (7:30 AM UY)</div></div></div>
+    <div style="margin-top:14px; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:8px;">Morning Summary contiene:</div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Versículo del día (bible-api.com · RV1960)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Score de ayer (global + módulos)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Resumen de sueño de anoche</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Nutrición / agua de ayer</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Agenda de hoy (Google Calendar)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Cierre motivacional (Claude Haiku, 60 tokens)</div></div></div>
+  </div>
+</div>
+
+<!-- ═══ AGENTES ═══ -->
+<p class="section-title">🤖 Sub-Agentes</p>
+<div class="card" style="margin-bottom:24px">
+  <table>
+    <thead><tr><th>Agente</th><th>Archivo</th><th>Intenciones detectadas</th><th>Exports clave</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="pill" style="background:rgba(99,102,241,0.15);color:var(--accent2)">🧠 Orchestrator</span></td>
+        <td><code>agents/orchestrator/index.ts</code></td>
+        <td style="color:var(--muted)">Clasifica en sleep / fitness / nutrition / projects / ideas / finances / calendar / sync</td>
+        <td><code>orchestrate(userId, text)</code></td>
+      </tr>
+      <tr>
+        <td><span class="pill" style="background:rgba(139,92,246,0.15);color:var(--sleep)">😴 Sleep</span></td>
+        <td><code>agents/sleep/index.ts</code></td>
+        <td style="color:var(--muted)">bed · wake · query · sync · unknown</td>
+        <td><code>getSleepSummaryText()</code> <code>getBedTimeReminderText()</code></td>
+      </tr>
+      <tr>
+        <td><span class="pill" style="background:rgba(6,182,212,0.15);color:var(--fitness)">💪 Fitness</span></td>
+        <td><code>agents/fitness/index.ts</code></td>
+        <td style="color:var(--muted)">gym_start · gym_log · cardio_log · query · sync_garmin · unknown</td>
+        <td><code>getSummaryText()</code> <code>checkSmartHabits()</code></td>
+      </tr>
+      <tr>
+        <td><span class="pill" style="background:rgba(16,185,129,0.15);color:var(--nutrition)">🥗 Nutrition</span></td>
+        <td><code>agents/nutrition/index.ts</code></td>
+        <td style="color:var(--muted)">meal_log · water_log · query · diet_update</td>
+        <td><code>getNutritionSummaryText()</code> <code>getWaterReminderText()</code></td>
+      </tr>
+      <tr>
+        <td><span class="pill" style="background:rgba(245,158,11,0.15);color:var(--projects)">📁 Projects</span></td>
+        <td><code>agents/projects/index.ts</code></td>
+        <td style="color:var(--muted)">create · update_status · task_done · query · sync_notion · unknown</td>
+        <td><code>getProjectsSummaryText()</code></td>
+      </tr>
+      <tr>
+        <td><span class="pill" style="background:rgba(236,72,153,0.15);color:var(--ideas)">💡 Ideas</span></td>
+        <td><code>agents/ideas/index.ts</code></td>
+        <td style="color:var(--muted)">capture · query · expand</td>
+        <td><code>processIdeasMessage()</code></td>
+      </tr>
+      <tr>
+        <td><span class="pill" style="background:rgba(59,130,246,0.15);color:var(--finances)">💰 Finances</span></td>
+        <td><code>agents/finances/index.ts</code></td>
+        <td style="color:var(--muted)">query_spending · query_balance · query_report · create_expense · create_income</td>
+        <td><code>checkSpendingAlerts()</code></td>
+      </tr>
+      <tr>
+        <td><span class="pill" style="background:rgba(52,211,153,0.15);color:#34d399">📅 Calendar</span></td>
+        <td><code>agents/calendar/index.ts</code></td>
+        <td style="color:var(--muted)">query_today · query_week · create_event · status</td>
+        <td><code>getTodayEventsText()</code> <code>findFreeSlots()</code> <code>createEvent()</code></td>
+      </tr>
+      <tr>
+        <td><span class="pill" style="background:rgba(99,102,241,0.15);color:var(--scoring)">⭐ Scoring</span></td>
+        <td><code>agents/scoring/index.ts</code></td>
+        <td style="color:var(--muted)">calculateDailyScore · getTodayScore · getHistorical</td>
+        <td><code>getSummaryText()</code></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══ API ROUTES ═══ -->
+<p class="section-title">🔌 API Routes</p>
+<div class="grid-2">
+  <div class="card">
+    <div style="font-size:11px;font-weight:700;color:var(--sleep);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">😴 Sleep</div>
+    <div class="item"><div><span class="method post">POST</span><code>/api/sleep/log</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><code>/api/sleep/today</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><code>/api/sleep/history</code></div></div>
+    <div class="item"><div><span class="method post">POST</span><code>/api/sleep/sync-garmin</code></div></div>
+    <div class="item"><div><span class="method patch">PATCH</span><span class="method delete">DEL</span><code>/api/sleep/[id]</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><code>/api/garmin/status</code></div></div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--fitness);margin:14px 0 10px;text-transform:uppercase;letter-spacing:.05em">💪 Fitness</div>
+    <div class="item"><div><span class="method get">GET</span><code>/api/fitness/today</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><span class="method post">POST</span><code>/api/fitness/workout</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><span class="method patch">PATCH</span><span class="method delete">DEL</span><code>/api/fitness/workout/[id]</code></div></div>
+    <div class="item"><div><span class="method post">POST</span><code>/api/fitness/workout/[id]/exercise</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><span class="method post">POST</span><code>/api/fitness/routines</code></div></div>
+    <div class="item"><div><span class="method patch">PATCH</span><span class="method delete">DEL</span><code>/api/fitness/routines/[id]</code></div></div>
+    <div class="item"><div><span class="method post">POST</span><code>/api/fitness/log-exercise</code> <span style="color:var(--muted);font-size:11px">NLP</span></div></div>
+    <div class="item"><div><span class="method post">POST</span><code>/api/fitness/sync-garmin</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><code>/api/fitness/weekly-stats</code></div></div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--nutrition);margin:14px 0 10px;text-transform:uppercase;letter-spacing:.05em">🥗 Nutrition</div>
+    <div class="item"><div><span class="method get">GET</span><code>/api/nutrition/today</code></div></div>
+    <div class="item"><div><span class="method post">POST</span><code>/api/nutrition/meal</code> <span style="color:var(--muted);font-size:11px">NLP + macros IA</span></div></div>
+    <div class="item"><div><span class="method delete">DEL</span><code>/api/nutrition/meal/[id]</code></div></div>
+    <div class="item"><div><span class="method post">POST</span><code>/api/nutrition/water</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><span class="method post">POST</span><code>/api/nutrition/diet</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><code>/api/nutrition/history</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><code>/api/nutrition/weekly-stats</code></div></div>
+  </div>
+
+  <div class="card">
+    <div style="font-size:11px;font-weight:700;color:var(--projects);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">📁 Projects</div>
+    <div class="item"><div><span class="method get">GET</span><span class="method post">POST</span><code>/api/projects</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><span class="method patch">PATCH</span><span class="method delete">DEL</span><code>/api/projects/[id]</code></div></div>
+    <div class="item"><div><span class="method post">POST</span><code>/api/projects/reorder</code></div></div>
+    <div class="item"><div><span class="method post">POST</span><code>/api/projects/[id]/tasks</code></div></div>
+    <div class="item"><div><span class="method patch">PATCH</span><span class="method delete">DEL</span><code>/api/projects/tasks/[taskId]</code></div></div>
+    <div class="item"><div><span class="method post">POST</span><code>/api/projects/sync-notion</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><code>/api/projects/weekly-stats</code></div></div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--ideas);margin:14px 0 10px;text-transform:uppercase;letter-spacing:.05em">💡 Ideas</div>
+    <div class="item"><div><span class="method get">GET</span><span class="method post">POST</span><code>/api/ideas</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><span class="method patch">PATCH</span><span class="method delete">DEL</span><code>/api/ideas/[id]</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><code>/api/ideas/stats</code></div></div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--finances);margin:14px 0 10px;text-transform:uppercase;letter-spacing:.05em">💰 Finances / Calendar / Settings</div>
+    <div class="item"><div><span class="method get">GET</span><code>/api/finances/summary</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><span class="method post">POST</span><code>/api/finances/transactions</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><code>/api/calendar/today</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><code>/api/calendar/week</code></div></div>
+    <div class="item"><div><span class="method post">POST</span><code>/api/calendar/event</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><span class="method patch">PATCH</span><code>/api/settings</code></div></div>
+    <div class="item"><div><span class="method delete">DEL</span><code>/api/settings/day-data</code></div></div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--scoring);margin:14px 0 10px;text-transform:uppercase;letter-spacing:.05em">⭐ Scoring / WhatsApp</div>
+    <div class="item"><div><span class="method get">GET</span><code>/api/scoring/today</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><code>/api/scoring/history</code></div></div>
+    <div class="item"><div><span class="method post">POST</span><code>/api/scoring/calculate</code></div></div>
+    <div class="item"><div><span class="method get">GET</span><span class="method post">POST</span><code>/api/whatsapp/webhook</code> <span class="badge badge-green" style="font-size:9px">sin auth</span></div></div>
+  </div>
+</div>
+
+<!-- ═══ CRON JOBS ═══ -->
+<p class="section-title">⏰ Cron Jobs</p>
+<div class="card" style="margin-bottom:24px">
+  <table>
+    <thead><tr><th>Nombre</th><th>Plataforma</th><th>Schedule</th><th>Ruta</th><th>Descripción</th></tr></thead>
+    <tbody>
+      <tr><td><code>sleep-sync</code></td><td>Vercel</td><td><code>0 8 * * *</code></td><td><code>/api/cron/sleep-sync</code></td><td style="color:var(--muted)">Sincroniza Garmin sueño (últimos 2 días)</td></tr>
+      <tr><td><code>sleep-notifications</code></td><td><span class="badge badge-orange">cron-job.org</span></td><td>cada 30min 20–23hs</td><td><code>/api/cron/sleep-notifications</code></td><td style="color:var(--muted)">Recordatorio bedtime + alerta despertar no registrado</td></tr>
+      <tr><td><code>fitness-sync</code></td><td>Vercel</td><td><code>0 6 * * *</code></td><td><code>/api/cron/fitness-sync</code></td><td style="color:var(--muted)">Sincroniza actividades Garmin todos los usuarios</td></tr>
+      <tr><td><code>fitness-habits</code></td><td>Vercel</td><td><code>10 7 * * *</code></td><td><code>/api/cron/fitness-habits</code></td><td style="color:var(--muted)">Detecta desvío de gym, propone hueco Calendar</td></tr>
+      <tr><td><code>water-reminder</code></td><td><span class="badge badge-orange">cron-job.org</span></td><td><code>0 12,17 * * *</code></td><td><code>/api/cron/water-reminder</code></td><td style="color:var(--muted)">Recordatorio hidratación 12 PM y 5 PM</td></tr>
+      <tr><td><code>morning-summary</code></td><td>Vercel</td><td><code>30 10 * * *</code></td><td><code>/api/cron/morning-summary</code></td><td style="color:var(--muted)">7:30 AM Uruguay (UTC-3) — resumen matutino WhatsApp</td></tr>
+    </tbody>
+  </table>
+  <div style="margin-top:12px;font-size:11px;color:var(--muted)">⚠️ Vercel Hobby = 1 ejecución/día por cron. Los crons frecuentes usan cron-job.org con <code>?secret=CRON_SECRET</code> como query param.</div>
+</div>
+
+<!-- ═══ INTEGRACIONES ═══ -->
+<p class="section-title">🔗 Integraciones Externas</p>
+<div class="grid-3">
+  <div class="card">
+    <div class="card-header"><div class="card-icon" style="background:rgba(37,211,102,0.15)">📱</div><div><div class="card-title">WhatsApp Business API</div><div class="card-sub"><span class="status-dot dot-green"></span>Activo · WABA 1291248383...</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--whatsapp)"></div><div><div class="item-label">Phone: +59892182606</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--whatsapp)"></div><div><div class="item-label">System User token permanente</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--whatsapp)"></div><div><div class="item-label">Webhook suscripto a messages</div></div></div>
+    <div class="tag-strip"><span class="env">WHATSAPP_TOKEN</span><span class="env">WHATSAPP_PHONE_ID</span><span class="env">WEBHOOK_VERIFY_TOKEN</span></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon" style="background:rgba(6,182,212,0.15)">⌚</div><div><div class="card-title">Garmin Connect API</div><div class="card-sub"><span class="status-dot dot-green"></span>Activo</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--fitness)"></div><div><div class="item-label">SSO en 3 pasos (embed→signin→ticket)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--fitness)"></div><div><div class="item-label">Cache sesión en DB (TTL 23h)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--fitness)"></div><div><div class="item-label">Endpoints: wellness (sueño) + activitylist</div></div></div>
+    <div class="tag-strip"><span class="env">GARMIN_EMAIL</span><span class="env">GARMIN_PASSWORD</span></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon" style="background:rgba(234,67,53,0.15)">📅</div><div><div class="card-title">Google Calendar API</div><div class="card-sub"><span class="status-dot dot-green"></span>Activo</div></div></div>
+    <div class="item"><div class="item-dot" style="background:#f87171"></div><div><div class="item-label">OAuth Google (NextAuth scopes)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:#f87171"></div><div><div class="item-label">Scopes: readonly + events</div></div></div>
+    <div class="item"><div class="item-dot" style="background:#f87171"></div><div><div class="item-label">Refresh automático de tokens (tabla accounts)</div></div></div>
+    <div class="tag-strip"><span class="env">AUTH_GOOGLE_ID</span><span class="env">AUTH_GOOGLE_SECRET</span><span class="env">GOOGLE_CALENDAR_ID</span></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon" style="background:rgba(99,102,241,0.15)">🤖</div><div><div class="card-title">Claude API (Anthropic)</div><div class="card-sub"><span class="status-dot dot-green"></span>Activo · Haiku</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Orquestrador — clasificar intención WA</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Fitness — parsear ejercicios NLP</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Nutrition — macros + diet alignment</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Ideas — estructurar (title+content+tags)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Finances — parsear transacciones NLP</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Morning summary — cierre motivacional</div></div></div>
+    <div class="tag-strip"><span class="env">ANTHROPIC_API_KEY</span></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon" style="background:rgba(16,185,129,0.15)">🎙️</div><div><div class="card-title">Whisper API (OpenAI)</div><div class="card-sub"><span class="status-dot dot-green"></span>Activo</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--nutrition)"></div><div><div class="item-label">Transcripción audio.ogg → texto</div><div class="item-note">Audios enviados por WhatsApp</div></div></div>
+    <div class="tag-strip"><span class="env">OPENAI_API_KEY</span></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon" style="background:rgba(245,158,11,0.15)">📋</div><div><div class="card-title">Notion API</div><div class="card-sub"><span class="status-dot dot-green"></span>Activo (read-only)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--projects)"></div><div><div class="item-label">@notionhq/client v5</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--projects)"></div><div><div class="item-label">Sync tareas IT del trabajo</div><div class="item-note">Paginación con cursor. Upsert por notionId.</div></div></div>
+    <div class="tag-strip"><span class="env">NOTION_TOKEN</span><span class="env">NOTION_DB_ID</span></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon" style="background:rgba(59,130,246,0.15)">💰</div><div><div class="card-title">App Finanzas</div><div class="card-sub"><span class="status-dot dot-green"></span>Activo (proxy)</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--finances)"></div><div><div class="item-label">finanzas-lemon.vercel.app</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--finances)"></div><div><div class="item-label">CORS habilitado para app-personal</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--finances)"></div><div><div class="item-label">API key por usuario en UserSettings</div></div></div>
+    <div class="tag-strip"><span class="env">FINANCES_APP_URL</span><span class="env">FINANCES_API_KEY</span></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon" style="background:rgba(148,163,184,0.1)">📖</div><div><div class="card-title">bible-api.com</div><div class="card-sub"><span class="status-dot dot-green"></span>Activo · sin auth</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--muted)"></div><div><div class="item-label">Versículo aleatorio (RV1960)</div><div class="item-note">Morning Summary diario</div></div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-icon" style="background:rgba(16,185,129,0.15)">🐘</div><div><div class="card-title">Supabase</div><div class="card-sub"><span class="status-dot dot-green"></span>Activo</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--nutrition)"></div><div><div class="item-label">PostgreSQL — base de datos principal</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--nutrition)"></div><div><div class="item-label">20+ tablas via Prisma ORM</div></div></div>
+    <div class="tag-strip"><span class="env">DATABASE_URL</span><span class="env">DIRECT_URL</span></div>
+  </div>
+</div>
+
+<!-- ═══ DB SCHEMA ═══ -->
+<p class="section-title">🗃️ Schema de Base de Datos (Prisma)</p>
+<div class="card" style="margin-bottom:24px">
+  <table>
+    <thead><tr><th>Modelo</th><th>Módulo</th><th>Campos clave</th></tr></thead>
+    <tbody>
+      <tr><td><code>User</code></td><td>Auth</td><td style="color:var(--muted)">id, name, email, image — relaciones con todos los módulos</td></tr>
+      <tr><td><code>Account</code> <code>Session</code> <code>VerificationToken</code></td><td>Auth</td><td style="color:var(--muted)">NextAuth PrismaAdapter — guarda tokens OAuth (access_token, refresh_token, expires_at)</td></tr>
+      <tr><td><code>SleepLog</code></td><td style="color:var(--sleep)">Sleep</td><td style="color:var(--muted)">userId, date(despertar), bedTime, wakeTime, durationMinutes, garminSleepId, garminScore, deepSleepMinutes, lightSleepMinutes, remSleepMinutes, awakeMinutes, stressScore, spo2Avg, respirationAvg, bodyBatteryChange</td></tr>
+      <tr><td><code>Workout</code></td><td style="color:var(--fitness)">Fitness</td><td style="color:var(--muted)">userId, date, type(GYM/RUNNING/SWIMMING/WALKING/CYCLING/OTHER), durationMinutes, distanceKm, calories, title, source(MANUAL/GARMIN), steps, garminActivityId</td></tr>
+      <tr><td><code>WorkoutExercise</code> <code>WorkoutSet</code></td><td style="color:var(--fitness)">Fitness</td><td style="color:var(--muted)">name, order, sets (reps, weight, durationSec)</td></tr>
+      <tr><td><code>GymRoutine</code> <code>GymRoutineExercise</code></td><td style="color:var(--fitness)">Fitness</td><td style="color:var(--muted)">Templates de rutinas de gym del usuario</td></tr>
+      <tr><td><code>Meal</code></td><td style="color:var(--nutrition)">Nutrition</td><td style="color:var(--muted)">userId, date, type(BREAKFAST/LUNCH/DINNER/SNACK), description, calories, protein, carbs, fat, dietAlignmentScore</td></tr>
+      <tr><td><code>WaterLog</code></td><td style="color:var(--nutrition)">Nutrition</td><td style="color:var(--muted)">userId, date, thermos (float, unidades de 2L)</td></tr>
+      <tr><td><code>UserDiet</code></td><td style="color:var(--nutrition)">Nutrition</td><td style="color:var(--muted)">userId, description, restrictions, goals — referencia para IA</td></tr>
+      <tr><td><code>Project</code></td><td style="color:var(--projects)">Projects</td><td style="color:var(--muted)">userId, title, description, status(TODO/IN_PROGRESS/DONE), priority, deadline, color, notionId, order</td></tr>
+      <tr><td><code>ProjectTask</code></td><td style="color:var(--projects)">Projects</td><td style="color:var(--muted)">projectId, title, completed, dueDate, notionTaskId</td></tr>
+      <tr><td><code>Idea</code></td><td style="color:var(--ideas)">Ideas</td><td style="color:var(--muted)">userId, title, content, tags[], priority(baja/media/alta/urgente), status(idea/progreso/hecha)</td></tr>
+      <tr><td><code>DailyScore</code></td><td style="color:var(--scoring)">Scoring</td><td style="color:var(--muted)">userId, date, sleepScore, fitnessScore, nutritionScore, projectsScore, globalScore</td></tr>
+      <tr><td><code>UserSettings</code></td><td>Config</td><td style="color:var(--muted)">userId, whatsappNumber, garminSessionKey, garminSessionExp, expectedSleepTime, expectedWakeTime, expectedGymTime, gymDays, dailyWaterGoalThermos, notificationsEnabled, notionToken, notionDbId, financesApiKey</td></tr>
+      <tr><td><code>UserHabit</code></td><td>Config</td><td style="color:var(--muted)">Hábitos esperados por módulo</td></tr>
+      <tr><td><code>WhatsAppMessage</code></td><td>WA</td><td style="color:var(--muted)">userId, direction(INBOUND/OUTBOUND), text, status(RECEIVED/PROCESSING/PROCESSED), waMessageId</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══ ENV VARS ═══ -->
+<p class="section-title">🔐 Variables de Entorno</p>
+<div class="card" style="margin-bottom:24px">
+  <table>
+    <thead><tr><th>Grupo</th><th>Variables</th></tr></thead>
+    <tbody>
+      <tr><td>Database</td><td><span class="env">DATABASE_URL</span> <span class="env">DIRECT_URL</span></td></tr>
+      <tr><td>Auth</td><td><span class="env">AUTH_SECRET</span> <span class="env">AUTH_GOOGLE_ID</span> <span class="env">AUTH_GOOGLE_SECRET</span> <span class="env">ALLOWED_EMAIL</span></td></tr>
+      <tr><td>IA</td><td><span class="env">ANTHROPIC_API_KEY</span> <span class="env">OPENAI_API_KEY</span></td></tr>
+      <tr><td>WhatsApp</td><td><span class="env">WHATSAPP_TOKEN</span> <span class="env">WHATSAPP_PHONE_ID</span> <span class="env">WHATSAPP_WABA_ID</span> <span class="env">WEBHOOK_VERIFY_TOKEN</span></td></tr>
+      <tr><td>Garmin</td><td><span class="env">GARMIN_EMAIL</span> <span class="env">GARMIN_PASSWORD</span></td></tr>
+      <tr><td>Integraciones</td><td><span class="env">NOTION_TOKEN</span> <span class="env">NOTION_DB_ID</span> <span class="env">GOOGLE_CALENDAR_ID</span> <span class="env">FINANCES_APP_URL</span> <span class="env">FINANCES_API_KEY</span></td></tr>
+      <tr><td>Cron</td><td><span class="env">CRON_SECRET</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══ PENDIENTES ═══ -->
+<p class="section-title">📋 Notas y Pendientes</p>
+<div class="grid-2">
+  <div class="card">
+    <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:10px">Pendientes</div>
+    <div class="item"><div class="item-dot" style="background:var(--orange)"></div><div><div class="item-label">Webhooks finanzas → alertas proactivas WhatsApp</div><div class="item-note">La app de finanzas ya tiene Telegram bot — conectar al orquestrador</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--orange)"></div><div><div class="item-label">App de Ventas (sesión futura)</div><div class="item-note">Marketplace + dashboard negocio + agente Meta</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--muted)"></div><div><div class="item-label">Lumina ya reemplazada por módulo de Ideas nativo</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--muted)"></div><div><div class="item-label">Apple Health — no accesible desde web</div><div class="item-note">Alternativa: iPhone Shortcut con webhook, o Garmin como fuente principal</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--red)"></div><div><div class="item-label">Dead code en /components/ideas/</div><div class="item-note">IdeaCaptureForm, IdeaCard, IdeaDetail, IdeasGrid, IdeasStats, TagFilter — reemplazados por IdeasModuleClient refactorizado</div></div></div>
+  </div>
+  <div class="card">
+    <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:10px">Notas técnicas importantes</div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Prisma workaround Supabase</div><div class="item-note">Si prisma db push falla, aplicar migraciones vía SQL directo en Supabase SQL Editor</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Google Calendar scopes</div><div class="item-note">Usuario debe cerrar sesión y volver a entrar para que Google otorgue nuevos scopes</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Vercel after() en webhook</div><div class="item-note">Única forma de ejecutar lógica pesada sin que el runtime mate la función después del 200</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">KanbanBoard — SSR disabled</div><div class="item-note">dynamic(ssr:false) para evitar errores de hidratación con @hello-pangea/dnd</div></div></div>
+    <div class="item"><div class="item-dot" style="background:var(--accent)"></div><div><div class="item-label">Scoring: null vs 0</div><div class="item-note">null = sin datos del módulo. 0 = hay datos pero no se cumplieron criterios. Solo null es omitido del promedio global.</div></div></div>
+  </div>
+</div>
+
+<div style="margin-top:32px; text-align:center; color:var(--muted); font-size:11px; border-top:1px solid var(--border); padding-top:20px">
+  App Personal · arquitectura generada 2026-05-15 · <a href="https://app-personal-ten.vercel.app" style="color:var(--accent2);text-decoration:none">app-personal-ten.vercel.app</a>
+</div>
+
+</body>
+</html>

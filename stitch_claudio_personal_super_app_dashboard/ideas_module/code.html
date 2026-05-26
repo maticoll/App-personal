@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;family=Geist+Mono:wght@100..900&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed": "#301400",
+                        "outline-variant": "#464554",
+                        "on-primary-fixed": "#07006c",
+                        "secondary-fixed-dim": "#d0bcff",
+                        "primary-fixed-dim": "#c0c1ff",
+                        "on-primary-container": "#0d0096",
+                        "inverse-primary": "#494bd6",
+                        "inverse-surface": "#e0e2f0",
+                        "secondary-fixed": "#e9ddff",
+                        "outline": "#908fa0",
+                        "on-tertiary-fixed-variant": "#703700",
+                        "on-background": "#e0e2f0",
+                        "tertiary-fixed-dim": "#ffb783",
+                        "surface": "#10131d",
+                        "primary": "#c0c1ff",
+                        "primary-container": "#8083ff",
+                        "tertiary": "#ffb783",
+                        "surface-container-highest": "#31343f",
+                        "on-secondary": "#3c0091",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed": "#23005c",
+                        "error": "#ffb4ab",
+                        "on-error": "#690005",
+                        "on-secondary-container": "#c4abff",
+                        "primary-fixed": "#e1e0ff",
+                        "on-surface-variant": "#c7c4d7",
+                        "surface-dim": "#10131d",
+                        "surface-bright": "#363944",
+                        "secondary": "#d0bcff",
+                        "on-secondary-fixed-variant": "#5516be",
+                        "surface-variant": "#31343f",
+                        "surface-container-high": "#272a34",
+                        "inverse-on-surface": "#2d303b",
+                        "surface-container-lowest": "#0b0e17",
+                        "background": "#10131d",
+                        "on-primary-fixed-variant": "#2f2ebe",
+                        "tertiary-fixed": "#ffdcc5",
+                        "surface-container": "#1c1f29",
+                        "secondary-container": "#571bc1",
+                        "tertiary-container": "#d97721",
+                        "on-primary": "#1000a9",
+                        "surface-container-low": "#181b25",
+                        "error-container": "#93000a",
+                        "on-surface": "#e0e2f0",
+                        "on-tertiary-container": "#452000",
+                        "surface-tint": "#c0c1ff",
+                        "on-tertiary": "#4f2500",
+                        "accent-rose": "#F43F5E"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "lg": "24px",
+                        "xl": "40px",
+                        "margin-desktop": "32px",
+                        "gutter": "16px",
+                        "md": "16px",
+                        "margin-mobile": "16px",
+                        "unit": "4px",
+                        "xs": "4px",
+                        "sm": "8px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Geist"],
+                        "body-md": ["Geist"],
+                        "display-lg": ["Geist"],
+                        "body-lg": ["Geist"],
+                        "headline-lg": ["Geist"],
+                        "headline-md": ["Geist"],
+                        "mono-md": ["Geist Mono"],
+                        "label-sm": ["Geist"]
+                    },
+                    "fontSize": {
+                        "label-md": ["14px", {"lineHeight": "1.4", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                        "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "700"}],
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                        "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "mono-md": ["14px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "label-sm": ["12px", {"lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-card {
+            background: rgba(26, 29, 39, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .ios-safe-top { padding-top: env(safe-area-inset-top); }
+        .ios-safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md selection:bg-accent-rose/30">
+<!-- TopAppBar -->
+<header class="sticky top-0 z-40 flex justify-between items-center px-lg h-[72px] w-full bg-surface/80 backdrop-blur-xl border-b border-outline-variant/10 shadow-lg ios-safe-top">
+<div class="flex items-center gap-sm">
+<div class="w-10 h-10 rounded-full overflow-hidden border border-accent-rose/20 bg-surface-container">
+<img alt="User Profile Image" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB4KlHFuXNqDF7rmY5sqQxaLpcmap4_a-GMRCabOdk5cz7N1TLD3-icNCTdGynR6Xu9Hgn4g2xkB6yD23C2Ym3RzDg9vvPxYA4Hat_flrRuw7dwVsFoZb3tyefye271LDYjIOK1ISMFF6qLyTgD6ngDq_PaZRRyO_J6k_hYsJRSTxseYBAtowPz3Z9U7YLVLy_Aq9J_N4bsdlj8m8wsty2WjJWY3gaAI2loTgX3Mnpt15lwQjHLneG6lAlS2RGdHlBR4YBKSJYfjA"/>
+</div>
+<h1 class="font-headline-md text-headline-md font-bold tracking-tighter text-primary">CLAUDIO</h1>
+</div>
+<button class="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-highest transition-colors active:scale-98">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</header>
+<main class="px-md pt-lg pb-32 max-w-md mx-auto space-y-xl">
+<!-- Stats Row -->
+<section class="flex gap-sm overflow-x-auto no-scrollbar pb-xs">
+<div class="flex-1 min-w-[100px] flex items-center justify-between px-md py-sm bg-surface-container-low rounded-full border border-outline-variant/10">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Total</span>
+<span class="font-label-md text-label-md text-primary">24</span>
+</div>
+<div class="flex-1 min-w-[100px] flex items-center justify-between px-md py-sm bg-accent-rose/10 rounded-full border border-accent-rose/20">
+<span class="font-label-sm text-label-sm text-accent-rose">Active</span>
+<span class="font-label-md text-label-md text-accent-rose">8</span>
+</div>
+<div class="flex-1 min-w-[100px] flex items-center justify-between px-md py-sm bg-surface-container-low rounded-full border border-outline-variant/10">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Done</span>
+<span class="font-label-md text-label-md text-primary">16</span>
+</div>
+</section>
+<!-- Search & Filter Cluster -->
+<section class="space-y-md">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-outline-variant group-focus-within:text-accent-rose transition-colors">search</span>
+<input class="w-full h-12 pl-12 pr-md bg-surface-container-lowest border-none rounded-xl focus:ring-1 focus:ring-accent-rose/50 font-mono-md text-mono-md placeholder:text-outline-variant/50" placeholder="Search ideas..." type="text"/>
+</div>
+<!-- Tags -->
+<div class="flex flex-wrap gap-xs">
+<button class="px-md py-sm rounded-full bg-accent-rose text-white font-label-sm text-label-sm shadow-lg shadow-accent-rose/20">All</button>
+<button class="px-md py-sm rounded-full bg-surface-container border border-outline-variant/10 text-on-surface-variant font-label-sm text-label-sm hover:bg-surface-container-highest transition-colors">Code</button>
+<button class="px-md py-sm rounded-full bg-surface-container border border-outline-variant/10 text-on-surface-variant font-label-sm text-label-sm hover:bg-surface-container-highest transition-colors">Business</button>
+<button class="px-md py-sm rounded-full bg-surface-container border border-outline-variant/10 text-on-surface-variant font-label-sm text-label-sm hover:bg-surface-container-highest transition-colors">Home</button>
+<button class="px-md py-sm rounded-full bg-surface-container border border-outline-variant/10 text-on-surface-variant font-label-sm text-label-sm hover:bg-surface-container-highest transition-colors">Health</button>
+</div>
+<!-- Status Tabs -->
+<div class="flex p-1 bg-surface-container-lowest rounded-xl">
+<button class="flex-1 py-sm text-center font-label-sm text-label-sm bg-surface-container-high rounded-lg text-primary shadow-sm">All</button>
+<button class="flex-1 py-sm text-center font-label-sm text-label-sm text-on-surface-variant opacity-60">Ideas</button>
+<button class="flex-1 py-sm text-center font-label-sm text-label-sm text-on-surface-variant opacity-60">In Progress</button>
+<button class="flex-1 py-sm text-center font-label-sm text-label-sm text-on-surface-variant opacity-60">Done</button>
+</div>
+</section>
+<!-- Ideas List (Bento-style Cards) -->
+<section class="grid grid-cols-1 gap-md">
+<!-- Card 1: Urgent -->
+<div class="glass-card rounded-2xl p-md flex flex-col gap-md group">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-sm">
+<div class="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"></div>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest">Business</span>
+</div>
+<button class="text-on-surface-variant hover:text-accent-rose transition-colors">
+<span class="material-symbols-outlined">expand_content</span>
+</button>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface group-hover:text-primary transition-colors">Launch SaaS Beta</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mt-xs line-clamp-2">Finalize the landing page and the user onboarding flow for early adopters.</p>
+</div>
+<div class="flex justify-between items-center pt-md border-t border-outline-variant/10">
+<button class="flex items-center gap-xs px-md py-xs rounded-lg bg-surface-container hover:bg-surface-container-highest text-on-surface-variant transition-all active:scale-95">
+<span class="material-symbols-outlined text-[18px]">sync</span>
+<span class="font-label-sm text-label-sm">In Progress</span>
+</button>
+<div class="flex -space-x-2">
+<div class="w-8 h-8 rounded-full border-2 border-surface bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px] text-accent-rose" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 2: High -->
+<div class="glass-card rounded-2xl p-md flex flex-col gap-md group">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-sm">
+<div class="w-2 h-2 rounded-full bg-orange-500"></div>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest">Code</span>
+</div>
+<button class="text-on-surface-variant">
+<span class="material-symbols-outlined">expand_content</span>
+</button>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Refactor API Layer</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mt-xs line-clamp-2">Clean up the legacy controllers and move to the new repository pattern.</p>
+</div>
+<div class="flex justify-between items-center pt-md border-t border-outline-variant/10">
+<button class="flex items-center gap-xs px-md py-xs rounded-lg bg-surface-container-low text-on-surface-variant opacity-60">
+<span class="material-symbols-outlined text-[18px]">lightbulb</span>
+<span class="font-label-sm text-label-sm">Idea</span>
+</button>
+</div>
+</div>
+<!-- Card 3: Med -->
+<div class="glass-card rounded-2xl p-md flex flex-col gap-md group">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-sm">
+<div class="w-2 h-2 rounded-full bg-amber-500"></div>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest">Home</span>
+</div>
+<button class="text-on-surface-variant">
+<span class="material-symbols-outlined">expand_content</span>
+</button>
+</div>
+<div class="flex gap-md">
+<div class="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-surface-container-highest">
+<img class="w-full h-full object-cover opacity-80" data-alt="A modern, minimalist architectural interior photograph showing a corner of a living room with smart lighting and clean geometric shadows. The atmosphere is calm and technologically integrated, with deep obsidian surfaces and warm amber accents creating a sense of intelligent comfort and luxury organization." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDV5xYbZmtotUjcLezcsTDLVBjRcwVfki7awqYg3MS7-D7zPcGH_D8V-v6MnIpPcRqtuC9Iq1qGckYiFKeK14j0ucvy6fXEt7f6B_HEJ3Xs0OSwHqxc_6I777obrvzWPH6wwzaIjZhyRM7A3bAj3CNxTgTmKlCmK0DA9fyI5lfiNCwngqiHJE8R0jiAEYllWIxMmeNqgLpHf6rVAO5dxhW8b4euQlZCdb69E3e4aSRHS-7XY-kMRvqqyTUo1EufBikGfECX_uwPKA"/>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Living Room Setup</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mt-xs line-clamp-1">Install Philips Hue sync box for TV immersion.</p>
+</div>
+</div>
+<div class="flex justify-between items-center pt-md border-t border-outline-variant/10">
+<button class="flex items-center gap-xs px-md py-xs rounded-lg bg-surface-container-low text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span class="font-label-sm text-label-sm">Done</span>
+</button>
+</div>
+</div>
+<!-- Card 4: Low -->
+<div class="glass-card rounded-2xl p-md flex flex-col gap-md group">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-sm">
+<div class="w-2 h-2 rounded-full bg-gray-500"></div>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest">Health</span>
+</div>
+<button class="text-on-surface-variant">
+<span class="material-symbols-outlined">expand_content</span>
+</button>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Marathon Training Plan</h3>
+</div>
+<div class="flex justify-between items-center pt-md border-t border-outline-variant/10">
+<button class="flex items-center gap-xs px-md py-xs rounded-lg bg-surface-container-low text-on-surface-variant opacity-60">
+<span class="material-symbols-outlined text-[18px]">lightbulb</span>
+<span class="font-label-sm text-label-sm">Idea</span>
+</button>
+</div>
+</div>
+</section>
+</main>
+<!-- FAB -->
+<button class="fixed bottom-32 right-md w-14 h-14 bg-accent-rose text-white rounded-2xl shadow-[0_12px_24px_rgba(244,63,94,0.4)] flex items-center justify-center z-50 transition-transform active:scale-90">
+<span class="material-symbols-outlined text-[32px]">add</span>
+</button>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-lg left-1/2 -translate-x-1/2 w-[calc(100%-32px)] max-w-md z-50 flex justify-around items-center h-16 px-md py-sm bg-surface-container/60 backdrop-blur-md rounded-full border border-outline-variant/20 shadow-[0_20px_40px_rgba(0,0,0,0.4)] ios-safe-bottom">
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-60 hover:opacity-100 transition-opacity active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-60 hover:opacity-100 transition-opacity active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">fitness_center</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-60 hover:opacity-100 transition-opacity active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">psychology</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary drop-shadow-[0_0_8px_rgba(192,193,255,0.5)] active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">list_alt</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-60 hover:opacity-100 transition-opacity active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined">person</span>
+</a>
+</nav>
+</body></html>
