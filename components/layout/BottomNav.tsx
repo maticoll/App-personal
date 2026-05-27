@@ -8,8 +8,8 @@ const MOBILE_NAV = [
   { href: "/", icon: "dashboard", label: "Inicio" },
   { href: "/fitness", icon: "fitness_center", label: "Fitness" },
   { href: "/sleep", icon: "bedtime", label: "Sueño" },
-  { href: "/projects", icon: "folder_kanban", label: "Proyectos" },
-  { href: "/tasks", icon: "checklist", label: "Tareas" },
+  { href: "/projects", icon: "folder", label: "Proyectos" },
+  { href: "/settings", icon: "person", label: "Perfil" },
 ] as const;
 
 export function BottomNav() {

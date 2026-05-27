@@ -6,8 +6,11 @@
 import { auth } from "@/auth";
 import Link from "next/link";
 import { GlobalScoreRing } from "@/components/scoring/GlobalScoreRing";
+import TasksBlock from "@/components/dashboard/TasksBlock";
 import { db } from "@/lib/db";
 import { calculateFullScore, saveScore, getStoredScore } from "@/lib/scoring";
+import { getThisWeekTasks } from "@/lib/tasks";
+import { getAllProjects } from "@/lib/projects";
 import type { DailyScoreData } from "@/lib/types";
 
 // ── Módulos del bento grid ────────────────────────────────────────────────────
@@ -124,10 +127,16 @@ export default async function DashboardPage() {
   const userId = session?.user?.id;
   const firstName = session?.user?.name?.split(" ")[0] ?? "Corea";
 
-  const [todayScore, summaries] = await Promise.all([
+  const [todayScore, summaries, tasksData, projectsData] = await Promise.all([
     userId ? loadTodayScore(userId) : Promise.resolve(null),
     userId ? loadSummaries(userId) : Promise.resolve(null),
+    userId ? getThisWeekTasks(userId).catch(() => []) : Promise.resolve([]),
+    userId ? getAllProjects(userId).catch(() => []) : Promise.resolve([]),
   ]);
+
+  const activeProjects = projectsData.filter(
+    (p) => p.status === "TODO" || p.status === "IN_PROGRESS"
+  );
 
   const hora = parseInt(
     new Date().toLocaleString("es-UY", { timeZone: "America/Montevideo", hour: "numeric", hour12: false })
@@ -206,6 +215,11 @@ export default async function DashboardPage() {
             </Link>
           );
         })}
+      </div>
+
+      {/* Bloque de Tareas (sin score) */}
+      <div className="mb-10">
+        <TasksBlock initialTasks={tasksData} projects={activeProjects} />
       </div>
 
       {/* Garmin Sync */}
