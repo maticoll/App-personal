@@ -5,12 +5,13 @@
 // Muestra duración, calidad, fases y datos Garmin
 // ============================================================
 
-import { Moon, Clock, TrendingUp, Droplets, Wind } from "lucide-react";
+import { Moon, Clock, TrendingUp, Droplets, Wind, Pencil } from "lucide-react";
 import { cn, formatDuration, formatTime } from "@/lib/utils";
 import type { SleepLogEntry } from "@/lib/sleep";
 
 type Props = {
   log: SleepLogEntry;
+  onEdit?: () => void;
 };
 
 const SLEEP_PHASES = [
@@ -54,7 +55,7 @@ function getDurationLabel(minutes: number): { label: string; color: string } {
   return { label: "Fuera de rango", color: "text-score-bad" };
 }
 
-export function SleepTodayCard({ log }: Props) {
+export function SleepTodayCard({ log, onEdit }: Props) {
   const hasGarmin =
     log.garminScore !== null ||
     log.deepSleepMinutes !== null;
@@ -76,6 +77,16 @@ export function SleepTodayCard({ log }: Props) {
             <span className="text-sm font-medium text-on-surface-variant">
               Sueño de anoche
             </span>
+            {onEdit && (
+              <button
+                onClick={onEdit}
+                className="ml-1 flex items-center gap-1 text-xs text-module-sleep hover:text-module-sleep/80 transition-colors"
+                aria-label="Editar registro de sueño"
+              >
+                <Pencil className="w-3 h-3" />
+                Editar
+              </button>
+            )}
           </div>
           {log.durationMinutes ? (
             <div className="flex items-baseline gap-2">

@@ -5,21 +5,24 @@
 // ============================================================
 
 import { useState } from "react";
-import { Moon, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Moon, Trash2, Pencil, ChevronDown, ChevronUp } from "lucide-react";
 import { cn, formatDate, formatTime, formatDuration } from "@/lib/utils";
 import type { SleepLogEntry } from "@/lib/sleep";
 
 type Props = {
   history: SleepLogEntry[];
   onDelete: (id: string) => Promise<void>;
+  onEdit?: (log: SleepLogEntry) => void;
 };
 
 function SleepLogRow({
   log,
   onDelete,
+  onEdit,
 }: {
   log: SleepLogEntry;
   onDelete: (id: string) => Promise<void>;
+  onEdit?: (log: SleepLogEntry) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -95,13 +98,11 @@ function SleepLogRow({
         </div>
 
         {/* Expand icon */}
-        {(hasGarmin || hasPhases || log.notes) ? (
-          expanded ? (
-            <ChevronUp className="w-4 h-4 text-outline flex-shrink-0" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-outline flex-shrink-0" />
-          )
-        ) : null}
+        {expanded ? (
+          <ChevronUp className="w-4 h-4 text-outline flex-shrink-0" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-outline flex-shrink-0" />
+        )}
       </div>
 
       {/* Expanded detail */}
@@ -188,8 +189,17 @@ function SleepLogRow({
             </p>
           )}
 
-          {/* Delete */}
-          <div className="flex justify-end pt-1">
+          {/* Acciones */}
+          <div className="flex justify-end items-center gap-3 pt-1">
+            {onEdit && (
+              <button
+                onClick={() => onEdit(log)}
+                className="flex items-center gap-1 text-xs text-module-sleep hover:opacity-80 transition-opacity"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Editar
+              </button>
+            )}
             <button
               onClick={handleDelete}
               disabled={deleting}
@@ -205,7 +215,7 @@ function SleepLogRow({
   );
 }
 
-export function SleepHistoryList({ history, onDelete }: Props) {
+export function SleepHistoryList({ history, onDelete, onEdit }: Props) {
   // Mostrar de más reciente a más antiguo
   const sorted = [...history].reverse();
 
@@ -221,7 +231,7 @@ export function SleepHistoryList({ history, onDelete }: Props) {
   return (
     <div className="space-y-2">
       {sorted.map((log) => (
-        <SleepLogRow key={log.id} log={log} onDelete={onDelete} />
+        <SleepLogRow key={log.id} log={log} onDelete={onDelete} onEdit={onEdit} />
       ))}
     </div>
   );

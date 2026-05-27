@@ -47,11 +47,31 @@ export async function PATCH(
     return NextResponse.json({ error: "Registro no encontrado" }, { status: 404 });
   }
 
+  // Aceptar edicion de horarios y recalcular duration
+  const bedTime = body.bedTime ? new Date(body.bedTime) : log.bedTime;
+  const wakeTime =
+    body.wakeTime === null
+      ? null
+      : body.wakeTime
+      ? new Date(body.wakeTime)
+      : log.wakeTime;
+
+  let durationMinutes: number | null = log.durationMinutes;
+  if (wakeTime && bedTime) {
+    const ms = wakeTime.getTime() - bedTime.getTime();
+    durationMinutes = Math.round(ms / (1000 * 60));
+  } else if (!wakeTime) {
+    durationMinutes = null;
+  }
+
   const updated = await db.sleepLog.update({
     where: { id },
     data: {
-      notes: body.notes ?? log.notes,
-      flexible: body.flexible ?? log.flexible,
+      bedTime,
+      wakeTime,
+      durationMinutes,
+      notes: body.notes !== undefined ? body.notes : log.notes,
+      flexible: body.flexible !== undefined ? body.flexible : log.flexible,
     },
   });
 

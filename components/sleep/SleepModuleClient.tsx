@@ -16,6 +16,7 @@ import { SleepQualityChart } from "./SleepQualityChart";
 import { SleepTimingChart } from "./SleepTimingChart";
 import { SleepHistoryList } from "./SleepHistoryList";
 import { GarminSyncButton } from "./GarminSyncButton";
+import EditSleepLogger from "./EditSleepLogger";
 import type { SleepLogEntry, WeeklyStats } from "@/lib/sleep";
 
 type Tab = "charts" | "history";
@@ -39,6 +40,7 @@ export function SleepModuleClient({
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("charts");
   const [loading, setLoading] = useState(false);
+  const [editing, setEditing] = useState<SleepLogEntry | null>(null);
 
   // State — se actualiza con las acciones del usuario
   const [today, setToday] = useState<SleepLogEntry | null>(initialToday);
@@ -104,6 +106,10 @@ export function SleepModuleClient({
     }
   };
 
+  const handleEdit = (log: SleepLogEntry) => {
+    setEditing(log);
+  };
+
   const handleDelete = async (id: string) => {
     const res = await fetch(`/api/sleep/${id}`, { method: "DELETE" });
     if (!res.ok) {
@@ -151,7 +157,7 @@ export function SleepModuleClient({
 
       {/* Card de hoy (si hay datos) */}
       {displayedToday && (
-        <SleepTodayCard log={displayedToday} />
+        <SleepTodayCard log={displayedToday} onEdit={() => handleEdit(displayedToday)} />
       )}
 
       {/* Stats semanales */}
@@ -208,7 +214,16 @@ export function SleepModuleClient({
           )}
         </div>
       ) : (
-        <SleepHistoryList history={history} onDelete={handleDelete} />
+        <SleepHistoryList history={history} onDelete={handleDelete} onEdit={handleEdit} />
+      )}
+
+      {/* Modal de edicion */}
+      {editing && (
+        <EditSleepLogger
+          log={editing}
+          onSaved={refreshData}
+          onClose={() => setEditing(null)}
+        />
       )}
     </div>
   );
