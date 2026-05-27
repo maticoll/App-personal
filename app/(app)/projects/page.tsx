@@ -1,13 +1,13 @@
 // ============================================================
-// Módulo de Proyectos — /projects — Sesión 6
-// Server Component: carga datos iniciales en paralelo
+// /projects — Solo proyectos activos (sin kanban ni tareas)
+// El tablero operativo está en /tasks
 // ============================================================
 
 import { FolderKanban } from "lucide-react";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import { getAllProjects, getWeeklyStats } from "@/lib/projects";
-import ProjectsModuleClient from "@/components/projects/ProjectsModuleClient";
+import { getAllProjects } from "@/lib/projects";
+import ActiveProjectsList from "@/components/projects/ActiveProjectsList";
 
 export default async function ProjectsPage() {
   const session = await auth();
@@ -15,14 +15,12 @@ export default async function ProjectsPage() {
 
   const userId = session.user.id;
 
-  const [projects, stats] = await Promise.all([
-    getAllProjects(userId).catch(() => []),
-    getWeeklyStats(userId).catch(() => ({
-      projectsAdvanced: 0,
-      tasksCompleted: 0,
-      activeProjects: 0,
-    })),
-  ]);
+  const projects = await getAllProjects(userId).catch(() => []);
+
+  // Solo activos: TODO e IN_PROGRESS
+  const activeProjects = projects.filter(
+    (p) => p.status === "TODO" || p.status === "IN_PROGRESS"
+  );
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -32,11 +30,14 @@ export default async function ProjectsPage() {
           <h2 className="text-xl font-bold text-on-surface">Proyectos</h2>
         </div>
         <p className="text-sm text-on-surface-variant">
-          Personales, trabajo y deadlines
+          Proyectos activos · El tablero está en{" "}
+          <a href="/tasks" className="text-amber-400 hover:underline">
+            Tareas
+          </a>
         </p>
       </div>
 
-      <ProjectsModuleClient initialProjects={projects} initialStats={stats} />
+      <ActiveProjectsList initialProjects={activeProjects} />
     </div>
   );
 }
