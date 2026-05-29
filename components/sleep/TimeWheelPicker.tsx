@@ -5,7 +5,7 @@
 // Estilo iOS: scroll con snap, número central resaltado
 // ============================================================
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 
 const ITEM_H = 44; // px por ítem
 const VISIBLE = 5; // ítems visibles (centro + 2 arriba + 2 abajo)
@@ -19,33 +19,64 @@ type WheelColumnProps = {
 
 function WheelColumn({ items, value, onChange, format }: WheelColumnProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const isSyncing = useRef(false);
+  // Ultimo valor que esta columna emitio/recibio. Sirve para distinguir
+  // un cambio externo (hay que re-scrollear) de uno generado por el scroll
+  // del propio usuario (NO re-scrollear, eso es lo que trababa la rueda).
+  const lastValue = useRef(value);
+  const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Resaltado en vivo: sigue al dedo sin forzar scroll ni avisar al padre.
+  const [activeIdx, setActiveIdx] = useState(() => items.indexOf(value));
 
-  // Scroll al ítem seleccionado
   const scrollTo = useCallback(
-    (v: number, behavior: ScrollBehavior = "instant") => {
+    (v: number, behavior: ScrollBehavior = "auto") => {
       if (!ref.current) return;
       const idx = items.indexOf(v);
       if (idx < 0) return;
-      isSyncing.current = true;
       ref.current.scrollTo({ top: idx * ITEM_H, behavior });
-      setTimeout(() => { isSyncing.current = false; }, 300);
     },
     [items]
   );
 
-  // Inicializar posición
-  useEffect(() => { scrollTo(value, "instant"); }, []); // eslint-disable-line
+  // Inicializar posición (una sola vez)
+  useEffect(() => {
+    scrollTo(value, "auto");
+    lastValue.current = value;
+  }, []); // eslint-disable-line
 
-  // Cuando value cambia externamente
-  useEffect(() => { scrollTo(value, "smooth"); }, [value, scrollTo]);
+  // Solo re-scrollear si el value cambió desde AFUERA (no por el scroll del user)
+  useEffect(() => {
+    if (value !== lastValue.current) {
+      scrollTo(value, "auto");
+      lastValue.current = value;
+      setActiveIdx(items.indexOf(value));
+    }
+  }, [value, scrollTo, items]);
 
+  // En cada frame de scroll: solo actualizamos el resaltado visual (barato).
+  // El aviso al padre (onChange) se difiere hasta que el scroll se detiene,
+  // así no peleamos con el gesto del usuario.
   const handleScroll = () => {
-    if (!ref.current || isSyncing.current) return;
+    if (!ref.current) return;
     const idx = Math.round(ref.current.scrollTop / ITEM_H);
     const clamped = Math.max(0, Math.min(idx, items.length - 1));
-    if (items[clamped] !== value) onChange(items[clamped]);
+    setActiveIdx((prev) => (prev === clamped ? prev : clamped));
+
+    if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    scrollTimer.current = setTimeout(() => {
+      const next = items[clamped];
+      if (next !== lastValue.current) {
+        lastValue.current = next;
+        onChange(next);
+      }
+    }, 90);
   };
+
+  // Limpiar timer al desmontar
+  useEffect(() => {
+    return () => {
+      if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    };
+  }, []);
 
   return (
     <div className="relative flex-1 select-none">
@@ -74,12 +105,12 @@ function WheelColumn({ items, value, onChange, format }: WheelColumnProps) {
       >
         {/* Padding superior e inferior para centrar primero/último */}
         <div style={{ height: ITEM_H * 2 }} />
-        {items.map((v) => (
+        {items.map((v, i) => (
           <div
             key={v}
             style={{ height: ITEM_H, scrollSnapAlign: "center" }}
-            className={`flex items-center justify-center transition-all duration-150 ${
-              v === value
+            className={`flex items-center justify-center transition-all duration-100 ${
+              i === activeIdx
                 ? "text-on-surface text-3xl font-bold"
                 : "text-on-surface-variant/40 text-2xl font-medium"
             }`}

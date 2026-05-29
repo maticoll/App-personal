@@ -72,11 +72,12 @@ export default function RetroSleepLogger({ onLogged, onClose }: Props) {
   return (
     /* Backdrop */
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg bg-surface-container rounded-t-3xl pb-safe overflow-hidden"
+        className="w-full max-w-lg bg-surface-container rounded-t-3xl overflow-hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Handle */}
