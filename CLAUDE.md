@@ -1,5 +1,77 @@
-# App Personal — CLAUDE.md
-> Contexto general del proyecto para todas las sesiones de trabajo
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+> Contexto general del proyecto para todas las sesiones de trabajo. Las secciones de abajo ("Bloque Sesión N") son un registro histórico de cómo se construyó cada módulo — útil como referencia, pero la fuente de verdad es siempre el código.
+
+---
+
+## Referencia de desarrollo (orientación rápida)
+
+### Comandos
+
+```bash
+npm run dev          # Servidor de desarrollo (next dev)
+npm run build        # prisma generate && next build (genera el client antes de compilar)
+npm run start        # Servidor de producción
+npm run lint         # ESLint (eslint-config-next)
+
+npm run db:generate  # Regenerar Prisma Client (correr tras cambiar schema.prisma)
+npm run db:push      # Empujar schema a Supabase sin migración
+npm run db:migrate   # Crear y aplicar migración (prisma migrate dev)
+npm run db:studio    # Prisma Studio (inspeccionar la DB)
+```
+
+- **No hay framework de tests** configurado. La verificación se hace con `npx tsc --noEmit` (chequeo de tipos) + `npm run build`.
+- **Windows / PowerShell:** el entorno de desarrollo es Windows. Usar sintaxis PowerShell en la terminal.
+
+### Gotchas críticos
+
+- **`prisma db push` suele fallar por conectividad con Supabase.** Workaround documentado y usado en varias sesiones: aplicar el cambio de schema con SQL directo en el **Supabase SQL Editor** (ej. `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...`), luego correr `npm run db:generate` localmente para sincronizar el client. Los bloques de sesión incluyen el SQL exacto de cada cambio.
+- **Crons divididos por límite de Vercel Hobby (1 ejecución/día por cron).** Los crons diarios viven en `vercel.json`; los más frecuentes (cada 30 min, varias veces al día) se configuran en **cron-job.org** pasando `?secret=` como query param. Todos validan `CRON_SECRET` vía `verifyCronSecret`.
+- **Webhook de WhatsApp responde 200 inmediato + `after()`.** Meta exige respuesta <5s. La lógica pesada corre en `after(() => processIncomingMessage(body))` (Next.js background task), única forma de no morir en el runtime serverless.
+- **Edge runtime split de auth:** `auth.config.ts` (sin Prisma, edge-compatible, usado en `middleware.ts`) vs `auth.ts` (con `PrismaAdapter`, server-side). No importar Prisma en `auth.config.ts`.
+- **Modelos de IA hardcodeados** en las llamadas REST directas a Anthropic: clasificación/NLP con `claude-haiku-4-5-20251001`, respuesta final con `claude-sonnet-4-6`. No hay SDK — se hace `fetch` directo a `https://api.anthropic.com/v1/messages`.
+- **Convención de fechas de sueño:** `SleepLog.date` = día de despertar.
+- **Acceso restringido:** login Google OAuth filtrado por `ALLOWED_EMAILS` (lista separada por comas) en `auth.config.ts`.
+
+### Arquitectura — el panorama grande
+
+**1. Capa de datos.** Todo pasa por el singleton `db` en `lib/db.ts` (Prisma Client). El schema en `prisma/schema.prisma` está organizado por módulo; cada modelo usa `@@map` a snake_case. Relación 1-1 con `User` para config/estado (`UserSettings`, `UserGoals`, `ConversationMemory`, `PendingTransaction`).
+
+**2. Separación lib / agents / app.**
+- `lib/` — lógica de negocio pura por módulo (`sleep.ts`, `fitness.ts`, `nutrition.ts`, `projects.ts`, `ideas.ts`, `finances.ts`, `calendar.ts`, `scoring.ts`) + integraciones externas (`garmin.ts`, `notion.ts`, `whatsapp.ts`, `reminders.ts`) + infra (`db.ts`, `nlp.ts`, `conversation.ts`, `goals.ts`, `cron.ts`, `logger.ts`).
+- `agents/` — capa conversacional de WhatsApp. Un directorio por módulo, todos exportados desde `agents/index.ts`. Cada agente expone `process(input: AgentInput): Promise<AgentOutput>` (ver tipos en `lib/types.ts`). Los agentes llaman a `lib/` para la lógica real y devuelven **datos crudos** (no la respuesta final con voz). `agents/prompts.ts` arma los system prompts personalizados por objetivos del usuario.
+- `app/` — Next.js App Router. Páginas en `app/(app)/<modulo>/page.tsx` (Server Components con carga paralela vía `Promise.all`, pasan datos a un `*ModuleClient.tsx`). API routes en `app/api/<modulo>/...`. Crons en `app/api/cron/...`.
+
+**3. Orquestrador de WhatsApp (HERMES) — `lib/orchestrator.ts`.** Es el núcleo de la IA conversacional. Flujo de `orchestrate(userId, text)`:
+   0. **Bypass de pending:** si hay una `PendingTransaction` activa, el mensaje es respuesta a un flujo de confirmación de finanzas → va directo a `financesAgent.handleConfirmation` (sin clasificar).
+   1. Carga contexto de conversación (`lib/conversation.ts`: rolling window K=8 + summary) + objetivos (`lib/goals.ts`) en paralelo.
+   2. **Clasificación con Haiku** → uno de los módulos (`MODULE_DESCRIPTIONS`).
+   3. El **agente especialista** ejecuta la acción y retorna datos crudos.
+   4. **Respuesta final con Sonnet** (voz rioplatense, sin markdown) usando datos del agente + contexto + objetivos.
+   5. Guarda turnos user/assistant en `ConversationMemory`.
+   - El webhook (`app/api/whatsapp/webhook/route.ts`) es el único punto de entrada; transcribe audios con Whisper antes de orquestar.
+
+**4. Scoring — `lib/scoring.ts`.** Cada módulo expone `calc<Modulo>ScoreForDate()`. `calculateFullScore()` los combina con pesos desde `UserGoals` (normalizados). Distinción clave: `null` = sin datos (no entra al promedio) vs `0` = había datos pero no se cumplió el criterio. Ideas NO entra al score global.
+
+**5. NLP compartido — `lib/nlp.ts`.** `detectIntentAI(context, intents, message, systemPrompt?)` reemplaza la detección por regex: una sola llamada a Haiku por invocación de agente, devuelve la key del intent.
+
+### Convenciones de código
+
+- **TypeScript estricto, sin JS plano.** Mantener `npx tsc --noEmit` en 0 errores.
+- Alias de imports: `@/` → raíz del proyecto (ver `tsconfig.json`).
+- Los agentes reciben y devuelven siempre objetos tipados (`AgentInput` / `AgentOutput`).
+- Los mensajes proactivos de WhatsApp siempre pasan por el orquestrador — los sub-agentes nunca hablan directo con WhatsApp.
+- Respuestas de WhatsApp sin markdown (`**`, `_`): se limpian o se generan ya planas.
+
+### Documentos de referencia en la raíz
+
+- `BLUEPRINT.md` — visión y flujos completos del producto.
+- `APP_TECHNICAL_AUDIT.md`, `PENDIENTES.md` — auditoría técnica y pendientes.
+- `CRON_SETUP.md` — setup detallado de los crons (Vercel + cron-job.org).
+- `skills/*.md` — guía por módulo de cómo se construyó cada uno.
+- ⚠️ `AGENTS.md` es una copia parcial y **desactualizada** de este archivo (lista módulos como "Por construir" cuando ya están hechos, y dice "Codex API" en vez de Claude API). Tratar `CLAUDE.md` como la fuente de verdad.
 
 ---
 

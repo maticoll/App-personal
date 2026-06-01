@@ -68,7 +68,12 @@ async function parseEventFromText(
   text: string,
   referenceDate: Date,
   context?: string
-): Promise<{ title: string; start: Date; end: Date } | null> {
+): Promise<{
+  title: string;
+  start: Date;
+  end: Date;
+  recurrence: string[] | null;
+} | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
 
@@ -94,18 +99,28 @@ async function parseEventFromText(
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 150,
+        max_tokens: 250,
         messages: [
           {
             role: "user",
             content:
               `Hoy es ${dateStr}.${contextSection}\n` +
-              `Extrae del siguiente texto: título del evento, fecha y hora de inicio, fecha y hora de fin. ` +
+              `Extrae del siguiente texto: título del evento, fecha y hora de inicio (la PRIMERA ocurrencia), fecha y hora de fin de esa primera ocurrencia, y si es un evento recurrente. ` +
               `Si no se menciona duración, asumir 1 hora. ` +
-              `Si el texto hace referencia a un evento mencionado antes en el contexto, usá esa información para completar los datos faltantes. ` +
+              `Si el texto hace referencia a un evento mencionado antes en el contexto, usá esa información para completar los datos faltantes.\n\n` +
+              `RECURRENCIA: si el usuario pide que el evento se repita (ej: "todos los días", "cada lunes", "de lunes a viernes", "todas las semanas", "cada día por un mes"), ` +
+              `generá una regla RRULE estándar de iCalendar en el campo "recurrence". Reglas:\n` +
+              `- "todos los días" → "RRULE:FREQ=DAILY"\n` +
+              `- "de lunes a viernes" / "días de semana" → "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"\n` +
+              `- "cada lunes" / "todos los lunes" → "RRULE:FREQ=WEEKLY;BYDAY=MO"\n` +
+              `- "todas las semanas" → "RRULE:FREQ=WEEKLY"\n` +
+              `- Si dice una cantidad explícita (ej: "por un mes", "durante un mes"), agregá un límite con UNTIL en formato UTC: "...;UNTIL=YYYYMMDDT235959Z" calculado a un mes desde la primera ocurrencia.\n` +
+              `- Si dice "X veces", usá COUNT (ej: ";COUNT=10").\n` +
+              `- Si NO menciona un final y es recurrente "todos los días" sin límite, agregá UNTIL a un mes desde la primera ocurrencia para no agendar indefinidamente.\n` +
+              `- Si el evento NO es recurrente, devolvé "recurrence": null.\n\n` +
               `IMPORTANTE: Devuelve las horas en formato de Uruguay (UTC-3), usando el offset -03:00. ` +
               `Responde SOLO con JSON con este formato exacto: ` +
-              `{"title":"...","start":"YYYY-MM-DDTHH:MM:SS-03:00","end":"YYYY-MM-DDTHH:MM:SS-03:00"} ` +
+              `{"title":"...","start":"YYYY-MM-DDTHH:MM:SS-03:00","end":"YYYY-MM-DDTHH:MM:SS-03:00","recurrence":"RRULE:..." o null} ` +
               `Texto: "${text}"`,
           },
         ],
@@ -125,18 +140,78 @@ async function parseEventFromText(
       title: string;
       start: string;
       end: string;
+      recurrence?: string | null;
     };
 
     if (!parsed.title || !parsed.start || !parsed.end) return null;
+
+    // Normalizar la RRULE: aceptar string no vacío que arranque con "RRULE:"
+    let recurrence: string[] | null = null;
+    if (typeof parsed.recurrence === "string") {
+      const rule = parsed.recurrence.trim();
+      if (rule && rule.toUpperCase().startsWith("RRULE:")) {
+        recurrence = [rule];
+      }
+    }
 
     return {
       title: parsed.title,
       start: new Date(parsed.start),
       end: new Date(parsed.end),
+      recurrence,
     };
   } catch {
     return null;
   }
+}
+
+// ─── Etiqueta legible de una RRULE ────────────────────────────────────────────
+
+/**
+ * Convierte una RRULE en una descripción corta en español para confirmar al usuario.
+ * Ej: "RRULE:FREQ=DAILY;UNTIL=20260701T235959Z" → "todos los días hasta el 1 jul".
+ */
+function describeRecurrence(rule: string): string {
+  const upper = rule.toUpperCase();
+  let base = "que se repite";
+
+  if (upper.includes("FREQ=DAILY")) {
+    base = "todos los días";
+  } else if (upper.includes("FREQ=WEEKLY")) {
+    const byday = upper.match(/BYDAY=([A-Z,]+)/)?.[1];
+    if (byday === "MO,TU,WE,TH,FR") {
+      base = "de lunes a viernes";
+    } else if (byday) {
+      const dayNames: Record<string, string> = {
+        MO: "lunes", TU: "martes", WE: "miércoles", TH: "jueves",
+        FR: "viernes", SA: "sábados", SU: "domingos",
+      };
+      const days = byday.split(",").map((d) => dayNames[d] ?? d).join(", ");
+      base = `cada ${days}`;
+    } else {
+      base = "todas las semanas";
+    }
+  } else if (upper.includes("FREQ=MONTHLY")) {
+    base = "todos los meses";
+  }
+
+  const count = upper.match(/COUNT=(\d+)/)?.[1];
+  if (count) return `${base} (${count} veces)`;
+
+  const until = upper.match(/UNTIL=(\d{8})/)?.[1];
+  if (until) {
+    const y = Number(until.slice(0, 4));
+    const m = Number(until.slice(4, 6)) - 1;
+    const d = Number(until.slice(6, 8));
+    const untilLabel = new Date(Date.UTC(y, m, d)).toLocaleDateString("es-UY", {
+      day: "numeric",
+      month: "short",
+      timeZone: "America/Montevideo",
+    });
+    return `${base} hasta el ${untilLabel}`;
+  }
+
+  return base;
 }
 
 // ─── Parseo de actualización de evento desde texto ────────────────────────────
@@ -350,7 +425,9 @@ export const calendarAgent = {
           userId,
           parsed.title,
           parsed.start,
-          parsed.end
+          parsed.end,
+          undefined,
+          parsed.recurrence ?? undefined
         );
 
         if (!eventId) {
@@ -364,6 +441,17 @@ export const calendarAgent = {
         const dateLabel = formatDateShort(parsed.start);
         const startTime = formatTime(parsed.start);
         const endTime = formatTime(parsed.end);
+
+        if (parsed.recurrence && parsed.recurrence.length > 0) {
+          const recurrenceLabel = describeRecurrence(parsed.recurrence[0]);
+          return {
+            success: true,
+            message:
+              `✅ Evento recurrente creado: "${parsed.title}"\n` +
+              `🔁 ${recurrenceLabel}\n` +
+              `📅 Desde el ${dateLabel}, ${startTime}-${endTime}`,
+          };
+        }
 
         return {
           success: true,
@@ -478,8 +566,9 @@ export const calendarAgent = {
     title: string,
     start: Date,
     end: Date,
-    description?: string
+    description?: string,
+    recurrence?: string[]
   ): Promise<string | null> {
-    return createEvent(userId, title, start, end, description);
+    return createEvent(userId, title, start, end, description, recurrence);
   },
 };

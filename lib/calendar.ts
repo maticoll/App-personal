@@ -236,13 +236,19 @@ async function fetchEvents(
 /**
  * Crea un evento en Google Calendar.
  * Devuelve el ID del evento creado, o null si falló.
+ *
+ * @param recurrence  Reglas RRULE para eventos recurrentes (ej:
+ *                    ["RRULE:FREQ=DAILY;UNTIL=20260701T000000Z"]).
+ *                    Si se pasa, Google expande automáticamente las repeticiones
+ *                    (un solo evento "master") — no hace falta crear N eventos.
  */
 export async function createEvent(
   userId: string,
   title: string,
   start: Date,
   end: Date,
-  description?: string
+  description?: string,
+  recurrence?: string[]
 ): Promise<string | null> {
   const accessToken = await getValidAccessToken(userId);
   if (!accessToken) return null;
@@ -250,6 +256,18 @@ export async function createEvent(
   const calendarId = process.env.GOOGLE_CALENDAR_ID ?? "primary";
 
   try {
+    const body: Record<string, unknown> = {
+      summary: title,
+      description: description ?? "",
+      // timeZone es necesario para que los eventos recurrentes respeten la
+      // hora local (UTC-3) en cada repetición, incluso cruzando cambios de DST.
+      start: { dateTime: start.toISOString(), timeZone: "America/Montevideo" },
+      end: { dateTime: end.toISOString(), timeZone: "America/Montevideo" },
+    };
+    if (recurrence && recurrence.length > 0) {
+      body.recurrence = recurrence;
+    }
+
     const res = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
       {
@@ -258,12 +276,7 @@ export async function createEvent(
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          summary: title,
-          description: description ?? "",
-          start: { dateTime: start.toISOString() },
-          end: { dateTime: end.toISOString() },
-        }),
+        body: JSON.stringify(body),
       }
     );
 
