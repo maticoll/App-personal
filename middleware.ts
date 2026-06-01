@@ -13,7 +13,10 @@ export default auth((req) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
 
-  const isPublicRoute = nextUrl.pathname.startsWith("/login");
+  const isPublicRoute =
+    nextUrl.pathname.startsWith("/login") ||
+    nextUrl.pathname.startsWith("/privacy") ||
+    nextUrl.pathname.startsWith("/terms");
   const isApiAuthRoute = nextUrl.pathname.startsWith("/api/auth");
   const isApiWebhook = nextUrl.pathname.startsWith("/api/webhooks");
   const isWhatsAppWebhook = nextUrl.pathname.startsWith("/api/whatsapp/webhook");
@@ -30,7 +33,8 @@ export default auth((req) => {
   }
 
   // Si ya esta autenticado y va a /login, redirigir al dashboard
-  if (isLoggedIn && isPublicRoute) {
+  // (solo /login — las páginas legales se pueden leer logueado)
+  if (isLoggedIn && nextUrl.pathname.startsWith("/login")) {
     return Response.redirect(new URL("/", nextUrl));
   }
 

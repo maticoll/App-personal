@@ -142,6 +142,35 @@ async function getValidAccessToken(userId: string): Promise<string | null> {
   return tokens.accessToken;
 }
 
+/**
+ * Revoca el acceso de la app a la cuenta de Google del usuario.
+ * Equivale a "Quitar acceso" en myaccount.google.com/permissions.
+ *
+ * Se usa al reconectar: revocar el grant viejo obliga a Google a entregar un
+ * refresh_token NUEVO en el próximo consentimiento (con prompt=consent). Sin
+ * esto, Google reutiliza el grant existente y puede no devolver refresh_token,
+ * dejando el token muerto en la DB.
+ *
+ * Best-effort: si falla (token ya inválido, red), no lanza.
+ */
+export async function revokeGoogleAccess(userId: string): Promise<void> {
+  const tokens = await getGoogleTokens(userId);
+  if (!tokens) return;
+
+  const tokenToRevoke = tokens.refreshToken ?? tokens.accessToken;
+  if (!tokenToRevoke) return;
+
+  try {
+    await fetch("https://oauth2.googleapis.com/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token: tokenToRevoke }),
+    });
+  } catch (err) {
+    console.error("[calendar] revokeGoogleAccess exception:", err);
+  }
+}
+
 // ─── Estado de la integración ────────────────────────────────────────────────
 
 /**

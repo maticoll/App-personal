@@ -18,7 +18,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     ...authConfig.callbacks,
     // Con JWT strategy, el user.id viene del token, no del adapter
-    jwt({ token, user, account }) {
+    async jwt({ token, user, account }) {
       if (user) {
         token.id = user.id;
       }
@@ -27,9 +27,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // en la DB. Con strategy: "jwt", PrismaAdapter solo crea el registro la
       // primera vez (linkAccount no hace update), por lo que sin esto los tokens
       // viejos (sin scopes de Calendar) persisten indefinidamente.
+      //
+      // IMPORTANTE: hay que AWAITear la escritura. En serverless (Vercel), si el
+      // callback retorna antes de que termine el update, la promesa pendiente se
+      // descarta y el refresh_token nuevo nunca se persiste — esa era la causa de
+      // que reconectar Google no reemplazara el token muerto.
       if (account && token.id && account.provider === "google") {
-        db.account
-          .updateMany({
+        try {
+          await db.account.updateMany({
             where: { userId: token.id as string, provider: "google" },
             data: {
               access_token: account.access_token,
@@ -37,10 +42,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               expires_at: account.expires_at ?? undefined,
               scope: account.scope ?? undefined,
             },
-          })
-          .catch((err) =>
-            console.error("[auth] Error actualizando tokens de Google:", err)
-          );
+          });
+        } catch (err) {
+          console.error("[auth] Error actualizando tokens de Google:", err);
+        }
       }
 
       return token;

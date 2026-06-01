@@ -36,6 +36,7 @@ import {
   Sliders,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { reconnectGoogleCalendar } from "@/app/(app)/settings/actions";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -683,14 +684,27 @@ export function SettingsClient({ user, settings: initial, calendarStatus, goals:
             </div>
           )}
 
-          {(!calendarStatus.connected || !calendarStatus.hasCalendarScope) && (
+          {/* Botón de reconexión — siempre disponible.
+              Revoca el token viejo y fuerza un consentimiento fresco con Google,
+              lo que mintea un refresh_token nuevo (arregla el "invalid_grant"). */}
+          <form action={reconnectGoogleCalendar}>
             <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
-              className="w-full py-2 rounded-xl bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
+              type="submit"
+              className={cn(
+                "w-full py-2 rounded-xl text-sm font-medium transition-colors",
+                calendarStatus.connected && calendarStatus.hasCalendarScope
+                  ? "border border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high"
+                  : "bg-accent text-white hover:bg-accent/90"
+              )}
             >
-              Reconectar con Google
+              Reconectar Google Calendar
             </button>
-          )}
+          </form>
+          <p className="text-xs text-outline">
+            Usá esto si Calendar dejó de funcionar (token expirado o revocado).
+            Te va a pedir permiso de Google de nuevo y va a aparecer un aviso de
+            &quot;app no verificada&quot; → Configuración avanzada → Continuar.
+          </p>
         </div>
       </SectionCard>
 
