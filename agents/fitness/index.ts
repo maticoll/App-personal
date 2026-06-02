@@ -18,6 +18,13 @@ import {
   getTodayFitnessSummary,
   checkSmartHabitDeviation,
   upsertWorkoutFromGarmin,
+  getRoutines,
+  getTodayGymRoutine,
+  matchRoutineByName,
+  getRoutineWithLastPerformance,
+  logRoutineSession,
+  type RoutineLastPerformance,
+  type RoutineSessionComparison,
 } from "@/lib/fitness";
 import { checkGarminStatus, fetchGarminActivities } from "@/lib/garmin";
 import { calcFitnessScoreForDate } from "@/lib/scoring";
@@ -84,15 +91,102 @@ function cardioLoggedText(
 
 export async function getFitnessSummaryText(userId: string): Promise<string> {
   const summary = await getTodayFitnessSummary(userId);
-  if (!summary || summary.workouts.length === 0) return "Sin actividad registrada hoy.";
+  if (!summary) return "Sin actividad registrada hoy.";
 
   const parts: string[] = [];
   if (summary.didGym) parts.push("sesión de gym");
   const cardio = summary.workouts.filter(w => w.type !== "GYM");
   if (cardio.length > 0) parts.push(`${cardio.length} sesión cardio`);
   if (summary.totalActivityMinutes > 0) parts.push(`${summary.totalActivityMinutes} min totales`);
+  if (summary.steps != null) {
+    parts.push(`${summary.steps.toLocaleString("es-UY")} pasos${summary.stepsGoal ? ` (meta ${summary.stepsGoal.toLocaleString("es-UY")})` : ""}`);
+  }
 
+  if (parts.length === 0) return "Sin actividad registrada hoy.";
   return `🏋️ Fitness: ${parts.join(", ")}.`;
+}
+
+// ─── Rutinas: detección y formateo ────────────────────────────────────────────
+
+function fmtDateShort(date: Date): string {
+  return date.toLocaleDateString("es-UY", {
+    day: "numeric",
+    month: "short",
+    timeZone: "America/Montevideo",
+  });
+}
+
+/** ¿El mensaje tiene datos de ejercicio (pesos/reps/series)? */
+function hasExerciseData(text: string): boolean {
+  return (
+    /\d/.test(text) &&
+    /(kg|reps?|repetic|series|serie|\d\s*x\s*\d|x\s*\d)/i.test(text)
+  );
+}
+
+/** ¿El usuario pide que le traigan/preparen una rutina? */
+function wantsBringRoutine(text: string): boolean {
+  return /(tra[eé]me|tr[aá]eme|dame|pas[aá]me|mostr|prepar|carg[aá]|quiero (hacer|ver|empezar)|qu[eé] toca|toca hoy)/i.test(
+    text
+  );
+}
+
+function formatRoutinePerf(perf: RoutineLastPerformance): string {
+  const lines: string[] = [];
+  lines.push(
+    `📋 ${perf.routineName}${perf.lastDate ? ` (última vez: ${fmtDateShort(perf.lastDate)})` : ""}`
+  );
+  perf.exercises.forEach((ex, i) => {
+    const reps = ex.repsRange ? `×${ex.repsRange}` : "";
+    const plan = `${ex.plannedSets}${reps}`;
+    let last = "sin registro previo";
+    if (ex.last) {
+      const w = ex.last.weightKg != null ? `${ex.last.weightKg}kg` : "";
+      const r = ex.last.reps != null ? ` ×${ex.last.reps}` : "";
+      last = `último: ${w}${r}`.trim();
+    }
+    lines.push(`${i + 1}. ${ex.name} — ${plan} · ${last}`);
+  });
+  if (!perf.lastDate) {
+    lines.push("Es la primera vez que vas a registrar esta rutina. ¡A darle!");
+  }
+  return lines.join("\n");
+}
+
+function formatRoutineComparison(cmp: RoutineSessionComparison): string {
+  const title = cmp.routineName ?? "Sesión de gym";
+  const lines: string[] = [];
+
+  if (cmp.prevDate) {
+    lines.push(`💪 ${title} registrada. Progreso vs ${fmtDateShort(cmp.prevDate)}:`);
+  } else {
+    lines.push(`💪 ${title} registrada. Es tu primera sesión de esta rutina (queda de referencia).`);
+  }
+
+  for (const ex of cmp.exercises) {
+    const wToday = ex.today.weightKg != null ? `${ex.today.weightKg}kg` : "";
+    const rToday = ex.today.reps != null ? ` ×${ex.today.reps}` : "";
+    const todayStr = `${wToday}${rToday}`.trim() || "registrado";
+
+    let delta = "";
+    if (!ex.prev) {
+      delta = " (nuevo)";
+    } else if (ex.deltaWeight != null && ex.deltaWeight > 0) {
+      delta = ` (subiste ${ex.deltaWeight}kg) ⬆️`;
+    } else if (ex.deltaWeight != null && ex.deltaWeight < 0) {
+      delta = ` (bajaste ${Math.abs(ex.deltaWeight)}kg) ⬇️`;
+    } else if (ex.deltaVolume != null && ex.deltaVolume > 0) {
+      delta = ` (más volumen: +${ex.deltaVolume}) ⬆️`;
+    } else if (ex.deltaVolume != null && ex.deltaVolume < 0) {
+      delta = ` (menos volumen: ${ex.deltaVolume}) ⬇️`;
+    } else if (ex.prev) {
+      delta = " (igual)";
+    }
+
+    lines.push(`• ${ex.name}: ${todayStr}${delta}`);
+  }
+
+  return lines.join("\n");
 }
 
 // ─── Agente principal ─────────────────────────────────────────────────────────
@@ -111,6 +205,32 @@ export const fitnessAgent = {
     void systemPrompt; // usado por detectIntentAI si se refactoriza a NLP
 
     try {
+      // ── Rutinas por nombre (traer / registrar con comparación) ──────────────
+      // Tiene prioridad sobre el log genérico de ejercicios.
+      const routines = await getRoutines(userId).catch(() => []);
+      const matchedRoutine = matchRoutineByName(routines, message);
+
+      if (matchedRoutine && hasExerciseData(text)) {
+        // El usuario mandó la rutina hecha → registrar + comparar con la última
+        const cmp = await logRoutineSession(userId, matchedRoutine.name, message);
+        return { success: true, message: formatRoutineComparison(cmp) };
+      }
+
+      if (matchedRoutine && (wantsBringRoutine(text) || !hasExerciseData(text))) {
+        // "tráeme push A" → traer la rutina con los últimos pesos
+        const perf = await getRoutineWithLastPerformance(userId, matchedRoutine.name);
+        if (perf) return { success: true, message: formatRoutinePerf(perf) };
+      }
+
+      // "tráeme la rutina de hoy" (sin nombrarla explícitamente)
+      if (!matchedRoutine && wantsBringRoutine(text) && /rutina|entren|toca/i.test(text)) {
+        const today = await getTodayGymRoutine(userId);
+        if (today) {
+          const perf = await getRoutineWithLastPerformance(userId, today.name);
+          if (perf) return { success: true, message: formatRoutinePerf(perf) };
+        }
+      }
+
       // Sync Garmin
       if (/sync|sincronizar|garmin/i.test(text)) {
         const status = await checkGarminStatus(userId);
@@ -141,7 +261,7 @@ export const fitnessAgent = {
 
       // Query
       const summary = await getTodayFitnessSummary(userId);
-      if (!summary || summary.workouts.length === 0) {
+      if (!summary) {
         return { success: true, message: "No hay actividad registrada hoy. ¿Fuiste al gym o hiciste cardio?" };
       }
       const parts: string[] = [];
@@ -149,6 +269,12 @@ export const fitnessAgent = {
       const cardio = summary.workouts.filter((w: any) => w.type !== "GYM");
       if (cardio.length > 0) parts.push(`${cardio.length} actividad${cardio.length > 1 ? "es" : ""} cardio`);
       if (summary.totalActivityMinutes > 0) parts.push(`${summary.totalActivityMinutes} min totales`);
+      if (summary.steps != null) {
+        parts.push(`${summary.steps.toLocaleString("es-UY")} pasos${summary.stepsGoal ? ` (meta ${summary.stepsGoal.toLocaleString("es-UY")})` : ""}`);
+      }
+      if (parts.length === 0) {
+        return { success: true, message: "No hay actividad registrada hoy. ¿Fuiste al gym o hiciste cardio?" };
+      }
       return { success: true, message: `Hoy: ${parts.join(", ")}.` };
 
     } catch {

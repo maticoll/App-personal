@@ -12,6 +12,7 @@ import {
   getWeeklyStats,
   getTodayGymRoutine,
   checkSmartHabitDeviation,
+  getTodaySteps,
 } from "@/lib/fitness";
 import { checkGarminStatus } from "@/lib/garmin";
 import FitnessModuleClient from "@/components/fitness/FitnessModuleClient";
@@ -30,6 +31,7 @@ export default async function FitnessPage() {
     todayRoutine,
     smartHabit,
     garminStatus,
+    todaySteps,
   ] = await Promise.all([
     getTodayWorkouts(userId).catch(() => []),
     getWorkoutHistory(userId, 14).catch(() => []),
@@ -37,6 +39,7 @@ export default async function FitnessPage() {
     getTodayGymRoutine(userId).catch(() => null),
     checkSmartHabitDeviation(userId).catch(() => ({ shouldNotify: false, message: null })),
     checkGarminStatus(userId).catch(() => ({ connected: false })),
+    getTodaySteps(userId).catch(() => null),
   ]);
 
   return (
@@ -59,6 +62,7 @@ export default async function FitnessPage() {
         initialWeeklyStats={weeklyStats}
         initialTodayRoutine={todayRoutine}
         initialSmartHabit={smartHabit}
+        initialSteps={todaySteps}
         garminConnected={garminStatus.connected}
       />
     </div>

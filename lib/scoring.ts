@@ -208,6 +208,11 @@ function getDayName(date: Date): string {
   return days[date.getDay()];
 }
 
+/** "YYYY-MM-DD" (UTC) → Date medianoche UTC, para la clave @db.Date de DailySteps */
+function stepsDateKey(date: Date): Date {
+  return new Date(date.toISOString().split("T")[0] + "T00:00:00.000Z");
+}
+
 async function calcFitnessScore(
   userId: string,
   date: Date,
@@ -216,19 +221,50 @@ async function calcFitnessScore(
   const met: string[] = [];
   const missed: string[] = [];
 
-  const [workouts, settings, userGoals] = await Promise.all([
+  const [workouts, settings, userGoals, stepsRow] = await Promise.all([
     db.workout.findMany({
       where: { userId, date: { gte: startOfDay(date), lte: endOfDay(date) } },
     }),
     db.userSettings.findUnique({ where: { userId } }),
     goals ?? getGoals(userId),
+    db.dailySteps
+      .findUnique({ where: { userId_date: { userId, date: stepsDateKey(date) } } })
+      .catch(() => null),
   ]);
 
   const dayName = getDayName(date);
   const isGymDay = (settings?.gymDays ?? []).includes(dayName);
   const targetDuration = userGoals.fitnessTargetGymDuration;
 
+  // Pasos del día (Garmin). La meta cumplida vale como cardio.
+  const steps = stepsRow?.steps ?? null;
+  const stepsGoal = userGoals.fitnessDailyStepsGoal ?? 8000;
+  const reachedSteps = steps !== null && steps >= stepsGoal;
+  const stepsLabel = steps !== null ? steps.toLocaleString("es-UY") : "0";
+
+  // ── Sin workouts registrados ─────────────────────────────────────────
   if (workouts.length === 0) {
+    // Día activo solo por caminar: meta de pasos alcanzada sin entrenar
+    if (reachedSteps) {
+      return {
+        score: 60,
+        met: [`${stepsLabel} pasos (meta ${stepsGoal.toLocaleString("es-UY")}) ✓`, "Movimiento diario ✓"],
+        missed: ["Sin entrenamiento registrado", "Sin gym"],
+      };
+    }
+    // Hay algún movimiento pero no llega a la meta → crédito parcial
+    if (steps !== null && steps > 0) {
+      const partial = Math.round(Math.min(steps / stepsGoal, 1) * 40);
+      return {
+        score: partial,
+        met: partial > 0 ? [`${stepsLabel} pasos (meta ${stepsGoal.toLocaleString("es-UY")})`] : [],
+        missed: [
+          "Sin entrenamiento registrado",
+          `Faltan ${Math.max(stepsGoal - steps, 0).toLocaleString("es-UY")} pasos para la meta`,
+        ],
+      };
+    }
+    // Sin nada
     if (isGymDay && (settings?.gymDays?.length ?? 0) > 0) {
       return { score: 0, met: [], missed: ["Hoy era día de gym — sin actividad registrada"] };
     }
@@ -265,13 +301,18 @@ async function calcFitnessScore(
     missed.push("Sin duración registrada");
   }
 
-  // Actividad cardiovascular (20 pts)
+  // Cardio o meta de pasos (20 pts)
+  // Los pasos del día cuentan como cardio: alcanzar la meta cumple este bloque.
   const hasCardio = workouts.some((w: any) => ["RUNNING", "SWIMMING", "CYCLING"].includes(w.type));
   if (hasCardio) {
     score += 20;
     met.push("Actividad cardiovascular ✓");
+    if (steps !== null) met.push(`${stepsLabel} pasos`);
+  } else if (reachedSteps) {
+    score += 20;
+    met.push(`Meta de pasos alcanzada (${stepsLabel}) ✓`);
   } else {
-    missed.push("Sin actividad cardiovascular");
+    missed.push(`Sin cardio ni meta de pasos (${stepsLabel}/${stepsGoal.toLocaleString("es-UY")})`);
   }
 
   return { score: Math.min(score, 100), met, missed };

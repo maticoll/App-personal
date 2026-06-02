@@ -7,8 +7,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { fetchGarminActivities } from "@/lib/garmin";
-import { upsertWorkoutFromGarmin } from "@/lib/fitness";
+import { fetchGarminActivities, fetchGarminDailySteps } from "@/lib/garmin";
+import { upsertWorkoutFromGarmin, upsertDailySteps } from "@/lib/fitness";
 import { verifyCronSecret } from "@/lib/cron";
 import { logger } from "@/lib/logger";
 
@@ -43,6 +43,14 @@ export async function GET(req: NextRequest) {
           for (const activity of activities) {
             await upsertWorkoutFromGarmin(userId, activity);
             synced++;
+          }
+
+          // Pasos diarios (total del día)
+          try {
+            const daily = await fetchGarminDailySteps(userId, dateStr);
+            if (daily) await upsertDailySteps(userId, dateStr, daily.totalSteps);
+          } catch (stepErr) {
+            logger.error("cron/fitness-sync", { event: "steps_error", userId, date: dateStr, error: String(stepErr) });
           }
         } catch (err) {
           logger.error("cron/fitness-sync", { event: "user_error", userId, date: dateStr, error: String(err) });

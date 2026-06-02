@@ -4,8 +4,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { fetchGarminActivities } from "@/lib/garmin";
-import { upsertWorkoutFromGarmin } from "@/lib/fitness";
+import { fetchGarminActivities, fetchGarminDailySteps } from "@/lib/garmin";
+import { upsertWorkoutFromGarmin, upsertDailySteps } from "@/lib/fitness";
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,14 +29,20 @@ export async function POST(req: NextRequest) {
 
       try {
         const activities = await fetchGarminActivities(userId, dateStr);
-        if (activities.length === 0) {
-          skipped++;
-          continue;
-        }
         for (const activity of activities) {
           await upsertWorkoutFromGarmin(userId, activity);
           synced++;
         }
+
+        // Pasos diarios (total del día) — independiente de las actividades
+        try {
+          const daily = await fetchGarminDailySteps(userId, dateStr);
+          if (daily) await upsertDailySteps(userId, dateStr, daily.totalSteps);
+        } catch (stepErr) {
+          console.error(`Error sync Garmin steps ${dateStr}:`, stepErr);
+        }
+
+        if (activities.length === 0) skipped++;
       } catch (err) {
         console.error(`Error sync Garmin activities ${dateStr}:`, err);
         errors++;

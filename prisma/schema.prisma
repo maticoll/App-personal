@@ -51,6 +51,9 @@ model User {
   // Scoring
   dailyScores  DailyScore[]
 
+  // Pasos diarios (Garmin)
+  dailySteps   DailySteps[]
+
   // Hábitos esperados
   habits       UserHabit[]
 
@@ -444,6 +447,29 @@ model DailyScore {
 }
 
 // ============================================================
+// PASOS DIARIOS (Garmin)
+// Total de pasos del día (resumen diario de Garmin, distinto de
+// los pasos por-actividad que guarda Workout.steps).
+// ============================================================
+
+model DailySteps {
+  id     String   @id @default(cuid())
+  userId String
+  date   DateTime @db.Date // Día calendario
+
+  steps  Int               // Total de pasos del día
+  source String  @default("GARMIN") // "GARMIN" | "MANUAL"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("daily_steps")
+}
+
+// ============================================================
 // OBJETIVOS DEL USUARIO
 // Metas por módulo + pesos del score global
 // ============================================================
@@ -463,6 +489,7 @@ model UserGoals {
   fitnessTargetBodyFat      Float? // % grasa objetivo
   fitnessTargetGymDuration  Int    @default(60)  // Duración mínima por sesión (min)
   fitnessTargetCardioWeekly Int    @default(120) // Cardio semanal objetivo (min)
+  fitnessDailyStepsGoal     Int    @default(8000) // Meta diaria de pasos (Garmin)
 
   // === NUTRICIÓN ===
   nutritionTargetCalories Int @default(2200)

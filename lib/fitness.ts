@@ -317,8 +317,13 @@ export async function getRoutines(
 export async function getTodayFitnessSummary(
   userId: string
 ): Promise<FitnessSummary | null> {
-  const workouts = await getTodayWorkouts(userId);
-  if (workouts.length === 0) return null;
+  const [workouts, stepsInfo] = await Promise.all([
+    getTodayWorkouts(userId),
+    getTodaySteps(userId).catch(() => null),
+  ]);
+
+  // Sin workouts y sin pasos → no hay datos de fitness hoy
+  if (workouts.length === 0 && !stepsInfo) return null;
 
   return {
     date: new Date(),
@@ -335,7 +340,70 @@ export async function getTodayFitnessSummary(
       (sum, w) => sum + (w.durationMinutes ?? 0),
       0
     ),
+    steps: stepsInfo?.steps ?? null,
+    stepsGoal: stepsInfo?.goal ?? null,
   };
+}
+
+// -------------------------------------------------------
+// Pasos diarios (Garmin)
+// El total de pasos del día se guarda en DailySteps, separado de los
+// pasos por-actividad de Workout.steps. La clave es la fecha calendario
+// en UTC (consistente con el sync de Garmin, que usa toISOString()).
+// -------------------------------------------------------
+
+const DEFAULT_STEPS_GOAL = 8000;
+
+/** "YYYY-MM-DD" → Date a medianoche UTC (para columnas @db.Date) */
+function stepsKeyFromStr(dateStr: string): Date {
+  return new Date(dateStr + "T00:00:00.000Z");
+}
+
+/** Date → clave de fecha calendario UTC para DailySteps */
+function stepsKeyFromDate(date: Date): Date {
+  return stepsKeyFromStr(date.toISOString().split("T")[0]);
+}
+
+/** Guarda (upsert) el total de pasos de un día. dateStr en formato "YYYY-MM-DD". */
+export async function upsertDailySteps(
+  userId: string,
+  dateStr: string,
+  steps: number,
+  source: "GARMIN" | "MANUAL" = "GARMIN"
+): Promise<void> {
+  const date = stepsKeyFromStr(dateStr);
+  await db.dailySteps.upsert({
+    where: { userId_date: { userId, date } },
+    update: { steps, source },
+    create: { userId, date, steps, source },
+  });
+}
+
+/** Total de pasos de una fecha dada (o null si no hay registro). */
+export async function getStepsForDate(
+  userId: string,
+  date: Date
+): Promise<number | null> {
+  const row = await db.dailySteps.findUnique({
+    where: { userId_date: { userId, date: stepsKeyFromDate(date) } },
+  });
+  return row?.steps ?? null;
+}
+
+/** Pasos de hoy + meta diaria del usuario (null si no hay pasos registrados). */
+export async function getTodaySteps(
+  userId: string
+): Promise<{ steps: number; goal: number } | null> {
+  const [row, goals] = await Promise.all([
+    db.dailySteps.findUnique({
+      where: { userId_date: { userId, date: stepsKeyFromDate(new Date()) } },
+    }),
+    db.userGoals.findUnique({ where: { userId } }).catch(() => null),
+  ]);
+
+  const goal = goals?.fitnessDailyStepsGoal ?? DEFAULT_STEPS_GOAL;
+  if (!row) return null;
+  return { steps: row.steps, goal };
 }
 
 // -------------------------------------------------------
@@ -426,9 +494,13 @@ export async function logActivity(
 /**
  * Obtener o crear la sesión de gym de hoy.
  * Si ya existe un workout de tipo GYM para hoy, lo devuelve.
+ * @param title — nombre de la rutina (ej: "Push A"). Si se pasa y la sesión de
+ *   hoy no tiene título (o difiere), se actualiza para etiquetarla. Esto permite
+ *   registrar CUALQUIER rutina, no solo la que toca según el día.
  */
 export async function startGymWorkout(
-  userId: string
+  userId: string,
+  title?: string
 ): Promise<WorkoutWithExercises> {
   const existing = await db.workout.findFirst({
     where: {
@@ -444,7 +516,24 @@ export async function startGymWorkout(
     },
   });
 
-  if (existing) return mapWorkout(existing);
+  if (existing) {
+    // Si llega un título nuevo y la sesión no lo tenía, etiquetarla.
+    const existingTitle = (existing as { title?: string | null }).title ?? null;
+    if (title && existingTitle !== title) {
+      const updated = await db.workout.update({
+        where: { id: existing.id },
+        data: { title } as Parameters<typeof db.workout.update>[0]["data"],
+        include: {
+          exercises: {
+            orderBy: { order: "asc" },
+            include: { sets: { orderBy: { setNumber: "asc" } } },
+          },
+        },
+      });
+      return mapWorkout(updated);
+    }
+    return mapWorkout(existing);
+  }
 
   const workout = await db.workout.create({
     data: {
@@ -452,7 +541,7 @@ export async function startGymWorkout(
       date: new Date(),
       type: "GYM",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ...({ source: "MANUAL" } as any),
+      ...({ source: "MANUAL", title: title ?? null } as any),
     } as Parameters<typeof db.workout.create>[0]["data"],
     include: { exercises: { include: { sets: true } } },
   });
@@ -616,6 +705,236 @@ Ejemplos de entrada → salida:
   } catch {
     throw new Error(`No se pudo interpretar la respuesta del parser: ${raw}`);
   }
+}
+
+// -------------------------------------------------------
+// Rutinas: matching por nombre + progreso entre sesiones
+// La sesión de gym se etiqueta con el nombre de la rutina (Workout.title),
+// así se puede comparar "Push A" de hoy contra la última "Push A".
+// -------------------------------------------------------
+
+/** Normaliza texto para comparar nombres (sin acentos, minúsculas) */
+function normalizeName(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/** Mejor serie de un ejercicio: mayor peso (desempate por reps). */
+function exerciseTopSet(
+  sets: { weightKg: number | null; reps: number | null }[]
+): { weightKg: number | null; reps: number | null } | null {
+  let best: { weightKg: number | null; reps: number | null } | null = null;
+  for (const s of sets) {
+    if (s.weightKg == null && s.reps == null) continue;
+    if (!best) {
+      best = s;
+      continue;
+    }
+    const bw = best.weightKg ?? -1;
+    const sw = s.weightKg ?? -1;
+    if (sw > bw || (sw === bw && (s.reps ?? 0) > (best.reps ?? 0))) best = s;
+  }
+  return best ? { weightKg: best.weightKg ?? null, reps: best.reps ?? null } : null;
+}
+
+/** Volumen total de un ejercicio (suma de peso × reps de cada serie). */
+function exerciseVolume(
+  sets: { weightKg: number | null; reps: number | null }[]
+): number {
+  return sets.reduce((sum, s) => sum + (s.weightKg ?? 0) * (s.reps ?? 0), 0);
+}
+
+/**
+ * Busca una rutina del usuario por nombre aproximado.
+ * Tolerante: exacto → nombre contenido en el texto → texto contenido en nombre.
+ */
+export function matchRoutineByName(
+  routines: GymRoutineWithExercises[],
+  query: string
+): GymRoutineWithExercises | null {
+  const q = normalizeName(query);
+  if (!q) return null;
+
+  // 1. Coincidencia exacta
+  const exact = routines.find((r) => normalizeName(r.name) === q);
+  if (exact) return exact;
+
+  // 2. El nombre de la rutina aparece dentro del texto (ej: "tráeme push a")
+  //    Si varias coinciden, preferir el nombre más largo (más específico).
+  const contained = routines
+    .filter((r) => q.includes(normalizeName(r.name)))
+    .sort((a, b) => b.name.length - a.name.length);
+  if (contained.length) return contained[0];
+
+  // 3. El texto aparece dentro del nombre de la rutina
+  const reverse = routines.find((r) => normalizeName(r.name).includes(q));
+  return reverse ?? null;
+}
+
+/**
+ * Última sesión de gym con un título de rutina dado.
+ * @param beforeDate — si se pasa, busca sesiones estrictamente anteriores a esa fecha.
+ */
+export async function findLastRoutineSession(
+  userId: string,
+  routineName: string,
+  beforeDate?: Date
+): Promise<WorkoutWithExercises | null> {
+  const w = await db.workout.findFirst({
+    where: {
+      userId,
+      type: "GYM",
+      title: { equals: routineName, mode: "insensitive" },
+      ...(beforeDate ? { date: { lt: beforeDate } } : {}),
+      exercises: { some: {} },
+    },
+    orderBy: { date: "desc" },
+    include: {
+      exercises: {
+        orderBy: { order: "asc" },
+        include: { sets: { orderBy: { setNumber: "asc" } } },
+      },
+    },
+  });
+  return w ? mapWorkout(w) : null;
+}
+
+export type RoutineLastPerformance = {
+  routineName: string;
+  lastDate: Date | null;
+  exercises: {
+    name: string;
+    plannedSets: number;
+    repsRange: string | null;
+    last: { weightKg: number | null; reps: number | null } | null;
+  }[];
+};
+
+/**
+ * Trae una rutina con los últimos pesos/reps registrados en la última sesión
+ * de esa misma rutina. Para el comando "tráeme push A".
+ */
+export async function getRoutineWithLastPerformance(
+  userId: string,
+  query: string
+): Promise<RoutineLastPerformance | null> {
+  const routines = await getRoutines(userId);
+  const routine = matchRoutineByName(routines, query);
+  if (!routine) return null;
+
+  const last = await findLastRoutineSession(userId, routine.name);
+  const lastMap = new Map<string, ExerciseWithSets>();
+  if (last) for (const ex of last.exercises) lastMap.set(normalizeName(ex.name), ex);
+
+  const exercises = routine.exercises.map((re) => {
+    const match = lastMap.get(normalizeName(re.name));
+    return {
+      name: re.name,
+      plannedSets: re.sets,
+      repsRange: re.repsRange ?? null,
+      last: match ? exerciseTopSet(match.sets) : null,
+    };
+  });
+
+  return { routineName: routine.name, lastDate: last?.date ?? null, exercises };
+}
+
+export type RoutineSessionComparison = {
+  routineName: string | null;
+  prevDate: Date | null;
+  exercises: {
+    name: string;
+    today: { weightKg: number | null; reps: number | null; volume: number };
+    prev: { weightKg: number | null; reps: number | null; volume: number } | null;
+    deltaWeight: number | null;
+    deltaVolume: number | null;
+  }[];
+};
+
+/**
+ * Registra una sesión de rutina desde texto libre y la compara con la última
+ * sesión de la MISMA rutina (por título). Devuelve el progreso por ejercicio.
+ */
+export async function logRoutineSession(
+  userId: string,
+  routineName: string | null,
+  text: string
+): Promise<RoutineSessionComparison> {
+  const parsed = await parseExercisesFromText(text);
+  if (parsed.length === 0) {
+    throw new Error(
+      "No pude interpretar los ejercicios. Probá: 'Push A: press plano 100kg 3x8, sentadilla 80kg 3x10'"
+    );
+  }
+
+  // Capturar la sesión previa de esta rutina ANTES de tocar la de hoy
+  const prev = routineName
+    ? await findLastRoutineSession(userId, routineName, startOfDay(new Date()))
+    : null;
+  const prevMap = new Map<string, ExerciseWithSets>();
+  if (prev) for (const ex of prev.exercises) prevMap.set(normalizeName(ex.name), ex);
+
+  // Crear/etiquetar la sesión de hoy y registrar ejercicios
+  const workout = await startGymWorkout(userId, routineName ?? undefined);
+  for (const ex of parsed) {
+    await addExerciseSets(workout.id, ex.name, ex.sets);
+  }
+
+  // Duración estimada (~5 min por serie)
+  const totalSets = parsed.reduce((sum, ex) => sum + ex.sets.length, 0);
+  const estimated = (workout.durationMinutes ?? 0) + totalSets * 5;
+  if (estimated > (workout.durationMinutes ?? 0)) {
+    await db.workout.update({
+      where: { id: workout.id },
+      data: { durationMinutes: Math.min(estimated, 150) },
+    });
+  }
+
+  const exercises = parsed.map((ex) => {
+    const todaySets = ex.sets.map((s) => ({
+      weightKg: s.weightKg ?? null,
+      reps: s.reps ?? null,
+    }));
+    const todayTop = exerciseTopSet(todaySets);
+    const todayVol = exerciseVolume(todaySets);
+
+    const prevEx = prevMap.get(normalizeName(ex.name));
+    const prevTop = prevEx ? exerciseTopSet(prevEx.sets) : null;
+    const prevVol = prevEx ? exerciseVolume(prevEx.sets) : null;
+
+    const deltaWeight =
+      todayTop?.weightKg != null && prevTop?.weightKg != null
+        ? round1(todayTop.weightKg - prevTop.weightKg)
+        : null;
+    const deltaVolume = prevVol != null ? Math.round(todayVol - prevVol) : null;
+
+    return {
+      name: ex.name,
+      today: {
+        weightKg: todayTop?.weightKg ?? null,
+        reps: todayTop?.reps ?? null,
+        volume: Math.round(todayVol),
+      },
+      prev: prevEx
+        ? {
+            weightKg: prevTop?.weightKg ?? null,
+            reps: prevTop?.reps ?? null,
+            volume: Math.round(prevVol ?? 0),
+          }
+        : null,
+      deltaWeight,
+      deltaVolume,
+    };
+  });
+
+  return { routineName, prevDate: prev?.date ?? null, exercises };
 }
 
 // -------------------------------------------------------

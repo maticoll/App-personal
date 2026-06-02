@@ -620,6 +620,75 @@ function parseGarminActivity(
   };
 }
 
+// ============================================================
+// PASOS DIARIOS (Fitness)
+// ============================================================
+
+export type GarminDailySteps = {
+  date: string; // "YYYY-MM-DD"
+  totalSteps: number;
+  dailyStepGoal: number | null;
+};
+
+/**
+ * Obtener el total de pasos del día desde el resumen diario de Garmin.
+ * Endpoint: /proxy/usersummary-service/usersummary/daily/{displayName}?calendarDate=YYYY-MM-DD
+ * Devuelve null si no hay datos para la fecha.
+ */
+export async function fetchGarminDailySteps(
+  userId: string,
+  date: string,
+  retrying = false
+): Promise<GarminDailySteps | null> {
+  const session = await getGarminSession(userId);
+
+  let displayName: string;
+  try {
+    displayName = await getGarminDisplayName(session);
+  } catch {
+    if (!retrying) {
+      await invalidateGarminSession(userId);
+      return fetchGarminDailySteps(userId, date, true);
+    }
+    throw new Error("No se pudo autenticar con Garmin después de reintentar.");
+  }
+
+  const url =
+    `${GARMIN_CONNECT_URL}/proxy/usersummary-service/usersummary/daily/${displayName}` +
+    `?calendarDate=${date}`;
+
+  const res = await fetch(url, {
+    headers: {
+      Cookie: session,
+      NK: "NT",
+      "User-Agent": "Mozilla/5.0",
+      "DI-Backend": "connectapi.garmin.com",
+      Accept: "application/json",
+    },
+  });
+
+  if (res.status === 401 && !retrying) {
+    await invalidateGarminSession(userId);
+    return fetchGarminDailySteps(userId, date, true);
+  }
+
+  if (res.status === 204 || res.status === 404) return null;
+
+  if (!res.ok) {
+    throw new Error(`Garmin usersummary API error: ${res.status}`);
+  }
+
+  const json = (await res.json()) as Record<string, unknown>;
+  const totalSteps = json.totalSteps as number | null | undefined;
+  if (totalSteps === null || totalSteps === undefined) return null;
+
+  return {
+    date,
+    totalSteps: Math.round(totalSteps),
+    dailyStepGoal: (json.dailyStepGoal as number | undefined) ?? null,
+  };
+}
+
 // --- Utils internos ---
 
 function extractCookies(res: Response): string {

@@ -58,6 +58,8 @@ export type FitnessSummary = {
   workouts: WorkoutSummary[];
   didGym: boolean;
   totalActivityMinutes: number;
+  steps?: number | null;     // Total de pasos del día (Garmin)
+  stepsGoal?: number | null; // Meta diaria de pasos
 };
 
 export type WorkoutSummary = {

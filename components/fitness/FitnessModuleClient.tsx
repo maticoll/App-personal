@@ -9,6 +9,7 @@ import type {
 } from "@/lib/fitness";
 
 import TodayWorkoutCard from "./TodayWorkoutCard";
+import StepsCard from "./StepsCard";
 import GymRoutineCard from "./GymRoutineCard";
 import FitnessQuickActions from "./FitnessQuickActions";
 import WeeklyVolumeChart from "./WeeklyVolumeChart";
@@ -19,12 +20,15 @@ import GarminSyncButton from "./GarminSyncButton";
 
 type Tab = "hoy" | "stats" | "rutinas";
 
+type StepsInfo = { steps: number; goal: number } | null;
+
 type Props = {
   initialTodayWorkouts: WorkoutWithExercises[];
   initialHistory: WorkoutWithExercises[];
   initialWeeklyStats: WeeklyStatEntry[];
   initialTodayRoutine: GymRoutineWithExercises | null;
   initialSmartHabit: SmartHabitStatus;
+  initialSteps: StepsInfo;
   garminConnected: boolean;
 };
 
@@ -34,6 +38,7 @@ export default function FitnessModuleClient({
   initialWeeklyStats,
   initialTodayRoutine,
   initialSmartHabit,
+  initialSteps,
   garminConnected,
 }: Props) {
   const [tab, setTab] = useState<Tab>("hoy");
@@ -41,6 +46,7 @@ export default function FitnessModuleClient({
   const [history, setHistory] = useState<WorkoutWithExercises[]>(initialHistory);
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStatEntry[]>(initialWeeklyStats);
   const [smartHabit, setSmartHabit] = useState<SmartHabitStatus>(initialSmartHabit);
+  const [steps, setSteps] = useState<StepsInfo>(initialSteps);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const refreshAll = useCallback(async () => {
@@ -55,6 +61,7 @@ export default function FitnessModuleClient({
         const d = await todayRes.json();
         setTodayWorkouts(d.workouts ?? []);
         setSmartHabit(d.smartHabit ?? { shouldNotify: false });
+        setSteps(d.steps ?? null);
       }
       if (historyRes.ok) {
         const d = await historyRes.json();
@@ -120,6 +127,9 @@ export default function FitnessModuleClient({
             <h2 className="text-2xl font-bold text-on-surface tracking-tight">Daily Focus</h2>
             <span className="text-xs font-bold text-accent-cyan uppercase tracking-widest">{dateLabel}</span>
           </div>
+
+          {/* Pasos de hoy (Garmin) */}
+          {steps && <StepsCard steps={steps.steps} goal={steps.goal} />}
 
           {/* Rutina del día */}
           {initialTodayRoutine && (

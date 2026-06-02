@@ -25,10 +25,10 @@ export default function GymRoutineCard({ routine, onStarted }: Props) {
   const handleStart = async () => {
     setStarting(true);
     try {
-      const res = await fetch("/api/fitness/workout", {
+      const res = await fetch("/api/fitness/start-routine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "GYM", title: routine.name }),
+        body: JSON.stringify({ title: routine.name }),
       });
       if (!res.ok) throw new Error();
       onStarted();

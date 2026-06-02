@@ -52,7 +52,7 @@ type Module =
 
 const MODULE_DESCRIPTIONS: Record<Module, string> = {
   sleep:     "El usuario habla de dormir, despertar, horas de sueño, cansancio, Garmin o descanso",
-  fitness:   "El usuario habla de gym, ejercicio, cardio, correr, nadar, entrenar, rutinas o Garmin",
+  fitness:   "El usuario habla de gym, ejercicio, cardio, correr, nadar, entrenar, pasos, o rutinas (incluye pedir/traer una rutina por nombre como 'tráeme push A', o mandar la rutina que hizo con pesos y repeticiones para registrarla)",
   nutrition: "El usuario habla de comida, comer, agua, hidratacion, dieta, calorías o macros",
   projects:  "El usuario habla de proyectos, tareas, trabajo, Notion, pendientes o deadlines",
   ideas:     "El usuario quiere capturar, anotar o explorar una idea, pensamiento u ocurrencia",

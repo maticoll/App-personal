@@ -8,6 +8,7 @@ import {
   getTodayWorkouts,
   getTodayGymRoutine,
   checkSmartHabitDeviation,
+  getTodaySteps,
 } from "@/lib/fitness";
 
 export async function GET() {
@@ -19,13 +20,14 @@ export async function GET() {
 
     const userId = session.user.id;
 
-    const [workouts, routine, smartHabit] = await Promise.all([
+    const [workouts, routine, smartHabit, steps] = await Promise.all([
       getTodayWorkouts(userId),
       getTodayGymRoutine(userId),
       checkSmartHabitDeviation(userId),
+      getTodaySteps(userId).catch(() => null),
     ]);
 
-    return NextResponse.json({ workouts, routine, smartHabit });
+    return NextResponse.json({ workouts, routine, smartHabit, steps });
   } catch (err) {
     console.error("[/api/fitness/today]", err);
     return NextResponse.json(
