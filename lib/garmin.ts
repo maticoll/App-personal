@@ -166,9 +166,10 @@ async function authenticateGarminSSO(
   const embedHtml = await embedRes.text();
   const csrf = extractCsrfToken(embedHtml);
   if (!csrf) {
+    const preview = embedHtml.slice(0, 500).replace(/\s+/g, " ");
     throw new Error(
       "No se pudo extraer el CSRF token del formulario Garmin. " +
-        `La estructura del SSO puede haber cambiado (HTML recibido: ${embedHtml.length} chars).`
+        `La estructura del SSO puede haber cambiado (HTML: ${embedHtml.length} chars, preview: ${preview})`
     );
   }
   const step1Cookies = extractCookies(embedRes);
@@ -698,7 +699,7 @@ export async function fetchGarminDailySteps(
  *   - token embebido en JS/JSON: "csrf":"X" o csrfToken = "X"
  */
 function extractCsrfToken(html: string): string | null {
-  // 1. name="_csrf" ... value="..."  (permite atributos en el medio)
+  // 1. name="_csrf" ... value="..."  (permite atributos en el medio, incluyendo type="hidden")
   let m = html.match(/name=["']_csrf["'][^>]*?\bvalue=["']([^"']+)["']/i);
   if (m) return m[1];
 
@@ -706,8 +707,30 @@ function extractCsrfToken(html: string): string | null {
   m = html.match(/\bvalue=["']([^"']+)["'][^>]*?name=["']_csrf["']/i);
   if (m) return m[1];
 
-  // 3. Token en JS/JSON embebido
+  // 3. Token en JS/JSON embebido: "_csrf":"X" o "csrfToken":"X" o csrf: "X"
   m = html.match(/["']?csrf(?:[_-]?token)?["']?\s*[:=]\s*["']([^"']+)["']/i);
+  if (m) return m[1];
+
+  // 4. Meta tag: <meta name="csrf-token" content="X"> o <meta name="_csrf" content="X">
+  m = html.match(/<meta[^>]+name=["']_?csrf(?:-token)?["'][^>]+content=["']([^"']+)["']/i);
+  if (m) return m[1];
+  m = html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']_?csrf(?:-token)?["']/i);
+  if (m) return m[1];
+
+  // 5. window.csrfToken = "X" o window._csrf = "X"
+  m = html.match(/window\._?csrf(?:Token)?\s*=\s*["']([^"']+)["']/i);
+  if (m) return m[1];
+
+  // 6. data-csrf="X" o data-csrf-token="X"
+  m = html.match(/data-csrf(?:-token)?=["']([^"']+)["']/i);
+  if (m) return m[1];
+
+  // 7. Cualquier input hidden con "csrf" en el name (más genérico, último recurso)
+  m = html.match(/<input[^>]+type=["']hidden["'][^>]+name=["'][^"']*csrf[^"']*["'][^>]+value=["']([^"']+)["']/i);
+  if (m) return m[1];
+  m = html.match(/<input[^>]+name=["'][^"']*csrf[^"']*["'][^>]+type=["']hidden["'][^>]+value=["']([^"']+)["']/i);
+  if (m) return m[1];
+  m = html.match(/<input[^>]+name=["'][^"']*csrf[^"']*["'][^>]+value=["']([^"']+)["']/i);
   if (m) return m[1];
 
   return null;

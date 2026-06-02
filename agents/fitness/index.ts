@@ -228,7 +228,9 @@ export const fitnessAgent = {
       if (matchedRoutine && hasExerciseData(text)) {
         // El usuario mandó la rutina hecha → registrar + comparar con la última
         const cmp = await logRoutineSession(userId, matchedRoutine.name, message);
-        return { success: true, message: formatRoutineComparison(cmp) };
+        const scoreResult = await calcFitnessScoreForDate(userId, new Date()).catch(() => null);
+        const scoreMsg = scoreResult?.score != null ? `\n\n💪 Fitness hoy: ${scoreResult.score}/100` : "";
+        return { success: true, message: formatRoutineComparison(cmp) + scoreMsg };
       }
 
       if (matchedRoutine && (wantsBringRoutine(text) || !hasExerciseData(text))) {
@@ -275,7 +277,9 @@ export const fitnessAgent = {
       // Exercise NLP (series, pesos)
       if (/series|reps|repeticiones|kg|press|sentadilla|curl|peso/i.test(text)) {
         const result = await parseAndLogExerciseNLP(userId, message);
-        return { success: true, message: result.message };
+        const scoreResult = await calcFitnessScoreForDate(userId, new Date()).catch(() => null);
+        const scoreMsg = scoreResult?.score != null ? ` Fitness hoy: ${scoreResult.score}/100` : "";
+        return { success: true, message: result.message + scoreMsg };
       }
 
       // Query
