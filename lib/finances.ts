@@ -124,13 +124,27 @@ async function financesApiFetch<T>(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
+      Accept: "application/json",
       ...(options?.headers ?? {}),
     },
   });
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Finances API error ${res.status}: ${text}`);
+    throw new Error(`Finances API error ${res.status} en ${path}: ${text.slice(0, 200)}`);
+  }
+
+  // La API a veces devuelve HTML (200) si el endpoint no existe o la API key
+  // es rechazada (página de login / fallback de la SPA). Detectarlo y dar un
+  // error accionable en vez de un críptico "Unexpected token '<'".
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Finances API devolvió ${contentType || "sin content-type"} (no JSON) en ${path} ` +
+        `[status ${res.status}]. Probablemente el endpoint no existe o la API key es inválida. ` +
+        `Respuesta: ${text.slice(0, 120).replace(/\s+/g, " ")}`
+    );
   }
 
   return res.json() as Promise<T>;
