@@ -11,6 +11,13 @@ type Props = {
   onToggleDone: () => void;
 };
 
+/** Parsea un input numérico a número finito o null (evita NaN en el estado). */
+function parseNum(value: string, integer: boolean): number | null {
+  if (value === "") return null;
+  const n = integer ? parseInt(value, 10) : parseFloat(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export default function SetRow({ index, prev, weightKg, reps, done, onChange, onToggleDone }: Props) {
   const prevText =
     prev && (prev.weightKg != null || prev.reps != null)
@@ -31,9 +38,7 @@ export default function SetRow({ index, prev, weightKg, reps, done, onChange, on
         inputMode="decimal"
         value={weightKg ?? ""}
         placeholder="kg"
-        onChange={(e) =>
-          onChange({ weightKg: e.target.value === "" ? null : parseFloat(e.target.value) })
-        }
+        onChange={(e) => onChange({ weightKg: parseNum(e.target.value, false) })}
         className="w-full bg-surface-container-high text-on-surface text-center rounded-md px-1 py-1 outline-none focus:ring-1 focus:ring-accent-cyan"
       />
       <input
@@ -41,9 +46,7 @@ export default function SetRow({ index, prev, weightKg, reps, done, onChange, on
         inputMode="numeric"
         value={reps ?? ""}
         placeholder="reps"
-        onChange={(e) =>
-          onChange({ reps: e.target.value === "" ? null : parseInt(e.target.value, 10) })
-        }
+        onChange={(e) => onChange({ reps: parseNum(e.target.value, true) })}
         className="w-full bg-surface-container-high text-on-surface text-center rounded-md px-1 py-1 outline-none focus:ring-1 focus:ring-accent-cyan"
       />
       <button

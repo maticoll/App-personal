@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Plus, Trash2, Timer } from "lucide-react";
+import { Plus, Trash2, Timer, X } from "lucide-react";
 import SetRow from "./SetRow";
 import type { SessionExercise } from "./workout-session-types";
 
@@ -9,6 +9,7 @@ type Props = {
   onSetChange: (setId: string, patch: { weightKg?: number | null; reps?: number | null }) => void;
   onToggleDone: (setId: string) => void;
   onAddSet: () => void;
+  onRemoveSet: (setId: string) => void;
   onRemoveExercise: () => void;
   onRestChange: (seconds: number) => void;
 };
@@ -36,6 +37,7 @@ export default function ExerciseLogCard({
   onSetChange,
   onToggleDone,
   onAddSet,
+  onRemoveSet,
   onRemoveExercise,
   onRestChange,
 }: Props) {
@@ -114,9 +116,16 @@ export default function ExerciseLogCard({
                   onToggleDone={() => onToggleDone(set.id)}
                 />
               </div>
-              <span className="w-5 text-center text-sm" aria-label={pr ? "Posible récord" : undefined}>
+              <span className="w-4 text-center text-sm" aria-label={pr ? "Posible récord" : undefined}>
                 {pr ? "🔥" : ""}
               </span>
+              <button
+                onClick={() => onRemoveSet(set.id)}
+                aria-label="Quitar serie"
+                className="p-1 rounded-md text-outline hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           );
         })}

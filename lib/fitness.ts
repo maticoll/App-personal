@@ -987,13 +987,32 @@ export async function saveWorkoutSession(
   // 3. Crear/reutilizar sesión GYM de hoy etiquetada con la rutina
   const workout = await startGymWorkout(userId, payload.routineName ?? undefined);
 
-  // 4. Insertar ejercicios + series
+  // 4. Insertar ejercicios + series. Si el workout de hoy ya tenía un ejercicio
+  //    con el mismo nombre (ej: una sesión previa o el Quick Log NLP), se
+  //    agregan las series a ese ejercicio en vez de duplicar la tarjeta.
+  const existingByName = new Map(
+    workout.exercises.map((e) => [normalizeName(e.name), e])
+  );
   for (const ex of exercises) {
-    await addExerciseSets(
-      workout.id,
-      ex.name,
-      ex.sets.map((s) => ({ reps: s.reps ?? null, weightKg: s.weightKg ?? null }))
-    );
+    const sets = ex.sets.map((s) => ({ reps: s.reps ?? null, weightKg: s.weightKg ?? null }));
+    const existing = existingByName.get(normalizeName(ex.name));
+    if (existing) {
+      const startNumber = existing.sets.length;
+      await Promise.all(
+        sets.map((s, i) =>
+          db.workoutSet.create({
+            data: {
+              exerciseId: existing.id,
+              setNumber: startNumber + i + 1,
+              reps: s.reps ?? undefined,
+              weightKg: s.weightKg ?? undefined,
+            },
+          })
+        )
+      );
+    } else {
+      await addExerciseSets(workout.id, ex.name, sets);
+    }
   }
 
   // 5. Duración

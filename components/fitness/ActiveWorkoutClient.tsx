@@ -314,6 +314,16 @@ export default function ActiveWorkoutClient() {
     [updateExercise]
   );
 
+  const handleRemoveSet = useCallback(
+    (exerciseId: string, setId: string) => {
+      updateExercise(exerciseId, (ex) => ({
+        ...ex,
+        sets: ex.sets.filter((s) => s.id !== setId),
+      }));
+    },
+    [updateExercise]
+  );
+
   const handleRemoveExercise = useCallback((exerciseId: string) => {
     setSession((prev) =>
       prev
@@ -563,6 +573,7 @@ export default function ActiveWorkoutClient() {
               }
               onToggleDone={(setId) => handleToggleDone(ex.id, setId)}
               onAddSet={() => handleAddSet(ex.id)}
+              onRemoveSet={(setId) => handleRemoveSet(ex.id, setId)}
               onRemoveExercise={() => handleRemoveExercise(ex.id)}
               onRestChange={(seconds) => handleRestChange(ex.id, seconds)}
             />
