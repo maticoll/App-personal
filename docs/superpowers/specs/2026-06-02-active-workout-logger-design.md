@@ -108,12 +108,13 @@ Auth requerida. Body:
   exercises: Array<{ name: string; sets: { weightKg: number|null; reps: number|null }[] }>;
 }
 ```
-El server:
+El server (ORDEN IMPORTA por los PRs):
 1. Ignora series totalmente vacías (sin peso y sin reps). Si no queda ninguna serie con datos → 400.
-2. Crea (o reutiliza si ya existe hoy) la sesión GYM con `startGymWorkout(userId, routineName ?? undefined)`.
-3. Inserta exercises + sets con `addExerciseSets`.
-4. Setea `durationMinutes = round(durationSeconds/60)`.
-5. Calcula PRs definitivos con `getExerciseBests` (estado ANTES de esta sesión).
+2. **Calcula los bests históricos PRIMERO** con `getExerciseBests(userId, names)` — ANTES de insertar nada — para que la sesión de hoy no se cuente a sí misma como baseline del PR. (Alternativa equivalente: pasar `beforeDate = startOfDay(now)`.)
+3. Crea (o reutiliza si ya existe hoy) la sesión GYM con `startGymWorkout(userId, routineName ?? undefined)`.
+4. Inserta exercises + sets con `addExerciseSets`.
+5. Setea `durationMinutes = round(durationSeconds/60)`.
+6. Compara la sesión de hoy contra los bests del paso 2 → PRs definitivos.
 Respuesta:
 ```ts
 {
@@ -140,6 +141,8 @@ Un PR en la sesión actual (solo series con ✓):
 - **reps**: existe una serie hoy con `reps > repsAtWeight[peso]` para ese peso.
 
 Live (en el cliente) se usan los `bests` traídos en prep para mostrar 🔥 tentativos; el server recalcula los definitivos al guardar (fuente de verdad).
+
+**Normalización de claves de peso:** `repsAtWeight` se indexa por el peso como string canónico vía `String(weightKg)` (ej. `16.5` → `"16.5"`, sin ceros de relleno). Prep y server DEBEN usar la misma función para evitar desajustes tipo `"16.5"` vs `"16.50"`.
 
 ## 9. Componentes / archivos
 
@@ -173,6 +176,7 @@ El Workout guardado alimenta el scoring existente (`calcFitnessScore`: base + gy
 - Finish sin ninguna serie con datos → error claro, no crea workout.
 - Salir sin terminar → localStorage permite retomar o descartar.
 - Ya existe un Workout GYM hoy → `startGymWorkout` lo reutiliza y le agrega los ejercicios (evita duplicado).
+- **Una sola sesión activa a la vez** en localStorage. Si entrás a `/fitness/session` (sobre todo con otra rutina) y hay una sesión sin terminar guardada, se pregunta "Retomar / Descartar" antes de pisarla; nunca se sobreescribe en silencio.
 
 ## 12. Verificación
 
