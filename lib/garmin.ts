@@ -57,9 +57,10 @@ const GARMIN_SSO_URL = "https://sso.garmin.com/sso";
 const GARMIN_CONNECT_URL = "https://connect.garmin.com";
 const SESSION_TTL_MS = 23 * 60 * 60 * 1000; // 23 horas
 
+// SSO_PARAMS para el GET inicial a /signin (renderiza el form HTML con _csrf)
 const SSO_PARAMS = new URLSearchParams({
   id: "gauth-widget",
-  embedWidget: "true",
+  embedWidget: "false",         // false → Garmin devuelve HTML estático con el form
   clientId: "GarminConnect",
   locale: "es_AR",
   gauthHost: GARMIN_SSO_URL,
@@ -67,6 +68,21 @@ const SSO_PARAMS = new URLSearchParams({
   source: `${GARMIN_CONNECT_URL}/signin/`,
   redirectAfterAccountLoginUrl: `${GARMIN_CONNECT_URL}/modern/`,
   redirectAfterAccountCreationUrl: `${GARMIN_CONNECT_URL}/modern/`,
+  rememberMeShown: "true",
+  rememberMeChecked: "false",
+  createAccountShown: "true",
+  openCreateAccount: "false",
+  displayNameShown: "false",
+  initialFocus: "true",
+  generateExtraServiceTicket: "true",
+  generateTwoExtraServiceTickets: "false",
+  generateNoServiceTicket: "false",
+  globalOptInShown: "true",
+  globalOptInChecked: "false",
+  mobile: "false",
+  connectLegalTerms: "true",
+  showTermsOfUse: "false",
+  showPrivacyPolicy: "false",
 });
 
 // Cache en memoria (se invalida si el proceso reinicia)
@@ -152,8 +168,9 @@ async function authenticateGarminSSO(
   const UA =
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
 
-  // Paso 1: GET embed para obtener CSRF
-  const embedRes = await fetch(`${GARMIN_SSO_URL}/embed?${SSO_PARAMS}`, {
+  // Paso 1: GET /signin (con embedWidget=false) → devuelve HTML estático con el form y _csrf
+  const signinUrl = `${GARMIN_SSO_URL}/signin?${SSO_PARAMS}`;
+  const signinGetRes = await fetch(signinUrl, {
     headers: {
       "User-Agent": UA,
       Accept: "text/html,application/xhtml+xml",
@@ -161,29 +178,30 @@ async function authenticateGarminSSO(
     },
   });
 
-  if (!embedRes.ok) {
-    throw new Error(`Garmin SSO embed falló: ${embedRes.status}`);
+  if (!signinGetRes.ok) {
+    throw new Error(`Garmin SSO signin GET falló: ${signinGetRes.status}`);
   }
 
-  const embedHtml = await embedRes.text();
-  const csrf = extractCsrfToken(embedHtml);
+  const signinHtml = await signinGetRes.text();
+  const csrf = extractCsrfToken(signinHtml);
   if (!csrf) {
-    // Log completo del HTML (es pequeño ~5k) para diagnóstico
-    console.error("[Garmin SSO] HTML completo recibido:\n" + embedHtml);
+    // Log completo del HTML para diagnóstico
+    console.error("[Garmin SSO] HTML completo recibido:\n" + signinHtml);
     throw new Error(
       "No se pudo extraer el CSRF token del formulario Garmin. " +
-        `La estructura del SSO puede haber cambiado (HTML: ${embedHtml.length} chars)`
+        `La estructura del SSO puede haber cambiado (HTML: ${signinHtml.length} chars)`
     );
   }
-  const step1Cookies = extractCookies(embedRes);
+  const step1Cookies = extractCookies(signinGetRes);
 
-  // Paso 2: POST con credenciales
+  // Paso 2: POST con credenciales al mismo /signin
   const loginBody = new URLSearchParams({
     username: email,
     password,
-    embed: "true",
+    embed: "false",
     _csrf: csrf,
     id: "gauth-widget",
+    clientId: "GarminConnect",
     gauthHost: GARMIN_SSO_URL,
     service: `${GARMIN_CONNECT_URL}/modern/`,
     source: `${GARMIN_CONNECT_URL}/signin/`,
@@ -198,7 +216,7 @@ async function authenticateGarminSSO(
       "User-Agent": UA,
       Cookie: step1Cookies,
       Origin: GARMIN_SSO_URL,
-      Referer: `${GARMIN_SSO_URL}/embed?${SSO_PARAMS}`,
+      Referer: signinUrl,
     },
     body: loginBody.toString(),
     redirect: "manual",
