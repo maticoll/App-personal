@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, ChevronDown, ChevronUp, Check, X, Play } from "lucide-react";
 import type { RoutineWithLastPerformance } from "@/lib/fitness";
 
@@ -46,6 +47,7 @@ type Props = {
 };
 
 export default function RoutineManager({ onChanged }: Props) {
+  const router = useRouter();
   const [routines, setRoutines] = useState<RoutineWithLastPerformance[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -55,7 +57,6 @@ export default function RoutineManager({ onChanged }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [startingId, setStartingId] = useState<string | null>(null);
-  const [startedId, setStartedId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRoutines();
@@ -184,24 +185,10 @@ export default function RoutineManager({ onChanged }: Props) {
     }
   };
 
-  // Registrar esta rutina HOY (aunque no sea la del día)
-  const handleStartToday = async (routine: RoutineWithLastPerformance) => {
+  // Hacer esta rutina HOY (aunque no sea la del día) → abre el workout activo
+  const handleStartToday = (routine: RoutineWithLastPerformance) => {
     setStartingId(routine.id);
-    try {
-      const res = await fetch("/api/fitness/start-routine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: routine.name }),
-      });
-      if (!res.ok) throw new Error();
-      setStartedId(routine.id);
-      setTimeout(() => setStartedId(null), 3000);
-      onChanged?.();
-    } catch {
-      alert("Error al iniciar la rutina");
-    } finally {
-      setStartingId(null);
-    }
+    router.push(`/fitness/session?routine=${routine.id}`);
   };
 
   const handleDelete = async (id: string) => {
@@ -415,19 +402,11 @@ export default function RoutineManager({ onChanged }: Props) {
                     <button
                       onClick={() => handleStartToday(routine)}
                       disabled={startingId === routine.id}
-                      title="Registrar esta rutina hoy"
-                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
-                        startedId === routine.id
-                          ? "bg-green-500/10 text-green-500"
-                          : "bg-[#06B6D4]/15 text-module-fitness hover:bg-[#06B6D4]/25"
-                      }`}
+                      title="Hacer esta rutina hoy"
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 bg-[#06B6D4]/15 text-module-fitness hover:bg-[#06B6D4]/25"
                     >
-                      {startedId === routine.id ? (
-                        <Check className="w-3.5 h-3.5" />
-                      ) : (
-                        <Play className="w-3.5 h-3.5" />
-                      )}
-                      {startedId === routine.id ? "Listo" : "Hacer hoy"}
+                      <Play className="w-3.5 h-3.5" />
+                      Hacer hoy
                     </button>
                     <button
                       onClick={() => toggleExpand(routine.id)}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import type {
   WorkoutWithExercises,
   RoutineWithLastPerformance,
@@ -41,6 +42,7 @@ export default function FitnessModuleClient({
   initialSteps,
   garminConnected,
 }: Props) {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("hoy");
   const [todayWorkouts, setTodayWorkouts] = useState<WorkoutWithExercises[]>(initialTodayWorkouts);
   const [history, setHistory] = useState<WorkoutWithExercises[]>(initialHistory);
@@ -144,6 +146,17 @@ export default function FitnessModuleClient({
               isRefreshing={isRefreshing}
             />
           )}
+
+          {/* Empezar workout vacío → pantalla de sesión activa */}
+          <button
+            onClick={() => router.push("/fitness/session")}
+            className="w-full py-3 rounded-full bg-accent-cyan text-[#0D0F14] font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all"
+          >
+            <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+              add
+            </span>
+            Empezar workout vacío
+          </button>
 
           {/* NLP Quick Log */}
           <FitnessQuickActions onLogged={handleLogged} />

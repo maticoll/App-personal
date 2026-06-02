@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { RoutineWithLastPerformance } from "@/lib/fitness";
 
 const DAY_LABELS: Record<string, string> = {
@@ -26,24 +27,15 @@ function lastLabel(last: { weightKg: number | null; reps: number | null } | null
 }
 
 export default function GymRoutineCard({ routine, onStarted }: Props) {
+  const router = useRouter();
   const [starting, setStarting] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  void onStarted; // la navegación reemplaza el refresh in-place
 
-  const handleStart = async () => {
+  // Abre la pantalla de workout activo con esta rutina precargada.
+  const handleStart = () => {
     setStarting(true);
-    try {
-      const res = await fetch("/api/fitness/start-routine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: routine.name }),
-      });
-      if (!res.ok) throw new Error();
-      onStarted();
-    } catch {
-      alert("Error al iniciar la sesión de gym");
-    } finally {
-      setStarting(false);
-    }
+    router.push(`/fitness/session?routine=${routine.id}`);
   };
 
   return (
