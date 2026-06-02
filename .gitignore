@@ -44,3 +44,4 @@ prisma/*.db-journal
 
 # Codex (contiene API keys)
 .codex/
+.superpowers/
