@@ -165,16 +165,30 @@ async function authenticateGarminSSO(
   email: string,
   password: string
 ): Promise<string> {
+  // Desktop Chrome UA — más creíble para Cloudflare que mobile Safari
   const UA =
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+  // Headers comunes browser-like para pasar Cloudflare
+  const BROWSER_HEADERS = {
+    "User-Agent": UA,
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "es-AR,es;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Cache-Control": "no-cache",
+    Pragma: "no-cache",
+    "Upgrade-Insecure-Requests": "1",
+  };
 
   // Paso 1: GET /signin (con embedWidget=false) → devuelve HTML estático con el form y _csrf
   const signinUrl = `${GARMIN_SSO_URL}/signin?${SSO_PARAMS}`;
   const signinGetRes = await fetch(signinUrl, {
     headers: {
-      "User-Agent": UA,
-      Accept: "text/html,application/xhtml+xml",
-      "Accept-Language": "es-AR,es;q=0.9",
+      ...BROWSER_HEADERS,
+      "sec-fetch-dest": "document",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-site": "none",
+      "sec-fetch-user": "?1",
     },
   });
 
@@ -212,11 +226,15 @@ async function authenticateGarminSSO(
   const loginRes = await fetch(`${GARMIN_SSO_URL}/signin`, {
     method: "POST",
     headers: {
+      ...BROWSER_HEADERS,
       "Content-Type": "application/x-www-form-urlencoded",
-      "User-Agent": UA,
       Cookie: step1Cookies,
       Origin: GARMIN_SSO_URL,
       Referer: signinUrl,
+      "sec-fetch-dest": "document",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-site": "same-origin",
+      "sec-fetch-user": "?1",
     },
     body: loginBody.toString(),
     redirect: "manual",
@@ -763,11 +781,17 @@ function extractCsrfToken(html: string): string | null {
 }
 
 function extractCookies(res: Response): string {
-  // En Node.js / Edge Runtime, headers.getSetCookie() puede no estar disponible
-  const setCookie = res.headers.get("set-cookie") ?? "";
-  // Si viene como string único separado por coma, parsear manualmente
-  return setCookie
-    .split(/,(?=[^ ][^;]*=)/)
+  // Node 18+ expone getSetCookie() que devuelve cada Set-Cookie header por separado.
+  // Fallback a get("set-cookie") que puede devolver solo el primero.
+  let rawValues: string[] = [];
+  if (typeof (res.headers as unknown as { getSetCookie?: unknown }).getSetCookie === "function") {
+    rawValues = (res.headers as unknown as { getSetCookie(): string[] }).getSetCookie();
+  } else {
+    const combined = res.headers.get("set-cookie") ?? "";
+    // Cuando vienen múltiples cookies en un solo string, separar por coma
+    rawValues = combined ? combined.split(/,(?=[^ ][^;]*=)/) : [];
+  }
+  return rawValues
     .map((c) => c.split(";")[0].trim())
     .filter(Boolean)
     .join("; ");
