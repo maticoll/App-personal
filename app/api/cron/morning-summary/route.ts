@@ -15,7 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyCronSecret } from "@/lib/cron";
-import { sendTextMessage, sendTemplateMessage } from "@/lib/whatsapp";
+import { sendTextMessage } from "@/lib/whatsapp";
 import { db } from "@/lib/db";
 import { scoringAgent } from "@/agents/scoring";
 import { sleepAgent } from "@/agents/sleep";
@@ -213,12 +213,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     yesterday.setDate(yesterday.getDate() - 1);
     yesterday.setHours(0, 0, 0, 0);
 
-    const dateLabel = yesterday.toLocaleDateString("es-UY", {
-      day: "numeric",
-      month: "long",
-      timeZone: "America/Montevideo",
-    });
-
     // --- 3. Enviar a cada usuario ---
     const results: Array<{ userId: string; to: string; ok: boolean; error?: string }> = [];
 
@@ -271,10 +265,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           motivation,
         });
 
-        // Template para abrir ventana 24hs + mensaje completo
-        await sendTemplateMessage(toNumber, "servicios", [
-          { type: "text", text: dateLabel },
-        ]);
         await sendTextMessage(toNumber, message);
 
         logger.info("cron/morning-summary", {
