@@ -15,7 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { verifyCronSecret } from "@/lib/cron";
-import { sendTextMessage } from "@/lib/whatsapp";
+import { sendTextMessage, sendTemplateMessage } from "@/lib/whatsapp";
 import { db } from "@/lib/db";
 import { scoringAgent } from "@/agents/scoring";
 import { sleepAgent } from "@/agents/sleep";
@@ -265,7 +265,31 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           motivation,
         });
 
-        await sendTextMessage(toNumber, message);
+        // Intenta envío directo. Si Meta rechaza por ventana 24hs vencida
+        // (error 131026), abre la ventana con el template "servicios" y reenvía.
+        try {
+          await sendTextMessage(toNumber, message);
+        } catch (sendErr) {
+          const errStr = String(sendErr);
+          if (errStr.includes("131026") || errStr.includes("outside the allowed window")) {
+            logger.warn("cron/morning-summary", {
+              event: "window_expired_fallback",
+              to: toNumber,
+              userId: s.userId,
+            });
+            const dateLabel = new Date().toLocaleDateString("es-UY", {
+              day: "numeric",
+              month: "long",
+              timeZone: "America/Montevideo",
+            });
+            await sendTemplateMessage(toNumber, "servicios", [
+              { type: "text", text: dateLabel },
+            ]);
+            await sendTextMessage(toNumber, message);
+          } else {
+            throw sendErr;
+          }
+        }
 
         logger.info("cron/morning-summary", {
           event: "sent",
