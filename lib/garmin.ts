@@ -60,6 +60,8 @@ const SESSION_TTL_MS = 23 * 60 * 60 * 1000; // 23 horas
 const SSO_PARAMS = new URLSearchParams({
   id: "gauth-widget",
   embedWidget: "true",
+  clientId: "GarminConnect",
+  locale: "es_AR",
   gauthHost: GARMIN_SSO_URL,
   service: `${GARMIN_CONNECT_URL}/modern/`,
   source: `${GARMIN_CONNECT_URL}/signin/`,
