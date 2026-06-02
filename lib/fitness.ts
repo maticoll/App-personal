@@ -845,6 +845,198 @@ function buildExercisePerformance(
   });
 }
 
+// ============================================================
+// Workout activo (pantalla de sesión en vivo, estilo Hevy)
+// ============================================================
+
+export type ExerciseBests = {
+  maxWeightKg: number | null;
+  maxSessionVolume: number | null;
+  repsAtWeight: Record<string, number>; // weightKey -> mejores reps históricas
+};
+
+export type SessionPrepExercise = {
+  name: string;
+  plannedSets: number;
+  repsRange: string | null;
+  lastSets: { weightKg: number | null; reps: number | null }[];
+  bests: ExerciseBests;
+};
+
+export type SessionPrep = {
+  routineId: string | null;
+  routineName: string | null;
+  exercises: SessionPrepExercise[];
+};
+
+export type WorkoutSessionPayload = {
+  routineName: string | null;
+  durationSeconds: number;
+  exercises: { name: string; sets: { weightKg: number | null; reps: number | null }[] }[];
+};
+
+export type WorkoutSessionPR = {
+  exercise: string;
+  kind: "weight" | "volume" | "reps";
+  detail: string;
+};
+
+export type WorkoutSessionSummary = {
+  workoutId: string;
+  durationSeconds: number;
+  totalSets: number;
+  totalVolume: number;
+  prs: WorkoutSessionPR[];
+};
+
+/** Clave canónica de peso para repsAtWeight (16.5 -> "16.5"). Misma fn en prep y server. */
+export function weightKey(weightKg: number | null): string {
+  return weightKg == null ? "0" : String(weightKg);
+}
+
+export async function getExerciseBests(
+  userId: string,
+  names: string[],
+  beforeDate?: Date
+): Promise<Record<string, ExerciseBests>> {
+  const wanted = new Set(names.map(normalizeName));
+  const workouts = await db.workout.findMany({
+    where: {
+      userId,
+      type: "GYM",
+      ...(beforeDate ? { date: { lt: beforeDate } } : {}),
+    },
+    include: { exercises: { include: { sets: true } } },
+  });
+
+  const out: Record<string, ExerciseBests> = {};
+  for (const n of names) {
+    out[normalizeName(n)] = { maxWeightKg: null, maxSessionVolume: null, repsAtWeight: {} };
+  }
+
+  for (const w of workouts) {
+    for (const ex of w.exercises) {
+      const key = normalizeName(ex.name);
+      if (!wanted.has(key)) continue;
+      const b = out[key];
+      let sessionVol = 0;
+      for (const s of ex.sets) {
+        const wk = s.weightKg ?? null;
+        const reps = s.reps ?? null;
+        if (wk != null && (b.maxWeightKg == null || wk > b.maxWeightKg)) b.maxWeightKg = wk;
+        if (wk != null && reps != null) {
+          sessionVol += wk * reps;
+          const k = weightKey(wk);
+          if (b.repsAtWeight[k] == null || reps > b.repsAtWeight[k]) b.repsAtWeight[k] = reps;
+        }
+      }
+      if (sessionVol > 0 && (b.maxSessionVolume == null || sessionVol > b.maxSessionVolume)) {
+        b.maxSessionVolume = sessionVol;
+      }
+    }
+  }
+  return out;
+}
+
+export async function getSessionPrep(
+  userId: string,
+  routineId: string | null
+): Promise<SessionPrep> {
+  if (!routineId) return { routineId: null, routineName: null, exercises: [] };
+
+  const routines = await getRoutines(userId);
+  const routine = routines.find((r) => r.id === routineId) ?? null;
+  if (!routine) return { routineId: null, routineName: null, exercises: [] };
+
+  const last = await findLastRoutineSession(userId, routine.name);
+  const perf = buildExercisePerformance(routine, last); // {name, plannedSets, repsRange, lastSets, top}
+  const bests = await getExerciseBests(userId, routine.exercises.map((e) => e.name));
+
+  return {
+    routineId: routine.id,
+    routineName: routine.name,
+    exercises: perf.map((p) => ({
+      name: p.name,
+      plannedSets: p.plannedSets,
+      repsRange: p.repsRange,
+      lastSets: p.lastSets,
+      bests: bests[normalizeName(p.name)] ?? { maxWeightKg: null, maxSessionVolume: null, repsAtWeight: {} },
+    })),
+  };
+}
+
+export async function saveWorkoutSession(
+  userId: string,
+  payload: WorkoutSessionPayload
+): Promise<WorkoutSessionSummary> {
+  // 1. Filtrar series vacías
+  const exercises = payload.exercises
+    .map((e) => ({
+      name: e.name.trim(),
+      sets: e.sets.filter((s) => s.weightKg != null || s.reps != null),
+    }))
+    .filter((e) => e.name && e.sets.length > 0);
+
+  if (exercises.length === 0) {
+    throw new Error("No hay series con datos para guardar.");
+  }
+
+  // 2. Bests históricos ANTES de insertar (no contar la sesión de hoy)
+  const bests = await getExerciseBests(userId, exercises.map((e) => e.name), startOfDay(new Date()));
+
+  // 3. Crear/reutilizar sesión GYM de hoy etiquetada con la rutina
+  const workout = await startGymWorkout(userId, payload.routineName ?? undefined);
+
+  // 4. Insertar ejercicios + series
+  for (const ex of exercises) {
+    await addExerciseSets(
+      workout.id,
+      ex.name,
+      ex.sets.map((s) => ({ reps: s.reps ?? null, weightKg: s.weightKg ?? null }))
+    );
+  }
+
+  // 5. Duración
+  const durationMinutes = Math.max(1, Math.round(payload.durationSeconds / 60));
+  await db.workout.update({ where: { id: workout.id }, data: { durationMinutes: Math.min(durationMinutes, 300) } });
+
+  // 6. PRs y totales
+  const prs: WorkoutSessionPR[] = [];
+  let totalSets = 0;
+  let totalVolume = 0;
+  for (const ex of exercises) {
+    const b = bests[normalizeName(ex.name)] ?? { maxWeightKg: null, maxSessionVolume: null, repsAtWeight: {} };
+    const top = exerciseTopSet(ex.sets);
+    const vol = exerciseVolume(ex.sets);
+    totalSets += ex.sets.length;
+    totalVolume += vol;
+
+    if (top?.weightKg != null && (b.maxWeightKg == null || top.weightKg > b.maxWeightKg)) {
+      prs.push({ exercise: ex.name, kind: "weight", detail: `${top.weightKg}kg` });
+    }
+    if (vol > 0 && (b.maxSessionVolume == null || vol > b.maxSessionVolume)) {
+      prs.push({ exercise: ex.name, kind: "volume", detail: `${Math.round(vol)} vol` });
+    }
+    for (const s of ex.sets) {
+      if (s.weightKg != null && s.reps != null) {
+        const prev = b.repsAtWeight[weightKey(s.weightKg)];
+        if (prev == null || s.reps > prev) {
+          prs.push({ exercise: ex.name, kind: "reps", detail: `${s.reps} reps @ ${s.weightKg}kg` });
+          break; // un PR de reps por ejercicio alcanza
+        }
+      }
+    }
+  }
+
+  return {
+    workoutId: workout.id,
+    durationSeconds: payload.durationSeconds,
+    totalSets,
+    totalVolume: Math.round(totalVolume),
+    prs,
+  };
+}
+
 /**
  * Trae una rutina con los últimos pesos/reps registrados en la última sesión
  * de esa misma rutina. Para el comando "tráeme push A".
