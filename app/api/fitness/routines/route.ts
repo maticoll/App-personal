@@ -3,7 +3,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getRoutines, createRoutine } from "@/lib/fitness";
+import { getRoutinesWithLastPerformance, createRoutine } from "@/lib/fitness";
 
 export async function GET() {
   try {
@@ -12,7 +12,8 @@ export async function GET() {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
-    const routines = await getRoutines(session.user.id);
+    // Incluye el último peso/reps por ejercicio (de la última sesión de la rutina)
+    const routines = await getRoutinesWithLastPerformance(session.user.id);
     return NextResponse.json({ routines });
   } catch (err) {
     console.error("[GET /api/fitness/routines]", err);

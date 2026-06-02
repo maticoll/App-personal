@@ -129,12 +129,19 @@ async function classifyModule(text: string): Promise<Module> {
 // callSpecialistAgent — ejecuta el agente correspondiente
 // Retorna datos crudos (sin styling final) para que Claude los procese
 // -------------------------------------------------------
+type AgentResult = {
+  text: string;
+  /** Si es true, la respuesta se envía tal cual, sin pasar por Sonnet
+   *  (para outputs con formato exacto, ej: "tráeme push A"). */
+  verbatim: boolean;
+};
+
 async function callSpecialistAgent(
   module: Module,
   userId: string,
   text: string,
   conversationContext?: string
-): Promise<string> {
+): Promise<AgentResult> {
   const input = { userId, message: text, timestamp: new Date(), context: conversationContext };
 
   const GENERAL_HELP =
@@ -146,43 +153,44 @@ async function callSpecialistAgent(
     switch (module) {
       case "sleep": {
         const result = await sleepAgent.process(input);
-        return result.message;
+        return { text: result.message, verbatim: false };
       }
       case "fitness": {
         const result = await fitnessAgent.process(input);
-        return result.message;
+        const verbatim = !!(result.data as { verbatim?: boolean } | undefined)?.verbatim;
+        return { text: result.message, verbatim };
       }
       case "nutrition": {
-        return await processNutritionMessage(userId, text);
+        return { text: await processNutritionMessage(userId, text), verbatim: false };
       }
       case "projects": {
-        return await processProjectsMessage(userId, text);
+        return { text: await processProjectsMessage(userId, text), verbatim: false };
       }
       case "ideas": {
-        return await processIdeasMessage(userId, text);
+        return { text: await processIdeasMessage(userId, text), verbatim: false };
       }
       case "scoring": {
         const result = await scoringAgent.process(input);
-        return result.message;
+        return { text: result.message, verbatim: false };
       }
       case "calendar": {
         const result = await calendarAgent.process(input);
-        return result.message;
+        return { text: result.message, verbatim: false };
       }
       case "finances": {
         const result = await financesAgent.process(input);
-        return result.message;
+        return { text: result.message, verbatim: false };
       }
       case "synthesis": {
-        return await synthesisAgent.getSynthesisText(userId, 7);
+        return { text: await synthesisAgent.getSynthesisText(userId, 7), verbatim: false };
       }
       case "general":
       default:
-        return GENERAL_HELP;
+        return { text: GENERAL_HELP, verbatim: false };
     }
   } catch (err) {
     console.error(`[orchestrator] Error en módulo ${module}:`, err);
-    return "Error obteniendo datos del módulo.";
+    return { text: "Error obteniendo datos del módulo.", verbatim: false };
   }
 }
 
@@ -305,22 +313,26 @@ export async function orchestrate(userId: string, text: string): Promise<string>
   const conversationContext = formatContextForPrompt(ctx);
 
   // 4. Ejecutar agente especialista (pasa contexto para módulos que lo necesitan)
-  const agentData = await callSpecialistAgent(module, userId, text, conversationContext);
+  const agent = await callSpecialistAgent(module, userId, text, conversationContext);
 
-  // 5. Generar respuesta natural con Claude Sonnet (si hay goals cargados)
+  // 5. Generar respuesta natural con Claude Sonnet (si hay goals cargados).
+  //    Si el agente marcó la respuesta como verbatim (ej: "tráeme push A" con
+  //    formato exacto de pesos), se envía tal cual sin reescribir.
   let finalResponse: string;
 
-  if (goals) {
+  if (agent.verbatim) {
+    finalResponse = agent.text;
+  } else if (goals) {
     const systemPrompt = buildOrchestratorPrompt(goals, ctx.summary ?? undefined, userName);
 
     finalResponse = await generateFinalResponse(
       systemPrompt,
       conversationContext,
       text,
-      agentData
+      agent.text
     );
   } else {
-    finalResponse = agentData;
+    finalResponse = agent.text;
   }
 
   // 6. Guardar respuesta del asistente en memoria

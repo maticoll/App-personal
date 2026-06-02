@@ -10,7 +10,7 @@ import {
   getTodayWorkouts,
   getWorkoutHistory,
   getWeeklyStats,
-  getTodayGymRoutine,
+  getTodayGymRoutineWithLastPerformance,
   checkSmartHabitDeviation,
   getTodaySteps,
 } from "@/lib/fitness";
@@ -36,7 +36,7 @@ export default async function FitnessPage() {
     getTodayWorkouts(userId).catch(() => []),
     getWorkoutHistory(userId, 14).catch(() => []),
     getWeeklyStats(userId).catch(() => []),
-    getTodayGymRoutine(userId).catch(() => null),
+    getTodayGymRoutineWithLastPerformance(userId).catch(() => null),
     checkSmartHabitDeviation(userId).catch(() => ({ shouldNotify: false, message: null })),
     checkGarminStatus(userId).catch(() => ({ connected: false })),
     getTodaySteps(userId).catch(() => null),

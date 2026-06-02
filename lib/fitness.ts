@@ -806,16 +806,44 @@ export async function findLastRoutineSession(
   return w ? mapWorkout(w) : null;
 }
 
+export type ExerciseLastPerformance = {
+  name: string;
+  plannedSets: number;
+  repsRange: string | null;
+  /** Mejor serie de la última sesión (para mostrar en cards web). */
+  top: { weightKg: number | null; reps: number | null } | null;
+  /** Todas las series de la última sesión, en orden (para el detalle de WhatsApp). */
+  lastSets: { weightKg: number | null; reps: number | null }[];
+};
+
 export type RoutineLastPerformance = {
   routineName: string;
   lastDate: Date | null;
-  exercises: {
-    name: string;
-    plannedSets: number;
-    repsRange: string | null;
-    last: { weightKg: number | null; reps: number | null } | null;
-  }[];
+  exercises: ExerciseLastPerformance[];
 };
+
+/** Construye el detalle de performance por ejercicio de una rutina vs su última sesión. */
+function buildExercisePerformance(
+  routine: GymRoutineWithExercises,
+  last: WorkoutWithExercises | null
+): ExerciseLastPerformance[] {
+  const lastMap = new Map<string, ExerciseWithSets>();
+  if (last) for (const ex of last.exercises) lastMap.set(normalizeName(ex.name), ex);
+
+  return routine.exercises.map((re) => {
+    const match = lastMap.get(normalizeName(re.name));
+    const lastSets = match
+      ? match.sets.map((s) => ({ weightKg: s.weightKg ?? null, reps: s.reps ?? null }))
+      : [];
+    return {
+      name: re.name,
+      plannedSets: re.sets,
+      repsRange: re.repsRange ?? null,
+      top: match ? exerciseTopSet(match.sets) : null,
+      lastSets,
+    };
+  });
+}
 
 /**
  * Trae una rutina con los últimos pesos/reps registrados en la última sesión
@@ -830,20 +858,59 @@ export async function getRoutineWithLastPerformance(
   if (!routine) return null;
 
   const last = await findLastRoutineSession(userId, routine.name);
+  return {
+    routineName: routine.name,
+    lastDate: last?.date ?? null,
+    exercises: buildExercisePerformance(routine, last),
+  };
+}
+
+export type RoutineExerciseWithLast = GymRoutineWithExercises["exercises"][number] & {
+  last: { weightKg: number | null; reps: number | null } | null;
+};
+
+export type RoutineWithLastPerformance = Omit<GymRoutineWithExercises, "exercises"> & {
+  lastDate: Date | null;
+  exercises: RoutineExerciseWithLast[];
+};
+
+/** Enriquece una rutina con el último peso/reps (mejor serie) por ejercicio. */
+export async function enrichRoutineWithLastPerformance(
+  userId: string,
+  routine: GymRoutineWithExercises
+): Promise<RoutineWithLastPerformance> {
+  const last = await findLastRoutineSession(userId, routine.name);
   const lastMap = new Map<string, ExerciseWithSets>();
   if (last) for (const ex of last.exercises) lastMap.set(normalizeName(ex.name), ex);
 
-  const exercises = routine.exercises.map((re) => {
-    const match = lastMap.get(normalizeName(re.name));
-    return {
-      name: re.name,
-      plannedSets: re.sets,
-      repsRange: re.repsRange ?? null,
-      last: match ? exerciseTopSet(match.sets) : null,
-    };
-  });
+  return {
+    ...routine,
+    lastDate: last?.date ?? null,
+    exercises: routine.exercises.map((ex) => {
+      const match = lastMap.get(normalizeName(ex.name));
+      return { ...ex, last: match ? exerciseTopSet(match.sets) : null };
+    }),
+  };
+}
 
-  return { routineName: routine.name, lastDate: last?.date ?? null, exercises };
+/**
+ * Todas las rutinas del usuario, con el último peso/reps (mejor serie) por
+ * ejercicio según la última sesión de esa rutina. Para mostrar en la web.
+ */
+export async function getRoutinesWithLastPerformance(
+  userId: string
+): Promise<RoutineWithLastPerformance[]> {
+  const routines = await getRoutines(userId);
+  return Promise.all(routines.map((r) => enrichRoutineWithLastPerformance(userId, r)));
+}
+
+/** Rutina del día con el último peso/reps por ejercicio (o null si no hay rutina hoy). */
+export async function getTodayGymRoutineWithLastPerformance(
+  userId: string
+): Promise<RoutineWithLastPerformance | null> {
+  const routine = await getTodayGymRoutine(userId);
+  if (!routine) return null;
+  return enrichRoutineWithLastPerformance(userId, routine);
 }
 
 export type RoutineSessionComparison = {

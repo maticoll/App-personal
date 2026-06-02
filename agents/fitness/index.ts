@@ -131,26 +131,41 @@ function wantsBringRoutine(text: string): boolean {
   );
 }
 
+/** Formatea un número de peso sin decimales innecesarios (70, no 70.0; 16.5 ok). */
+function fmtWeight(n: number | null): string {
+  if (n == null) return "—";
+  return Number.isInteger(n) ? String(n) : String(n);
+}
+
+/**
+ * Formato estructurado de una rutina con los pesos de la última sesión:
+ *
+ *   PULL B
+ *   Jalón al pecho agarre neutro 3x8-12
+ *   70x12
+ *   70x10
+ *   70x9
+ *
+ *   Remo con barra 3x8-10
+ *   ...
+ */
 function formatRoutinePerf(perf: RoutineLastPerformance): string {
-  const lines: string[] = [];
-  lines.push(
-    `📋 ${perf.routineName}${perf.lastDate ? ` (última vez: ${fmtDateShort(perf.lastDate)})` : ""}`
-  );
-  perf.exercises.forEach((ex, i) => {
-    const reps = ex.repsRange ? `×${ex.repsRange}` : "";
-    const plan = `${ex.plannedSets}${reps}`;
-    let last = "sin registro previo";
-    if (ex.last) {
-      const w = ex.last.weightKg != null ? `${ex.last.weightKg}kg` : "";
-      const r = ex.last.reps != null ? ` ×${ex.last.reps}` : "";
-      last = `último: ${w}${r}`.trim();
-    }
-    lines.push(`${i + 1}. ${ex.name} — ${plan} · ${last}`);
+  const blocks = perf.exercises.map((ex) => {
+    const header = ex.repsRange
+      ? `${ex.name} ${ex.plannedSets}x${ex.repsRange}`
+      : `${ex.name} ${ex.plannedSets} series`;
+    const setLines = ex.lastSets.map((s) => {
+      const r = s.reps != null ? s.reps : "—";
+      return `${fmtWeight(s.weightKg)}x${r}`;
+    });
+    return [header, ...setLines].join("\n");
   });
+
+  let out = perf.routineName.toUpperCase() + "\n" + blocks.join("\n\n");
   if (!perf.lastDate) {
-    lines.push("Es la primera vez que vas a registrar esta rutina. ¡A darle!");
+    out += "\n\n(Sin registros previos — hoy marcás la primera referencia.)";
   }
-  return lines.join("\n");
+  return out;
 }
 
 function formatRoutineComparison(cmp: RoutineSessionComparison): string {
@@ -217,9 +232,11 @@ export const fitnessAgent = {
       }
 
       if (matchedRoutine && (wantsBringRoutine(text) || !hasExerciseData(text))) {
-        // "tráeme push A" → traer la rutina con los últimos pesos
+        // "tráeme push A" → traer la rutina con los últimos pesos (formato exacto)
         const perf = await getRoutineWithLastPerformance(userId, matchedRoutine.name);
-        if (perf) return { success: true, message: formatRoutinePerf(perf) };
+        if (perf) {
+          return { success: true, message: formatRoutinePerf(perf), data: { verbatim: true } };
+        }
       }
 
       // "tráeme la rutina de hoy" (sin nombrarla explícitamente)
@@ -227,7 +244,9 @@ export const fitnessAgent = {
         const today = await getTodayGymRoutine(userId);
         if (today) {
           const perf = await getRoutineWithLastPerformance(userId, today.name);
-          if (perf) return { success: true, message: formatRoutinePerf(perf) };
+          if (perf) {
+            return { success: true, message: formatRoutinePerf(perf), data: { verbatim: true } };
+          }
         }
       }
 

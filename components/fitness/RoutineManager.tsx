@@ -2,7 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { Plus, Trash2, Pencil, ChevronDown, ChevronUp, Check, X, Play } from "lucide-react";
-import type { GymRoutineWithExercises } from "@/lib/fitness";
+import type { RoutineWithLastPerformance } from "@/lib/fitness";
+
+/** Último peso×reps de un ejercicio para mostrar en la lista (ej: "70x10"). */
+function lastLabel(
+  last: { weightKg: number | null; reps: number | null } | null | undefined
+): string {
+  if (!last || last.weightKg == null) return "";
+  return last.reps != null ? `${last.weightKg}x${last.reps}` : `${last.weightKg}kg`;
+}
 
 const DAYS = [
   { value: "MONDAY", label: "Lun" },
@@ -38,7 +46,7 @@ type Props = {
 };
 
 export default function RoutineManager({ onChanged }: Props) {
-  const [routines, setRoutines] = useState<GymRoutineWithExercises[]>([]);
+  const [routines, setRoutines] = useState<RoutineWithLastPerformance[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -79,7 +87,7 @@ export default function RoutineManager({ onChanged }: Props) {
     setShowForm(true);
   };
 
-  const openEdit = (routine: GymRoutineWithExercises) => {
+  const openEdit = (routine: RoutineWithLastPerformance) => {
     setEditingId(routine.id);
     setForm({
       name: routine.name,
@@ -177,7 +185,7 @@ export default function RoutineManager({ onChanged }: Props) {
   };
 
   // Registrar esta rutina HOY (aunque no sea la del día)
-  const handleStartToday = async (routine: GymRoutineWithExercises) => {
+  const handleStartToday = async (routine: RoutineWithLastPerformance) => {
     setStartingId(routine.id);
     try {
       const res = await fetch("/api/fitness/start-routine", {
@@ -449,19 +457,25 @@ export default function RoutineManager({ onChanged }: Props) {
 
                 {isExpanded && routine.exercises.length > 0 && (
                   <div className="px-3 pb-3 pt-2 border-t border-outline-variant/20 space-y-1.5">
-                    {routine.exercises.map((ex, idx) => (
-                      <div key={ex.id} className="flex items-center gap-2 text-xs">
-                        <span className="w-4 h-4 rounded-full bg-surface-container-high flex items-center justify-center text-outline flex-shrink-0">
-                          {idx + 1}
-                        </span>
-                        <span className="text-on-surface-variant flex-1">
-                          {ex.name}
-                        </span>
-                        <span className="text-outline">
-                          {ex.sets} × {ex.repsRange ?? "—"}
-                        </span>
-                      </div>
-                    ))}
+                    {routine.exercises.map((ex, idx) => {
+                      const last = lastLabel(ex.last);
+                      return (
+                        <div key={ex.id} className="flex items-center gap-2 text-xs">
+                          <span className="w-4 h-4 rounded-full bg-surface-container-high flex items-center justify-center text-outline flex-shrink-0">
+                            {idx + 1}
+                          </span>
+                          <span className="text-on-surface-variant flex-1">
+                            {ex.name}
+                          </span>
+                          {last && (
+                            <span className="font-semibold text-module-fitness">{last}</span>
+                          )}
+                          <span className="text-outline">
+                            {ex.sets} × {ex.repsRange ?? "—"}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

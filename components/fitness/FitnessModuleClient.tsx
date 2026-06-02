@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import type {
   WorkoutWithExercises,
-  GymRoutineWithExercises,
+  RoutineWithLastPerformance,
   WeeklyStatEntry,
   SmartHabitStatus,
 } from "@/lib/fitness";
@@ -26,7 +26,7 @@ type Props = {
   initialTodayWorkouts: WorkoutWithExercises[];
   initialHistory: WorkoutWithExercises[];
   initialWeeklyStats: WeeklyStatEntry[];
-  initialTodayRoutine: GymRoutineWithExercises | null;
+  initialTodayRoutine: RoutineWithLastPerformance | null;
   initialSmartHabit: SmartHabitStatus;
   initialSteps: StepsInfo;
   garminConnected: boolean;
