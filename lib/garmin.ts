@@ -227,18 +227,23 @@ async function authenticateGarminSSO(
 
   // Extraer ticket
   let ticket = "";
+  let loginHtml = "";
   const locationHeader = loginRes.headers.get("location") ?? "";
   const ticketFromLocation = locationHeader.match(/ticket=([^&"]+)/);
   if (ticketFromLocation) {
     ticket = ticketFromLocation[1];
   } else {
-    // Intentar desde el HTML embebido
-    const loginHtml = await loginRes.text();
+    // Intentar desde el HTML embebido (body se consume aquí)
+    loginHtml = await loginRes.text();
     const ticketFromHtml = loginHtml.match(/ticket=([A-Z0-9-]+)/);
     if (ticketFromHtml) ticket = ticketFromHtml[1];
   }
 
   if (!ticket) {
+    console.error(
+      `[Garmin SSO] Login POST status: ${loginRes.status}, location: ${locationHeader || "(none)"}\n` +
+      `[Garmin SSO] Login response body (first 1500):\n${loginHtml.slice(0, 1500)}`
+    );
     throw new Error(
       "Autenticación Garmin fallida. Verificá que GARMIN_EMAIL y GARMIN_PASSWORD son correctos. " +
         "Si recientemente cambiaste la contraseña, actualizá las variables de entorno."
