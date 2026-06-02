@@ -168,10 +168,11 @@ async function authenticateGarminSSO(
   const embedHtml = await embedRes.text();
   const csrf = extractCsrfToken(embedHtml);
   if (!csrf) {
-    const preview = embedHtml.slice(0, 500).replace(/\s+/g, " ");
+    // Log completo del HTML (es pequeño ~5k) para diagnóstico
+    console.error("[Garmin SSO] HTML completo recibido:\n" + embedHtml);
     throw new Error(
       "No se pudo extraer el CSRF token del formulario Garmin. " +
-        `La estructura del SSO puede haber cambiado (HTML: ${embedHtml.length} chars, preview: ${preview})`
+        `La estructura del SSO puede haber cambiado (HTML: ${embedHtml.length} chars)`
     );
   }
   const step1Cookies = extractCookies(embedRes);
