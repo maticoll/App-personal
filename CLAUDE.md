@@ -34,10 +34,14 @@ npm run db:studio    # Prisma Studio (inspeccionar la DB)
 - **Modelos de IA hardcodeados** en las llamadas REST directas a Anthropic: clasificación/NLP con `claude-haiku-4-5-20251001`, respuesta final con `claude-sonnet-4-6`. No hay SDK — se hace `fetch` directo a `https://api.anthropic.com/v1/messages`.
 - **Convención de fechas de sueño:** `SleepLog.date` = día de despertar.
 - **Acceso restringido:** login Google OAuth filtrado por `ALLOWED_EMAILS` (lista separada por comas) en `auth.config.ts`.
+- **Persistencia de tokens de Google:** el callback `jwt` en `auth.ts` **es `async` y AWAITea** el `updateMany` de los tokens. Sin el await, en serverless la promesa se descarta y el `refresh_token` nuevo no se guarda (era la causa de que reconectar Calendar no sirviera). Si el refresh falla con `invalid_grant`, el token está revocado/expirado → usar el botón **"Reconectar Google Calendar"** en Ajustes (revoca + re-consentimiento). La app OAuth debe estar en **Producción** (no Testing) o el refresh token expira a los 7 días.
+- **Garmin = scraping SSO no oficial (frágil).** Login email/password en `lib/garmin.ts`; extrae el CSRF del HTML (`extractCsrfToken`, tolerante a orden de atributos/comillas). Si Garmin cambia el form, el login se rompe. Pasos diarios: `fetchGarminDailySteps` (endpoint `usersummary-service`), distinto de los pasos por-actividad.
+- **API de finanzas externa (finanzas-lemon):** se consume con `Authorization: Bearer fin_...`. Sus rutas `/api/*` están protegidas por el middleware de ESA app — si no deja pasar el Bearer, devuelve HTML (200) en vez de JSON. `financesApiFetch` detecta respuestas no-JSON y lanza error claro. El fix de auth vive en el repo de finanzas, no acá.
+- **Respuestas verbatim del orquestrador:** un agente puede devolver `data: { verbatim: true }` para que su `message` se envíe TAL CUAL, sin que Sonnet lo reescriba (se usa para "tráeme push A", que necesita formato exacto de pesos por serie).
 
 ### Arquitectura — el panorama grande
 
-**1. Capa de datos.** Todo pasa por el singleton `db` en `lib/db.ts` (Prisma Client). El schema en `prisma/schema.prisma` está organizado por módulo; cada modelo usa `@@map` a snake_case. Relación 1-1 con `User` para config/estado (`UserSettings`, `UserGoals`, `ConversationMemory`, `PendingTransaction`).
+**1. Capa de datos.** Todo pasa por el singleton `db` en `lib/db.ts` (Prisma Client). El schema en `prisma/schema.prisma` está organizado por módulo; cada modelo usa `@@map` a snake_case. Relación 1-1 con `User` para config/estado (`UserSettings`, `UserGoals`, `ConversationMemory`, `PendingTransaction`). Pasos diarios de Garmin en `DailySteps` (1-N, único por `userId+date`).
 
 **2. Separación lib / agents / app.**
 - `lib/` — lógica de negocio pura por módulo (`sleep.ts`, `fitness.ts`, `nutrition.ts`, `projects.ts`, `ideas.ts`, `finances.ts`, `calendar.ts`, `scoring.ts`) + integraciones externas (`garmin.ts`, `notion.ts`, `whatsapp.ts`, `reminders.ts`) + infra (`db.ts`, `nlp.ts`, `conversation.ts`, `goals.ts`, `cron.ts`, `logger.ts`).
@@ -49,11 +53,11 @@ npm run db:studio    # Prisma Studio (inspeccionar la DB)
    1. Carga contexto de conversación (`lib/conversation.ts`: rolling window K=8 + summary) + objetivos (`lib/goals.ts`) en paralelo.
    2. **Clasificación con Haiku** → uno de los módulos (`MODULE_DESCRIPTIONS`).
    3. El **agente especialista** ejecuta la acción y retorna datos crudos.
-   4. **Respuesta final con Sonnet** (voz rioplatense, sin markdown) usando datos del agente + contexto + objetivos.
+   4. **Respuesta final con Sonnet** (voz rioplatense, sin markdown) usando datos del agente + contexto + objetivos. **Excepción:** si el agente marcó `verbatim`, se envía su texto sin reescribir (`callSpecialistAgent` devuelve `{text, verbatim}`).
    5. Guarda turnos user/assistant en `ConversationMemory`.
    - El webhook (`app/api/whatsapp/webhook/route.ts`) es el único punto de entrada; transcribe audios con Whisper antes de orquestar.
 
-**4. Scoring — `lib/scoring.ts`.** Cada módulo expone `calc<Modulo>ScoreForDate()`. `calculateFullScore()` los combina con pesos desde `UserGoals` (normalizados). Distinción clave: `null` = sin datos (no entra al promedio) vs `0` = había datos pero no se cumplió el criterio. Ideas NO entra al score global.
+**4. Scoring — `lib/scoring.ts`.** Cada módulo expone `calc<Modulo>ScoreForDate()`. `calculateFullScore()` los combina con pesos desde `UserGoals` (normalizados). Distinción clave: `null` = sin datos (no entra al promedio) vs `0` = había datos pero no se cumplió el criterio. Ideas NO entra al score global. **Fitness:** 100 pts = base 40 + gym 20 + duración 20 + cardio/movimiento 20; el bloque de cardio se cumple con una actividad cardio **o** alcanzando la meta de pasos diaria (`UserGoals.fitnessDailyStepsGoal`, default 8000) — los pasos de Garmin cuentan como cardio. Un día solo de gym sin cardio ni pasos topa en 80.
 
 **5. NLP compartido — `lib/nlp.ts`.** `detectIntentAI(context, intents, message, systemPrompt?)` reemplaza la detección por regex: una sola llamada a Haiku por invocación de agente, devuelve la key del intent.
 
@@ -828,3 +832,78 @@ Usuario: "si"
 Si la tarjeta no se encuentra: lista las tarjetas numeradas, guarda `step: "select_card"` con `cards` en la DB.
 
 *Ultima actualizacion: Mayo 2026 - Flujo WhatsApp completo para gastos/ingresos + UI estadisticas Precision Ledger.*
+
+---
+
+## Bloque Sesion 11 — Junio 2026 (Calendar recurrente, Reconexion Google, Pasos Garmin, Rutinas, Workout Activo, fixes)
+
+### 1. Google Calendar — eventos recurrentes (RRULE)
+
+`lib/calendar.ts`: `createEvent` acepta `recurrence?: string[]` (reglas RRULE) y agrega `timeZone: "America/Montevideo"` a start/end. `agents/calendar`: `parseEventFromText` extrae una RRULE estandar cuando el pedido es recurrente ("todos los dias", "de lunes a viernes", etc.); para pedidos abiertos pone `UNTIL` a un mes. `describeRecurrence()` para confirmar al usuario. Un solo evento "master" recurrente (Google expande), no N eventos.
+
+### 2. Reconexion de Google + fix de persistencia de tokens
+
+- **`auth.ts`**: el callback `jwt` ahora es `async` y **awaitea** el `updateMany` de tokens (antes la promesa se descartaba en serverless → el refresh_token nuevo no se guardaba).
+- **`lib/calendar.ts`**: `revokeGoogleAccess(userId)` revoca el grant en Google.
+- **`app/(app)/settings/actions.ts`**: server action `reconnectGoogleCalendar` (revoca + signIn con prompt=consent → token fresco).
+- **SettingsClient**: boton "Reconectar Google Calendar" siempre visible.
+- Causa raiz del `invalid_grant`: app OAuth en modo Testing expira refresh tokens a los 7 dias → publicar en Produccion.
+
+### 3. Paginas legales publicas
+
+`app/privacy/page.tsx` y `app/terms/page.tsx` (para el consent screen de Google). `middleware.ts`: `/privacy` y `/terms` accesibles sin auth; solo `/login` rebota a usuarios logueados.
+
+### 4. Pasos diarios de Garmin + scoring
+
+- **Schema**: nuevo modelo `DailySteps` (userId+date unico, steps, source) + `UserGoals.fitnessDailyStepsGoal Int @default(8000)`. **SQL aplicado en Supabase:**
+  ```sql
+  CREATE TABLE IF NOT EXISTS daily_steps (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    "userId" TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date DATE NOT NULL, steps INTEGER NOT NULL,
+    source TEXT NOT NULL DEFAULT 'GARMIN',
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE ("userId", date)
+  );
+  ALTER TABLE user_goals ADD COLUMN IF NOT EXISTS "fitnessDailyStepsGoal" INTEGER NOT NULL DEFAULT 8000;
+  ```
+- **`lib/garmin.ts`**: `fetchGarminDailySteps` (endpoint `usersummary-service/usersummary/daily`).
+- **`lib/fitness.ts`**: `upsertDailySteps`, `getTodaySteps`, `getStepsForDate`; el sync (cron + manual) trae y guarda los pasos.
+- **UI**: `StepsCard` en la pestaña Today.
+- **Scoring**: el bloque de cardio (20 pts) se cumple con cardio **o** llegando a la meta de pasos. Arregla el cap de 80 en dias solo de gym.
+
+### 5. Rutinas — registrar cualquiera, traer por nombre, progreso
+
+- **`startGymWorkout(userId, title?)`** etiqueta/deduplica la sesion de gym de hoy con el nombre de la rutina (permite registrar cualquier rutina, no solo la del dia). Endpoint `POST /api/fitness/start-routine`.
+- **`matchRoutineByName`, `findLastRoutineSession`, `getRoutineWithLastPerformance`** (trae la rutina con los ultimos pesos/reps de la ultima sesion de ESA rutina), **`logRoutineSession`** (registra + compara por ejercicio vs la ultima sesion), **`getRoutinesWithLastPerformance`** / `enrichRoutineWithLastPerformance` (kg por ejercicio en la web).
+- **Agente de fitness**: "traeme push A" devuelve formato estructurado **verbatim** (titulo + SERIESxREPS + una linea por serie con el peso de la ultima vez); mandar la rutina hecha la registra y devuelve el progreso por ejercicio (Sonnet agrega la conclusion).
+- **Web**: `GymRoutineCard` y `RoutineManager` muestran el ultimo peso x reps por ejercicio (auto-actualizado desde la ultima sesion). Boton "Hacer hoy".
+
+### 6. Garmin SSO — CSRF robusto
+
+`extractCsrfToken` tolera orden de atributos invertido, atributos intermedios, comillas simples/dobles y token en JS/JSON. El error incluye el largo del HTML para diagnostico.
+
+### 7. Finanzas — diagnostico de auth
+
+`financesApiFetch` valida `content-type` y lanza error accionable si la API devuelve HTML (no JSON). Diagnostico: las rutas `/api/*` de finanzas-lemon las protegia su propio middleware (no dejaba pasar el Bearer). **El fix fue en el repo de finanzas** (dejar pasar `Authorization: Bearer fin_`); nuestro cliente ya usaba Bearer. Tambien se recreo la tabla `pending_transactions` en Supabase (le faltaba la columna `userId`):
+```sql
+DROP TABLE IF EXISTS pending_transactions;
+CREATE TABLE pending_transactions (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "userId" TEXT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  data JSONB NOT NULL, step TEXT NOT NULL DEFAULT 'confirm', cards JSONB,
+  "createdAt" TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### 8. Pantalla de Workout Activo (estilo Hevy)
+
+Spec/plan en `docs/superpowers/specs|plans/2026-06-02-active-workout-logger*`. Pantalla `/fitness/session` (client, mobile-first) para loguear series en vivo. **Sin cambios de schema** (reusa Workout/WorkoutExercise/WorkoutSet).
+
+- **`lib/fitness.ts`**: `getExerciseBests` (records historicos por ejercicio), `getSessionPrep` (rutina + "anterior" por serie + bests), `saveWorkoutSession` (guarda + calcula PRs; **bests ANTES de insertar** con `beforeDate=startOfDay(now)` para no contarse a si mismo; merge por nombre para no duplicar ejercicios), helper `weightKey` (clave de peso canonica, misma en prep y server).
+- **Endpoints**: `GET /api/fitness/session/prep`, `POST /api/fitness/session`.
+- **Componentes**: `ActiveWorkoutClient` (estado en cliente + respaldo en localStorage, cronometro, finish), `ExerciseLogCard`, `SetRow`, `RestTimer` (auto al ✓, 90s, +15/-15 sobre el restante), `WorkoutSummary`. Tipos en `workout-session-types.ts`.
+- **Flujo**: "Empezar"/"Hacer hoy"/"Empezar vacio" → `/fitness/session?routine=<id>`; logueas series con "anterior" precargado, ✓ marca + descanso, agregar/quitar series y ejercicios; **Finish** → 1 POST → resumen con volumen/series/duracion/PRs (peso max, volumen, reps a un peso). PRs en vivo son tentativos; el server es la fuente de verdad. El registro por WhatsApp y "traeme push A" quedan intactos.
+
+*Ultima actualizacion: Junio 2026 - Sesion 11: Calendar recurrente, reconexion Google, pasos Garmin, rutinas avanzadas, workout activo estilo Hevy.*
