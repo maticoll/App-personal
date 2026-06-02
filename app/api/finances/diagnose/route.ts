@@ -1,8 +1,8 @@
 // GET /api/finances/diagnose
-// Endpoint de diagnóstico: hace una llamada cruda a la API de finanzas y reporta
-// exactamente qué devuelve (status, content-type, snippet, cantidad de tarjetas).
-// Sirve para saber por qué "no hay tarjetas" sin tener que mirar los logs.
-// NO expone la API key.
+// Diagnóstico: prueba VARIAS formas de autenticación contra /api/cards de la
+// app de finanzas y reporta cuál devuelve JSON. Sirve para descubrir cómo
+// espera la API key (Bearer, x-api-key, query param, etc.). Read-only.
+// NO expone la API key completa.
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
@@ -10,6 +10,12 @@ import { getFinancesApiKey } from "@/lib/finances";
 
 const FINANCES_URL =
   process.env.FINANCES_APP_URL ?? "https://finanzas-lemon.vercel.app";
+
+type Attempt = {
+  label: string;
+  url: string;
+  headers: Record<string, string>;
+};
 
 export async function GET() {
   const session = await auth();
@@ -25,55 +31,61 @@ export async function GET() {
     });
   }
 
-  const url = `${FINANCES_URL}/api/cards`;
-  let result: Record<string, unknown> = {
-    hasApiKey: true,
-    apiKeyPreview: apiKey.slice(0, 6) + "…",
-    url,
-  };
+  const base = `${FINANCES_URL}/api/cards`;
+  const attempts: Attempt[] = [
+    { label: "Authorization: Bearer", url: base, headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" } },
+    { label: "Authorization: raw (sin Bearer)", url: base, headers: { Authorization: apiKey, Accept: "application/json" } },
+    { label: "x-api-key header", url: base, headers: { "x-api-key": apiKey, Accept: "application/json" } },
+    { label: "api-key header", url: base, headers: { "api-key": apiKey, Accept: "application/json" } },
+    { label: "query ?apiKey", url: `${base}?apiKey=${encodeURIComponent(apiKey)}`, headers: { Accept: "application/json" } },
+    { label: "query ?api_key", url: `${base}?api_key=${encodeURIComponent(apiKey)}`, headers: { Accept: "application/json" } },
+    { label: "query ?key", url: `${base}?key=${encodeURIComponent(apiKey)}`, headers: { Accept: "application/json" } },
+    { label: "query ?token", url: `${base}?token=${encodeURIComponent(apiKey)}`, headers: { Accept: "application/json" } },
+  ];
 
-  try {
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: "application/json",
-      },
-    });
-
-    const contentType = res.headers.get("content-type") ?? "";
-    const text = await res.text();
-    const isJson = contentType.includes("application/json");
-
-    let cardCount: number | null = null;
-    let parseError: string | null = null;
-    if (isJson) {
-      try {
-        const data = JSON.parse(text) as unknown;
-        const cards = Array.isArray(data)
-          ? data
-          : (data as { cards?: unknown[] }).cards ?? [];
-        cardCount = Array.isArray(cards) ? cards.length : null;
-      } catch (e) {
-        parseError = e instanceof Error ? e.message : String(e);
+  const results = [];
+  for (const a of attempts) {
+    try {
+      const res = await fetch(a.url, { headers: a.headers });
+      const contentType = res.headers.get("content-type") ?? "";
+      const text = await res.text();
+      const isJson = contentType.includes("application/json");
+      let cardCount: number | null = null;
+      if (isJson) {
+        try {
+          const data = JSON.parse(text) as unknown;
+          const cards = Array.isArray(data) ? data : (data as { cards?: unknown[] }).cards ?? [];
+          cardCount = Array.isArray(cards) ? cards.length : null;
+        } catch {
+          /* no-op */
+        }
       }
+      results.push({
+        attempt: a.label,
+        status: res.status,
+        contentType,
+        isJson,
+        cardCount,
+        bodyPreview: text.slice(0, 120).replace(/\s+/g, " "),
+      });
+    } catch (err) {
+      results.push({
+        attempt: a.label,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
-
-    result = {
-      ...result,
-      status: res.status,
-      ok: res.ok,
-      contentType,
-      isJson,
-      cardCount,
-      parseError,
-      bodyPreview: text.slice(0, 400),
-    };
-  } catch (err) {
-    result = {
-      ...result,
-      fetchError: err instanceof Error ? err.message : String(err),
-    };
   }
 
-  return NextResponse.json(result);
+  const winner = results.find((r) => "isJson" in r && r.isJson);
+
+  return NextResponse.json({
+    hasApiKey: true,
+    apiKeyPreview: apiKey.slice(0, 6) + "…",
+    base,
+    winner: winner ? winner.attempt : null,
+    hint: winner
+      ? `Usá este método de auth: ${winner.attempt}`
+      : "Ningún método devolvió JSON. La API quizás exige sesión por cookie, o la key es inválida.",
+    results,
+  });
 }
