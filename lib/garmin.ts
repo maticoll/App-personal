@@ -164,15 +164,13 @@ async function authenticateGarminSSO(
   }
 
   const embedHtml = await embedRes.text();
-  const csrfMatch = embedHtml.match(/name="_csrf"\s+value="([^"]+)"/);
-  if (!csrfMatch) {
+  const csrf = extractCsrfToken(embedHtml);
+  if (!csrf) {
     throw new Error(
       "No se pudo extraer el CSRF token del formulario Garmin. " +
-        "La estructura del SSO puede haber cambiado."
+        `La estructura del SSO puede haber cambiado (HTML recibido: ${embedHtml.length} chars).`
     );
   }
-
-  const csrf = csrfMatch[1];
   const step1Cookies = extractCookies(embedRes);
 
   // Paso 2: POST con credenciales
@@ -690,6 +688,30 @@ export async function fetchGarminDailySteps(
 }
 
 // --- Utils internos ---
+
+/**
+ * Extrae el CSRF token del HTML del SSO de Garmin de forma tolerante.
+ * Cubre distintos formatos que Garmin fue usando a lo largo del tiempo:
+ *   - <input name="_csrf" value="X">  (orden y atributos intermedios variables)
+ *   - <input value="X" name="_csrf">  (orden inverso)
+ *   - comillas simples o dobles
+ *   - token embebido en JS/JSON: "csrf":"X" o csrfToken = "X"
+ */
+function extractCsrfToken(html: string): string | null {
+  // 1. name="_csrf" ... value="..."  (permite atributos en el medio)
+  let m = html.match(/name=["']_csrf["'][^>]*?\bvalue=["']([^"']+)["']/i);
+  if (m) return m[1];
+
+  // 2. value="..." ... name="_csrf"  (orden inverso)
+  m = html.match(/\bvalue=["']([^"']+)["'][^>]*?name=["']_csrf["']/i);
+  if (m) return m[1];
+
+  // 3. Token en JS/JSON embebido
+  m = html.match(/["']?csrf(?:[_-]?token)?["']?\s*[:=]\s*["']([^"']+)["']/i);
+  if (m) return m[1];
+
+  return null;
+}
 
 function extractCookies(res: Response): string {
   // En Node.js / Edge Runtime, headers.getSetCookie() puede no estar disponible
