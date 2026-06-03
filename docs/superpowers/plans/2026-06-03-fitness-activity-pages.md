@@ -369,7 +369,7 @@ git commit -m "feat(fitness): mapa de actividades (slug, tipo, meta visual)"
 **Files:**
 - Modify: `lib/fitness.ts` (agregar al final, antes de cierre; y extender `WorkoutWithExercises`)
 
-- [ ] **Step 1: Extender `WorkoutWithExercises`** (líneas 14-29) con los campos nuevos (todos opcionales para no romper consumidores):
+- [ ] **Step 1a: Extender `WorkoutWithExercises`** (líneas 14-29) con los campos nuevos:
 
 ```ts
   avgHr: number | null;
@@ -383,7 +383,23 @@ git commit -m "feat(fitness): mapa de actividades (slug, tipo, meta visual)"
   garminMetrics: unknown | null;
 ```
 
-> Nota: si los `select`/`include` de Prisma usados por los getters existentes no traen estos campos por default, revisar que devuelvan el row completo (los getters que hacen `db.workout.findMany()` sin `select` ya los incluyen).
+- [ ] **Step 1b: Actualizar `mapWorkout`** (`lib/fitness.ts:~144`) para copiar los 9 campos nuevos.
+
+  ⚠️ **BLOQUEANTE:** `mapWorkout(w): WorkoutWithExercises` construye el objeto campo por campo. Al agregar campos requeridos al tipo, `mapWorkout` deja de compilar si no los copia. Agregar dentro del objeto que retorna:
+
+```ts
+    avgHr: w.avgHr ?? null,
+    maxHr: w.maxHr ?? null,
+    elevationGainM: w.elevationGainM ?? null,
+    avgSpeedMps: w.avgSpeedMps ?? null,
+    maxSpeedMps: w.maxSpeedMps ?? null,
+    movingSeconds: w.movingSeconds ?? null,
+    cadence: w.cadence ?? null,
+    locationName: w.locationName ?? null,
+    garminMetrics: w.garminMetrics ?? null,
+```
+
+  Beneficio extra: el historial global y demás getters que pasan por `mapWorkout` también quedan con datos ricos. (Los getters que hacen `db.workout.findMany()` sin `select` ya traen las columnas; solo faltaba copiarlas en el map.)
 
 - [ ] **Step 2: Agregar tipos y helpers nuevos**
 
@@ -450,6 +466,8 @@ export type GymStats = {
   totalVolumeKg: number;   // volumen de la última sesión
   weekVolumeKg: number;    // volumen acumulado de la semana
 };
+// NOTA: el spec §7 menciona "PRs recientes" en la página de Gym. Se DIFIEREN (YAGNI):
+// el cálculo de PRs ya existe en saveWorkoutSession; sumarlos a la página es iteración futura.
 
 /** Stats de gym recreadas para la página de Gym. */
 export async function getGymStats(userId: string): Promise<GymStats> {
@@ -491,7 +509,9 @@ git commit -m "feat(fitness): helpers de agregación por tipo y stats de gym"
 **Files:**
 - Modify: `components/fitness/FitnessQuickActions.tsx`
 
-- [ ] **Step 1: Reemplazar el bloque "Activity pills"** para que cada pill sea un `<Link href={/fitness/<slug>}>`. Usar `ACTIVITY_ORDER`/`ACTIVITIES` de `@/lib/fitness-activities`. Eliminar: estado `selectedActivity`, `duration`, `distance`, `handleActivity`, `handleGym`, `needsDistance`, y el `<form>` inline. Mantener la sección NLP "Quick Log" intacta.
+- [ ] **Step 1: Reemplazar el bloque "Activity pills"** para que cada pill sea un `<Link href={/fitness/<slug>}>`. Usar `ACTIVITY_ORDER`/`ACTIVITIES` de `@/lib/fitness-activities`. Eliminar: estado `selectedActivity`, `duration`, `distance`, `handleActivity`, `handleGym`, `needsDistance`, y el `<form>` inline.
+
+  ⚠️ **CONSERVAR la sección NLP "Quick Log" intacta** y todo lo que usa: `nlpText`, `handleNLP`, `flash`, `feedback`, y el estado `loading` (reducirlo a `"nlp" | null`). La prop `onLogged` se mantiene (la usa la NLP) — no es prop huérfana. NO borrar `flash`/`feedback`.
 
 ```tsx
 import Link from "next/link";
