@@ -137,6 +137,29 @@ export async function getGarminSession(userId: string): Promise<string> {
 }
 
 /**
+ * Guardar una sesión de Garmin obtenida externamente (script local).
+ *
+ * El login SSO de Garmin está protegido por Cloudflare y devuelve 403 desde las
+ * IPs de datacenter de Vercel. Workaround: `scripts/garmin-refresh-session.mjs`
+ * corre en una IP residencial, loguea y postea la cookie a `/api/fitness/garmin-session`,
+ * que llama a esta función. Vercel solo lee datos con la cookie ya inyectada.
+ */
+export async function saveGarminSession(
+  userId: string,
+  session: string,
+  ttlMs: number = SESSION_TTL_MS
+): Promise<void> {
+  const expiry = new Date(Date.now() + ttlMs);
+  await db.userSettings.upsert({
+    where: { userId },
+    update: { garminSessionKey: session, garminSessionExp: expiry },
+    create: { userId, garminSessionKey: session, garminSessionExp: expiry },
+  });
+  _memSession = session;
+  _memSessionExp = expiry;
+}
+
+/**
  * Invalidar sesión (en error 401 o manualmente).
  */
 export async function invalidateGarminSession(userId: string): Promise<void> {
@@ -271,8 +294,9 @@ async function authenticateGarminSSO(
     );
     if (loginRes.status === 403) {
       throw new Error(
-        "Garmin bloqueó el login con 403 (Cloudflare). Suele pasar al autenticar desde una " +
-          "IP de datacenter como Vercel. Si persiste, hay que cambiar de estrategia (ver nota en lib/garmin.ts)."
+        "Garmin bloqueó el login con 403 (Cloudflare) — esperado desde la IP de Vercel. " +
+          "Inyectá la sesión desde tu PC: ejecutá `node scripts/garmin-refresh-session.mjs` " +
+          "(ver scripts/garmin-refresh-session.mjs)."
       );
     }
     throw new Error(
