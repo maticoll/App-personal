@@ -26,14 +26,17 @@ export async function GET(req: NextRequest) {
     const userId = session.user.id;
 
     const url = new URL(req.url);
-    const date = url.searchParams.get("date") ?? new Date().toISOString().split("T")[0];
+    const date = url.searchParams.get("date"); // opcional
+    const limit = url.searchParams.get("limit") ?? "10";
 
     const garminSession = await getGarminSession(userId);
 
-    // 1) Lista de actividades del día (ya trae muchos campos por actividad)
+    // 1) Lista de actividades. Sin ?date → trae las últimas N (evita problemas
+    //    de zona horaria). Con ?date=YYYY-MM-DD → filtra por ese día.
     const listUrl =
       `${GARMIN_CONNECT_URL}/proxy/activitylist-service/activities/search/activities` +
-      `?startDate=${date}&endDate=${date}&start=0&limit=20`;
+      `?start=0&limit=${limit}` +
+      (date ? `&startDate=${date}&endDate=${date}` : "");
     const listRes = await fetch(listUrl, { headers: GARMIN_HEADERS(garminSession) });
 
     if (!listRes.ok) {
