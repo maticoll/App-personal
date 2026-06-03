@@ -21,9 +21,12 @@ export default auth((req) => {
   const isApiWebhook = nextUrl.pathname.startsWith("/api/webhooks");
   const isWhatsAppWebhook = nextUrl.pathname.startsWith("/api/whatsapp/webhook");
   const isCronRoute = nextUrl.pathname.startsWith("/api/cron");
+  // Inyección de sesión de Garmin: valida ?secret=CRON_SECRET o sesión NextAuth
+  // dentro del propio handler, por eso se excluye del middleware (igual que crons).
+  const isGarminSessionRoute = nextUrl.pathname.startsWith("/api/fitness/garmin-session");
 
-  // Dejar pasar rutas de auth, webhooks publicos y crons
-  if (isApiAuthRoute || isApiWebhook || isWhatsAppWebhook || isCronRoute) {
+  // Dejar pasar rutas de auth, webhooks publicos, crons e inyección de sesión Garmin
+  if (isApiAuthRoute || isApiWebhook || isWhatsAppWebhook || isCronRoute || isGarminSessionRoute) {
     return undefined;
   }
 
