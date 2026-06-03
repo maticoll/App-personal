@@ -1,12 +1,15 @@
 // ============================================================
 // scripts/garmin-refresh-session.mjs
 //
-// Loguea en Garmin Connect DESDE TU PC (IP residencial, no bloqueada por
-// Cloudflare) y postea la cookie de sesión a la app, que la guarda en la DB.
-// Vercel después solo LEE datos con esa cookie (su IP de datacenter no puede
-// loguearse: Garmin/Cloudflare devuelve 403).
+// Vincula Garmin Connect con la app usando OAuth (estilo garth).
+// Loguea DESDE TU PC (IP residencial, no bloqueada por Cloudflare), intercambia
+// el ticket por tokens OAuth y los manda a la app. La app guarda el OAuth1 token
+// (dura ~1 año) y mintea access tokens OAuth2 sola desde Vercel.
 //
-// Requisitos: Node 18+ (usa fetch global). Cero dependencias.
+// → Sólo hace falta correr esto UNA VEZ (y recién de nuevo dentro de ~1 año,
+//   o si revocás el acceso / cambiás la contraseña de Garmin).
+//
+// Requisitos: Node 18+ (fetch global). Cero dependencias.
 //
 // Uso (lee credenciales de .env.local automáticamente):
 //   node scripts/garmin-refresh-session.mjs
@@ -17,20 +20,18 @@
 //   APP_URL          (opcional)     → default https://app-personal-ten.vercel.app
 //   APP_USER_EMAIL   (opcional)     → email de tu usuario en la app
 //                                     (default: primero de ALLOWED_EMAILS)
-//   GARMIN_TTL_HOURS (opcional)     → vida de la sesión en horas (default 20)
-//
-// Automatizable con el Programador de tareas de Windows (a diario), porque las
-// cookies de Garmin expiran ~cada día.
+//   GARMIN_OAUTH_CONSUMER_KEY / _SECRET (opcional) → override del consumer público
 // ============================================================
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import crypto from "node:crypto";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, "..");
 
-// --- Cargar .env.local (parser mínimo, sin dependencias) ---
+// --- Cargar .env.local (parser mínimo) ---
 function loadEnvLocal() {
   try {
     const raw = readFileSync(join(PROJECT_ROOT, ".env.local"), "utf8");
@@ -41,7 +42,6 @@ function loadEnvLocal() {
       if (eq === -1) continue;
       const key = trimmed.slice(0, eq).trim();
       let value = trimmed.slice(eq + 1).trim();
-      // Quitar comillas envolventes
       if (
         (value.startsWith('"') && value.endsWith('"')) ||
         (value.startsWith("'") && value.endsWith("'"))
@@ -51,7 +51,7 @@ function loadEnvLocal() {
       if (!(key in process.env)) process.env[key] = value;
     }
   } catch {
-    // .env.local opcional — si no existe, se usan las vars del entorno
+    /* .env.local opcional */
   }
 }
 loadEnvLocal();
@@ -63,7 +63,9 @@ const APP_URL = (process.env.APP_URL || "https://app-personal-ten.vercel.app").r
 const APP_USER_EMAIL =
   process.env.APP_USER_EMAIL ||
   (process.env.ALLOWED_EMAILS || "").split(",")[0].trim();
-const TTL_HOURS = Number(process.env.GARMIN_TTL_HOURS) || 20;
+
+const CONSUMER_KEY = process.env.GARMIN_OAUTH_CONSUMER_KEY || "fc3e99d2-118c-44b8-8ae3-03370dde24c0";
+const CONSUMER_SECRET = process.env.GARMIN_OAUTH_CONSUMER_SECRET || "E08WAR897WEy2knn7aFBrvegVAf0AFdWBBF";
 
 function die(msg) {
   console.error(`\n❌ ${msg}\n`);
@@ -71,17 +73,19 @@ function die(msg) {
 }
 
 if (!EMAIL || !PASSWORD) die("Faltan GARMIN_EMAIL / GARMIN_PASSWORD (en .env.local o el entorno).");
-if (!CRON_SECRET) die("Falta CRON_SECRET (necesario para postear la sesión al endpoint).");
+if (!CRON_SECRET) die("Falta CRON_SECRET (necesario para postear los tokens al endpoint).");
 if (!APP_USER_EMAIL) die("Falta APP_USER_EMAIL (o ALLOWED_EMAILS) para identificar tu usuario.");
 
-// --- Constantes del SSO (idénticas a lib/garmin.ts) ---
+// --- Constantes ---
 const SSO_URL = "https://sso.garmin.com/sso";
 const SSO_EMBED_URL = `${SSO_URL}/embed`;
 const SSO_ORIGIN = "https://sso.garmin.com";
 const CONNECT_URL = "https://connect.garmin.com";
+const CONNECTAPI_URL = "https://connectapi.garmin.com";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+const GARMIN_UA = "com.garmin.android.apps.connectmobile";
 const BROWSER_HEADERS = {
   "User-Agent": UA,
   Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -104,7 +108,7 @@ const SSO_SIGNIN_PARAMS = new URLSearchParams({
   redirectAfterAccountCreationUrl: SSO_EMBED_URL,
 });
 
-// --- Utils (idénticos a lib/garmin.ts) ---
+// --- Utils de cookies / CSRF ---
 function extractCsrfToken(html) {
   let m = html.match(/name=["']_csrf["'][^>]*?\bvalue=["']([^"']+)["']/i);
   if (m) return m[1];
@@ -141,9 +145,49 @@ function mergeCookieStrings(...parts) {
   return Array.from(map.values()).join("; ");
 }
 
-// --- Login SSO ---
-async function login() {
-  // Paso 0: GET /sso/embed → cookies de Cloudflare/Garmin
+// --- OAuth 1.0a (HMAC-SHA1) ---
+function rfc3986(value) {
+  return encodeURIComponent(value).replace(
+    /[!'()*]/g,
+    (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase()
+  );
+}
+
+function buildOAuth1Header(method, url, token, tokenSecret) {
+  const oauth = {
+    oauth_consumer_key: CONSUMER_KEY,
+    oauth_nonce: crypto.randomBytes(16).toString("hex"),
+    oauth_signature_method: "HMAC-SHA1",
+    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+    oauth_version: "1.0",
+  };
+  if (token) oauth.oauth_token = token;
+
+  const u = new URL(url);
+  const all = {};
+  u.searchParams.forEach((v, k) => {
+    all[k] = v;
+  });
+  Object.assign(all, oauth);
+
+  const paramString = Object.keys(all)
+    .sort()
+    .map((k) => `${rfc3986(k)}=${rfc3986(all[k])}`)
+    .join("&");
+  const baseString = `${method.toUpperCase()}&${rfc3986(u.origin + u.pathname)}&${rfc3986(paramString)}`;
+  const signingKey = `${rfc3986(CONSUMER_SECRET)}&${rfc3986(tokenSecret || "")}`;
+  oauth.oauth_signature = crypto.createHmac("sha1", signingKey).update(baseString).digest("base64");
+
+  return (
+    "OAuth " +
+    Object.keys(oauth)
+      .map((k) => `${rfc3986(k)}="${rfc3986(oauth[k])}"`)
+      .join(", ")
+  );
+}
+
+// --- Paso 1: login SSO → ticket ---
+async function ssoLoginGetTicket() {
   const embedUrl = `${SSO_EMBED_URL}?${SSO_EMBED_PARAMS}`;
   const embedRes = await fetch(embedUrl, {
     headers: {
@@ -157,7 +201,6 @@ async function login() {
   });
   let cookies = extractCookies(embedRes);
 
-  // Paso 1: GET /sso/signin → HTML con _csrf
   const signinUrl = `${SSO_URL}/signin?${SSO_SIGNIN_PARAMS}`;
   const signinGetRes = await fetch(signinUrl, {
     headers: {
@@ -175,7 +218,6 @@ async function login() {
   if (!csrf) die(`No se pudo extraer el _csrf (HTML: ${signinHtml.length} chars)`);
   cookies = mergeCookieStrings(cookies, extractCookies(signinGetRes));
 
-  // Paso 2: POST /sso/signin → ticket
   const loginBody = new URLSearchParams({
     username: EMAIL,
     password: PASSWORD,
@@ -198,7 +240,6 @@ async function login() {
     body: loginBody.toString(),
     redirect: "manual",
   });
-  cookies = mergeCookieStrings(cookies, extractCookies(loginRes));
 
   let ticket = "";
   const location = loginRes.headers.get("location") ?? "";
@@ -216,60 +257,97 @@ async function login() {
   if (!ticket) {
     if (loginRes.status === 403) {
       die(
-        "403 de Cloudflare incluso desde tu PC. Probá de nuevo en unos minutos, o desde otra red. " +
+        "403 de Cloudflare incluso desde tu PC. Probá de nuevo en unos minutos o desde otra red. " +
           "Si Garmin pide captcha/MFA, este flujo no lo soporta."
       );
     }
     console.error(loginHtml.slice(0, 800));
     die(`Login falló (status ${loginRes.status}). ¿Credenciales correctas? ¿MFA activado?`);
   }
-
-  // Paso 3: canjear ticket por sesión de Connect
-  const ticketRes = await fetch(`${CONNECT_URL}/modern/?ticket=${ticket}`, {
-    headers: { "User-Agent": UA, Cookie: cookies },
-    redirect: "manual",
-  });
-  const finalCookies = mergeCookieStrings(cookies, extractCookies(ticketRes));
-
-  if (
-    !finalCookies.includes("GARMIN-SSO") &&
-    !finalCookies.includes("SESSIONID") &&
-    !finalCookies.includes("connect.garmin")
-  ) {
-    die("Sesión no obtenida (sin cookies GARMIN-SSO/SESSIONID). El SSO puede haber cambiado.");
-  }
-
-  return finalCookies;
+  return ticket;
 }
 
-// --- Postear la sesión a la app ---
-async function postSession(session) {
+// --- Paso 2: ticket → OAuth1 token ---
+async function getOAuth1Token(ticket) {
+  const url =
+    `${CONNECTAPI_URL}/oauth-service/oauth/preauthorized` +
+    `?ticket=${encodeURIComponent(ticket)}` +
+    `&login-url=${encodeURIComponent(SSO_EMBED_URL)}` +
+    `&accepts-mfa-tokens=true`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: buildOAuth1Header("GET", url),
+      "User-Agent": GARMIN_UA,
+    },
+  });
+  const text = await res.text();
+  if (!res.ok) die(`preauthorized falló (${res.status}): ${text.slice(0, 300)}`);
+  const params = new URLSearchParams(text);
+  const token = params.get("oauth_token");
+  const secret = params.get("oauth_token_secret");
+  if (!token || !secret) die(`preauthorized no devolvió oauth_token: ${text.slice(0, 200)}`);
+  return { token, secret };
+}
+
+// --- Paso 3: OAuth1 → OAuth2 access token ---
+async function getOAuth2Token(oauth1Token, oauth1Secret) {
+  const url = `${CONNECTAPI_URL}/oauth-service/oauth/exchange/user/2.0`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: buildOAuth1Header("POST", url, oauth1Token, oauth1Secret),
+      "User-Agent": GARMIN_UA,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: "",
+  });
+  const text = await res.text();
+  if (!res.ok) die(`exchange OAuth2 falló (${res.status}): ${text.slice(0, 300)}`);
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    die(`exchange OAuth2 no devolvió JSON: ${text.slice(0, 200)}`);
+  }
+  if (!json.access_token) die(`exchange OAuth2 sin access_token: ${text.slice(0, 200)}`);
+  return { accessToken: json.access_token, expiresInSec: json.expires_in ?? 3600 };
+}
+
+// --- Paso 4: postear tokens a la app ---
+async function postTokens(oauth1, oauth2) {
   const url = `${APP_URL}/api/fitness/garmin-session?secret=${encodeURIComponent(CRON_SECRET)}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session, ttlHours: TTL_HOURS, email: APP_USER_EMAIL }),
+    body: JSON.stringify({
+      oauth1Token: oauth1.token,
+      oauth1Secret: oauth1.secret,
+      oauth2Token: oauth2.accessToken,
+      oauth2ExpiresInSec: oauth2.expiresInSec,
+      email: APP_USER_EMAIL,
+    }),
   });
-  const raw = await res.text();
+  const text = await res.text();
   let json;
   try {
-    json = JSON.parse(raw);
+    json = JSON.parse(text);
   } catch {
-    die(
-      `El endpoint no devolvió JSON (status ${res.status}). ¿Está deployado /api/fitness/garmin-session ` +
-        `en ${APP_URL}? Respuesta:\n${raw.slice(0, 300)}`
-    );
+    die(`El endpoint no devolvió JSON (status ${res.status}). ¿Está deployado? ${text.slice(0, 300)}`);
   }
   if (!res.ok) die(`El endpoint respondió ${res.status}: ${json.error || JSON.stringify(json)}`);
-  if (json.success !== true) die(`Respuesta inesperada del endpoint: ${JSON.stringify(json)}`);
+  if (json.success !== true) die(`Respuesta inesperada: ${JSON.stringify(json)}`);
   return json;
 }
 
 // --- Main ---
-console.log("→ Logueando en Garmin Connect desde tu IP local…");
-const session = await login();
-console.log(`✓ Sesión obtenida (${session.length} chars de cookies).`);
-console.log(`→ Inyectando en ${APP_URL} para ${APP_USER_EMAIL}…`);
-const result = await postSession(session);
-console.log(`✅ ${result.message} (válida ~${result.expiresInHours}h).`);
-console.log("\nListo. Volvé a correr este script cuando la sync de Garmin falle por sesión expirada.");
+console.log("→ Logueando en Garmin desde tu IP local…");
+const ticket = await ssoLoginGetTicket();
+console.log("✓ Login OK (ticket obtenido).");
+console.log("→ Intercambiando ticket por tokens OAuth…");
+const oauth1 = await getOAuth1Token(ticket);
+const oauth2 = await getOAuth2Token(oauth1.token, oauth1.secret);
+console.log("✓ Tokens OAuth obtenidos (OAuth1 dura ~1 año).");
+console.log(`→ Guardando en ${APP_URL} para ${APP_USER_EMAIL}…`);
+const result = await postTokens(oauth1, oauth2);
+console.log(`✅ ${result.message}`);
+console.log("\nListo. Garmin queda vinculado. La app renueva el acceso sola desde Vercel.");
