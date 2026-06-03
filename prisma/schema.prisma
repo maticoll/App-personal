@@ -566,9 +566,17 @@ model UserSettings {
   // Nutrición
   dailyWaterGoalThermos Float @default(1.0) // Meta de termos por día
 
-  // Garmin Connect — sesión cacheada (Sesión 3)
-  garminSessionKey String?   // Cookie de sesión encriptada
-  garminSessionExp DateTime? // Expiración de la sesión
+  // Garmin Connect — sesión cacheada (Sesión 3, legacy cookie)
+  garminSessionKey String?   // Cookie de sesión (legacy — Garmin migró a OAuth)
+  garminSessionExp DateTime? // Expiración de la sesión legacy
+
+  // Garmin Connect — OAuth (estilo garth). El OAuth1 token dura ~1 año y se usa
+  // para mintear access tokens OAuth2 (cortos) desde Vercel. El login (que pasa
+  // por Cloudflare) se hace una vez desde la PC con scripts/garmin-refresh-session.mjs.
+  garminOauth1Token  String?   // OAuth1 token (durable, ~1 año)
+  garminOauth1Secret String?   // OAuth1 token secret
+  garminOauth2Token  String?   // OAuth2 access token (Bearer, cacheado)
+  garminOauth2Exp    DateTime? // Expiración del access token OAuth2
 
   // Integración Notion (Sesión 6)
   notionToken String?   // Integration token de Notion por usuario

@@ -24,6 +24,7 @@
 //   - Nivel de estrés promedio durante el sueño
 // ============================================================
 
+import crypto from "crypto";
 import { db } from "@/lib/db";
 
 // --- Tipos ---
@@ -53,283 +54,271 @@ export type GarminStatus = {
 
 // --- Constantes ---
 
-const GARMIN_SSO_URL = "https://sso.garmin.com/sso";
-const GARMIN_SSO_EMBED_URL = `${GARMIN_SSO_URL}/embed`;
-const GARMIN_SSO_ORIGIN = "https://sso.garmin.com"; // Origin válido = esquema+host, SIN path
-const GARMIN_CONNECT_URL = "https://connect.garmin.com";
-const SESSION_TTL_MS = 23 * 60 * 60 * 1000; // 23 horas
+// connectapi NO está bloqueado por Cloudflare (sí lo está sso.garmin.com, el login).
+const CONNECTAPI_URL = "https://connectapi.garmin.com";
 
-// Params del GET a /sso/embed — establece cookies iniciales (Cloudflare + GARMIN-SSO-GUID)
-const SSO_EMBED_PARAMS = new URLSearchParams({
-  id: "gauth-widget",
-  embedWidget: "true",
-  gauthHost: GARMIN_SSO_URL,
-});
+// Consumer OAuth público de Garmin (el mismo de garth/garminconnect). Es público.
+// Sobreescribible por env si Garmin lo rota.
+const OAUTH_CONSUMER_KEY =
+  process.env.GARMIN_OAUTH_CONSUMER_KEY ?? "fc3e99d2-118c-44b8-8ae3-03370dde24c0";
+const OAUTH_CONSUMER_SECRET =
+  process.env.GARMIN_OAUTH_CONSUMER_SECRET ?? "E08WAR897WEy2knn7aFBrvegVAf0AFdWBBF";
 
-// Params del GET/POST a /sso/signin (renderiza el form con _csrf y procesa el login).
-// Replican exactamente lo que usa garth (cliente de referencia): embedWidget=true y
-// service/source/redirect apuntando todos a /sso/embed.
-const SSO_SIGNIN_PARAMS = new URLSearchParams({
-  id: "gauth-widget",
-  embedWidget: "true",
-  gauthHost: GARMIN_SSO_EMBED_URL,
-  service: GARMIN_SSO_EMBED_URL,
-  source: GARMIN_SSO_EMBED_URL,
-  redirectAfterAccountLoginUrl: GARMIN_SSO_EMBED_URL,
-  redirectAfterAccountCreationUrl: GARMIN_SSO_EMBED_URL,
-});
+// User-Agent aceptado por connectapi (app mobile de Garmin)
+const GARMIN_UA = "com.garmin.android.apps.connectmobile";
 
-// Cache en memoria (se invalida si el proceso reinicia)
-let _memSession: string | null = null;
-let _memSessionExp: Date | null = null;
+// Margen para refrescar el access token antes de que expire
+const ACCESS_TOKEN_BUFFER_MS = 5 * 60 * 1000;
 
-// --- Auth ---
+// Cache en memoria del access token OAuth2 (se pierde al reiniciar el proceso)
+let _memAccessToken: string | null = null;
+let _memAccessExp: Date | null = null;
 
-/**
- * Obtener sesión activa de Garmin Connect.
- * Prioridad: memoria → DB → autenticar de nuevo.
- */
-export async function getGarminSession(userId: string): Promise<string> {
-  // 1. Cache en memoria
-  if (_memSession && _memSessionExp && _memSessionExp > new Date()) {
-    return _memSession;
-  }
+// --- OAuth 1.0a signing (HMAC-SHA1) ---
 
-  // 2. DB cache
-  const settings = await db.userSettings.findUnique({ where: { userId } });
-  if (
-    settings?.garminSessionKey &&
-    settings?.garminSessionExp &&
-    settings.garminSessionExp > new Date()
-  ) {
-    _memSession = settings.garminSessionKey!;
-    _memSessionExp = settings.garminSessionExp;
-    return _memSession!;
-  }
-
-  // 3. Autenticar con SSO
-  const email = process.env.GARMIN_EMAIL;
-  const password = process.env.GARMIN_PASSWORD;
-  if (!email || !password) {
-    throw new Error(
-      "Variables de entorno GARMIN_EMAIL y GARMIN_PASSWORD no configuradas. " +
-        "Completalas en .env.local para habilitar la sincronización con Garmin."
-    );
-  }
-
-  const session = await authenticateGarminSSO(email, password);
-  const expiry = new Date(Date.now() + SESSION_TTL_MS);
-
-  // Guardar en DB
-  await db.userSettings.upsert({
-    where: { userId },
-    update: { garminSessionKey: session, garminSessionExp: expiry },
-    create: {
-      userId,
-      garminSessionKey: session,
-      garminSessionExp: expiry,
-    },
-  });
-
-  _memSession = session;
-  _memSessionExp = expiry;
-  return session;
+function rfc3986(value: string): string {
+  return encodeURIComponent(value).replace(
+    /[!'()*]/g,
+    (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase()
+  );
 }
 
 /**
- * Guardar una sesión de Garmin obtenida externamente (script local).
- *
- * El login SSO de Garmin está protegido por Cloudflare y devuelve 403 desde las
- * IPs de datacenter de Vercel. Workaround: `scripts/garmin-refresh-session.mjs`
- * corre en una IP residencial, loguea y postea la cookie a `/api/fitness/garmin-session`,
- * que llama a esta función. Vercel solo lee datos con la cookie ya inyectada.
+ * Header Authorization OAuth 1.0a para connectapi. Incluye en la firma los
+ * query params de la URL + los oauth_*.
  */
-export async function saveGarminSession(
-  userId: string,
-  session: string,
-  ttlMs: number = SESSION_TTL_MS
-): Promise<void> {
-  const expiry = new Date(Date.now() + ttlMs);
-  await db.userSettings.upsert({
-    where: { userId },
-    update: { garminSessionKey: session, garminSessionExp: expiry },
-    create: { userId, garminSessionKey: session, garminSessionExp: expiry },
-  });
-  _memSession = session;
-  _memSessionExp = expiry;
-}
-
-/**
- * Invalidar sesión (en error 401 o manualmente).
- */
-export async function invalidateGarminSession(userId: string): Promise<void> {
-  _memSession = null;
-  _memSessionExp = null;
-  await db.userSettings.update({
-    where: { userId },
-    data: { garminSessionKey: null, garminSessionExp: null },
-  });
-}
-
-/**
- * Flujo SSO de Garmin Connect (no oficial), alineado con garth.
- *
- * Paso 0: GET /sso/embed   → establece cookies de Cloudflare + GARMIN-SSO-GUID
- * Paso 1: GET /sso/signin  → HTML del form con el _csrf
- * Paso 2: POST /sso/signin → login con credenciales + CSRF, devuelve el ticket
- * Paso 3: GET /modern/?ticket=… → canjea el ticket por cookies de sesión de Connect
- *
- * Claves anti-Cloudflare (por las que el POST devolvía 403 instantáneo):
- *   - Origin debe ser solo esquema+host (sin /sso). Un Origin con path = bloqueo WAF.
- *   - Hay que visitar /sso/embed ANTES del POST para tener las cookies de clearance.
- *   - No fijar Accept-Encoding a mano: deja que undici descomprima la respuesta.
- */
-async function authenticateGarminSSO(
-  email: string,
-  password: string
-): Promise<string> {
-  // Desktop Chrome UA — más creíble para Cloudflare que mobile Safari
-  const UA =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-
-  // Headers comunes browser-like. OJO: sin Accept-Encoding manual — si se fija a mano,
-  // undici no descomprime y .text() devolvería bytes crudos.
-  const BROWSER_HEADERS = {
-    "User-Agent": UA,
-    Accept:
-      "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "Accept-Language": "es-AR,es;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Upgrade-Insecure-Requests": "1",
+function buildOAuth1Header(
+  method: string,
+  url: string,
+  token?: string,
+  tokenSecret?: string
+): string {
+  const oauth: Record<string, string> = {
+    oauth_consumer_key: OAUTH_CONSUMER_KEY,
+    oauth_nonce: crypto.randomBytes(16).toString("hex"),
+    oauth_signature_method: "HMAC-SHA1",
+    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+    oauth_version: "1.0",
   };
+  if (token) oauth.oauth_token = token;
 
-  // Paso 0: GET /sso/embed → cookies de Cloudflare/Garmin que el POST necesita presentar.
-  const embedUrl = `${GARMIN_SSO_EMBED_URL}?${SSO_EMBED_PARAMS}`;
-  const embedRes = await fetch(embedUrl, {
-    headers: {
-      ...BROWSER_HEADERS,
-      Referer: `${GARMIN_CONNECT_URL}/`,
-      "sec-fetch-dest": "document",
-      "sec-fetch-mode": "navigate",
-      "sec-fetch-site": "none",
-      "sec-fetch-user": "?1",
-    },
+  const u = new URL(url);
+  const all: Record<string, string> = {};
+  u.searchParams.forEach((v, k) => {
+    all[k] = v;
   });
-  let cookies = extractCookies(embedRes);
+  Object.assign(all, oauth);
 
-  // Paso 1: GET /sso/signin → HTML estático con el form y el _csrf
-  const signinUrl = `${GARMIN_SSO_URL}/signin?${SSO_SIGNIN_PARAMS}`;
-  const signinGetRes = await fetch(signinUrl, {
-    headers: {
-      ...BROWSER_HEADERS,
-      Cookie: cookies,
-      Referer: embedUrl,
-      "sec-fetch-dest": "iframe",
-      "sec-fetch-mode": "navigate",
-      "sec-fetch-site": "same-origin",
-    },
-  });
+  const paramString = Object.keys(all)
+    .sort()
+    .map((k) => `${rfc3986(k)}=${rfc3986(all[k])}`)
+    .join("&");
+  const baseString = `${method.toUpperCase()}&${rfc3986(
+    u.origin + u.pathname
+  )}&${rfc3986(paramString)}`;
+  const signingKey = `${rfc3986(OAUTH_CONSUMER_SECRET)}&${rfc3986(
+    tokenSecret ?? ""
+  )}`;
+  oauth.oauth_signature = crypto
+    .createHmac("sha1", signingKey)
+    .update(baseString)
+    .digest("base64");
 
-  if (!signinGetRes.ok) {
-    throw new Error(`Garmin SSO signin GET falló: ${signinGetRes.status}`);
-  }
+  return (
+    "OAuth " +
+    Object.keys(oauth)
+      .map((k) => `${rfc3986(k)}="${rfc3986(oauth[k])}"`)
+      .join(", ")
+  );
+}
 
-  const signinHtml = await signinGetRes.text();
-  const csrf = extractCsrfToken(signinHtml);
-  if (!csrf) {
-    // Log completo del HTML para diagnóstico
-    console.error("[Garmin SSO] HTML completo recibido:\n" + signinHtml);
-    throw new Error(
-      "No se pudo extraer el CSRF token del formulario Garmin. " +
-        `La estructura del SSO puede haber cambiado (HTML: ${signinHtml.length} chars)`
-    );
-  }
-  cookies = mergeCookieStrings(cookies, extractCookies(signinGetRes));
-
-  // Paso 2: POST con credenciales al mismo /signin (con los MISMOS params en la URL).
-  const loginBody = new URLSearchParams({
-    username: email,
-    password,
-    embed: "true",
-    _csrf: csrf,
-  });
-
-  const loginRes = await fetch(signinUrl, {
+/**
+ * Intercambia el token OAuth1 (durable ~1 año) por un access token OAuth2 (corto).
+ * Corre en Vercel: connectapi.garmin.com NO está bloqueado por Cloudflare.
+ */
+async function exchangeOAuth1ForOAuth2(
+  oauth1Token: string,
+  oauth1Secret: string
+): Promise<{ accessToken: string; expiresInSec: number }> {
+  const url = `${CONNECTAPI_URL}/oauth-service/oauth/exchange/user/2.0`;
+  const res = await fetch(url, {
     method: "POST",
     headers: {
-      ...BROWSER_HEADERS,
+      Authorization: buildOAuth1Header("POST", url, oauth1Token, oauth1Secret),
+      "User-Agent": GARMIN_UA,
       "Content-Type": "application/x-www-form-urlencoded",
-      Cookie: cookies,
-      Origin: GARMIN_SSO_ORIGIN, // ← solo esquema+host (antes incluía /sso = 403 de Cloudflare)
-      Referer: signinUrl,
-      "sec-fetch-dest": "iframe",
-      "sec-fetch-mode": "navigate",
-      "sec-fetch-site": "same-origin",
-      "sec-fetch-user": "?1",
     },
-    body: loginBody.toString(),
-    redirect: "manual",
+    body: "",
   });
 
-  cookies = mergeCookieStrings(cookies, extractCookies(loginRes));
-
-  // Extraer ticket: primero del header Location, si no del HTML (formato embed?ticket=…)
-  let ticket = "";
-  const locationHeader = loginRes.headers.get("location") ?? "";
-  const ticketFromLocation = locationHeader.match(/ticket=([^&"']+)/);
-  let loginHtml = "";
-  if (ticketFromLocation) {
-    ticket = ticketFromLocation[1];
-  } else {
-    loginHtml = await loginRes.text();
-    const ticketFromHtml =
-      loginHtml.match(/embed\?ticket=([^"'&]+)/) ??
-      loginHtml.match(/ticket=([A-Za-z0-9-]+)/);
-    if (ticketFromHtml) ticket = ticketFromHtml[1];
-  }
-
-  if (!ticket) {
-    console.error(
-      `[Garmin SSO] Login POST status: ${loginRes.status}, location: ${locationHeader || "(none)"}\n` +
-        `[Garmin SSO] Login response body (first 1500):\n${loginHtml.slice(0, 1500)}`
-    );
-    if (loginRes.status === 403) {
-      throw new Error(
-        "Garmin bloqueó el login con 403 (Cloudflare) — esperado desde la IP de Vercel. " +
-          "Inyectá la sesión desde tu PC: ejecutá `node scripts/garmin-refresh-session.mjs` " +
-          "(ver scripts/garmin-refresh-session.mjs)."
-      );
-    }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
     throw new Error(
-      "Autenticación Garmin fallida. Verificá que GARMIN_EMAIL y GARMIN_PASSWORD son correctos. " +
-        "Si recientemente cambiaste la contraseña, actualizá las variables de entorno."
+      `Garmin OAuth2 exchange falló (${res.status}). ` +
+        (res.status === 401
+          ? "El token OAuth de Garmin expiró o se revocó — re-vinculá ejecutando " +
+            "`node scripts/garmin-refresh-session.mjs` en tu PC."
+          : body.slice(0, 200))
     );
   }
 
-  // Paso 3: canjear ticket por sesión de Connect
-  const ticketRes = await fetch(
-    `${GARMIN_CONNECT_URL}/modern/?ticket=${ticket}`,
-    {
-      headers: {
-        "User-Agent": UA,
-        Cookie: cookies,
-      },
-      redirect: "manual",
-    }
-  );
+  const json = (await res.json()) as Record<string, unknown>;
+  const accessToken = json.access_token as string | undefined;
+  if (!accessToken) {
+    throw new Error("Garmin OAuth2 exchange no devolvió access_token");
+  }
+  return {
+    accessToken,
+    expiresInSec: (json.expires_in as number | undefined) ?? 3600,
+  };
+}
 
-  const finalCookies = mergeCookieStrings(cookies, extractCookies(ticketRes));
+// --- Auth (OAuth) ---
+
+/**
+ * Devuelve un access token OAuth2 válido.
+ * Prioridad: memoria → DB (si no expiró) → re-mintear desde el OAuth1 token.
+ */
+export async function ensureGarminAccessToken(userId: string): Promise<string> {
+  const now = Date.now();
 
   if (
-    !finalCookies.includes("GARMIN-SSO") &&
-    !finalCookies.includes("SESSIONID") &&
-    !finalCookies.includes("connect.garmin")
+    _memAccessToken &&
+    _memAccessExp &&
+    _memAccessExp.getTime() > now + ACCESS_TOKEN_BUFFER_MS
   ) {
+    return _memAccessToken;
+  }
+
+  const settings = await db.userSettings.findUnique({ where: { userId } });
+
+  if (
+    settings?.garminOauth2Token &&
+    settings?.garminOauth2Exp &&
+    settings.garminOauth2Exp.getTime() > now + ACCESS_TOKEN_BUFFER_MS
+  ) {
+    _memAccessToken = settings.garminOauth2Token;
+    _memAccessExp = settings.garminOauth2Exp;
+    return _memAccessToken;
+  }
+
+  if (!settings?.garminOauth1Token || !settings?.garminOauth1Secret) {
     throw new Error(
-      "Sesión Garmin no obtenida. El protocolo SSO puede haber cambiado."
+      "Garmin no está vinculado por OAuth. Ejecutá `node scripts/garmin-refresh-session.mjs` " +
+        "en tu PC para vincular la cuenta (login una vez)."
     );
   }
 
-  return finalCookies;
+  const { accessToken, expiresInSec } = await exchangeOAuth1ForOAuth2(
+    settings.garminOauth1Token,
+    settings.garminOauth1Secret
+  );
+  const exp = new Date(now + expiresInSec * 1000);
+
+  await db.userSettings.update({
+    where: { userId },
+    data: { garminOauth2Token: accessToken, garminOauth2Exp: exp },
+  });
+
+  _memAccessToken = accessToken;
+  _memAccessExp = exp;
+  return accessToken;
+}
+
+/**
+ * GET autenticado contra connectapi.garmin.com con Bearer.
+ * Maneja el 401 re-minteando el token una vez.
+ */
+async function garminApiGet(
+  userId: string,
+  path: string,
+  retrying = false
+): Promise<Response> {
+  const token = await ensureGarminAccessToken(userId);
+  const res = await fetch(`${CONNECTAPI_URL}${path}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "User-Agent": GARMIN_UA,
+      Accept: "application/json",
+      "DI-Backend": "connectapi.garmin.com",
+    },
+  });
+
+  if (res.status === 401 && !retrying) {
+    _memAccessToken = null;
+    _memAccessExp = null;
+    await db.userSettings
+      .update({
+        where: { userId },
+        data: { garminOauth2Token: null, garminOauth2Exp: null },
+      })
+      .catch(() => {});
+    return garminApiGet(userId, path, true);
+  }
+
+  return res;
+}
+
+/**
+ * Guardar los tokens OAuth de Garmin obtenidos desde el script local.
+ *
+ * El login pasa por Cloudflare (bloqueado en Vercel), así que corre en la PC:
+ * `scripts/garmin-refresh-session.mjs` loguea, intercambia el ticket por tokens
+ * OAuth y los postea a `/api/fitness/garmin-session`, que llama a esta función.
+ */
+export async function saveGarminOAuth(
+  userId: string,
+  tokens: {
+    oauth1Token: string;
+    oauth1Secret: string;
+    oauth2Token?: string;
+    oauth2Exp?: Date;
+  }
+): Promise<void> {
+  await db.userSettings.upsert({
+    where: { userId },
+    update: {
+      garminOauth1Token: tokens.oauth1Token,
+      garminOauth1Secret: tokens.oauth1Secret,
+      garminOauth2Token: tokens.oauth2Token ?? null,
+      garminOauth2Exp: tokens.oauth2Exp ?? null,
+    },
+    create: {
+      userId,
+      garminOauth1Token: tokens.oauth1Token,
+      garminOauth1Secret: tokens.oauth1Secret,
+      garminOauth2Token: tokens.oauth2Token ?? null,
+      garminOauth2Exp: tokens.oauth2Exp ?? null,
+    },
+  });
+
+  if (tokens.oauth2Token && tokens.oauth2Exp) {
+    _memAccessToken = tokens.oauth2Token;
+    _memAccessExp = tokens.oauth2Exp;
+  } else {
+    _memAccessToken = null;
+    _memAccessExp = null;
+  }
+}
+
+/**
+ * Desvincular Garmin / invalidar el access token cacheado.
+ * Mantiene el OAuth1 token (durable) salvo que se pida `full`.
+ */
+export async function invalidateGarminSession(
+  userId: string,
+  full = false
+): Promise<void> {
+  _memAccessToken = null;
+  _memAccessExp = null;
+  await db.userSettings.update({
+    where: { userId },
+    data: {
+      garminOauth2Token: null,
+      garminOauth2Exp: null,
+      ...(full && { garminOauth1Token: null, garminOauth1Secret: null }),
+    },
+  });
 }
 
 // --- API calls ---
@@ -337,23 +326,11 @@ async function authenticateGarminSSO(
 /**
  * Obtener displayName del usuario (requerido para algunos endpoints de Garmin).
  */
-async function getGarminDisplayName(session: string): Promise<string> {
-  const res = await fetch(
-    `${GARMIN_CONNECT_URL}/proxy/userprofile-service/socialProfile`,
-    {
-      headers: {
-        Cookie: session,
-        NK: "NT",
-        "User-Agent": "Mozilla/5.0",
-        "DI-Backend": "connectapi.garmin.com",
-      },
-    }
-  );
-
+async function getGarminDisplayName(userId: string): Promise<string> {
+  const res = await garminApiGet(userId, "/userprofile-service/socialProfile");
   if (!res.ok) {
     throw new Error(`No se pudo obtener el perfil de Garmin: ${res.status}`);
   }
-
   const json = (await res.json()) as Record<string, unknown>;
   return (json.displayName as string) ?? (json.userName as string) ?? "user";
 }
@@ -366,40 +343,15 @@ async function getGarminDisplayName(session: string): Promise<string> {
  */
 export async function fetchGarminSleepData(
   userId: string,
-  date: string,
-  retrying = false
+  date: string
 ): Promise<GarminSleepData | null> {
-  const session = await getGarminSession(userId);
+  const displayName = await getGarminDisplayName(userId);
 
-  let displayName: string;
-  try {
-    displayName = await getGarminDisplayName(session);
-  } catch {
-    if (!retrying) {
-      await invalidateGarminSession(userId);
-      return fetchGarminSleepData(userId, date, true);
-    }
-    throw new Error("No se pudo autenticar con Garmin después de reintentar.");
-  }
-
-  const url =
-    `${GARMIN_CONNECT_URL}/proxy/wellness-service/wellness/dailySleepData/${displayName}` +
-    `?date=${date}&nonSleepBufferMinutes=60`;
-
-  const res = await fetch(url, {
-    headers: {
-      Cookie: session,
-      NK: "NT",
-      "User-Agent": "Mozilla/5.0",
-      "DI-Backend": "connectapi.garmin.com",
-      Accept: "application/json",
-    },
-  });
-
-  if (res.status === 401 && !retrying) {
-    await invalidateGarminSession(userId);
-    return fetchGarminSleepData(userId, date, true);
-  }
+  const res = await garminApiGet(
+    userId,
+    `/wellness-service/wellness/dailySleepData/${displayName}` +
+      `?date=${date}&nonSleepBufferMinutes=60`
+  );
 
   if (res.status === 204 || res.status === 404) {
     return null; // Sin datos para esta fecha
@@ -549,38 +501,28 @@ export async function upsertSleepFromGarmin(
 
 /**
  * Verificar estado de la conexión con Garmin.
+ * "Conectado" = hay un OAuth1 token guardado (vinculado desde la PC).
  */
 export async function checkGarminStatus(userId: string): Promise<GarminStatus> {
-  const hasCredentials = !!(
-    process.env.GARMIN_EMAIL && process.env.GARMIN_PASSWORD
-  );
+  const settings = await db.userSettings.findUnique({ where: { userId } });
 
-  if (!hasCredentials) {
+  const hasOAuth = !!(settings?.garminOauth1Token && settings?.garminOauth1Secret);
+
+  if (!hasOAuth) {
     return {
       connected: false,
       sessionValid: false,
       lastSync: null,
       error:
-        "Variables GARMIN_EMAIL y GARMIN_PASSWORD no configuradas en .env.local",
+        "Garmin no vinculado. Ejecutá `node scripts/garmin-refresh-session.mjs` en tu PC.",
     };
   }
 
-  const settings = await db.userSettings.findUnique({ where: { userId } });
-  const sessionValid = !!(
-    settings?.garminSessionKey &&
-    settings?.garminSessionExp &&
-    settings.garminSessionExp > new Date()
-  );
-
-  // Última sincronización = última sesión renovada
-  const lastSync = settings?.garminSessionExp
-    ? new Date(settings.garminSessionExp.getTime() - SESSION_TTL_MS)
-    : null;
-
+  // El access token OAuth2 se renueva solo; lo consideramos válido si hay OAuth1.
   return {
-    connected: hasCredentials,
-    sessionValid,
-    lastSync,
+    connected: true,
+    sessionValid: true,
+    lastSync: settings?.updatedAt ?? null,
   };
 }
 
@@ -628,33 +570,17 @@ const GARMIN_ACTIVITY_TYPE_MAP: Record<
 
 /**
  * Obtener actividades de Garmin para una fecha dada.
- * Endpoint: /proxy/activitylist-service/activities/search/activities
+ * Endpoint: /activitylist-service/activities/search/activities (connectapi, Bearer)
  */
 export async function fetchGarminActivities(
   userId: string,
-  date: string,
-  retrying = false
+  date: string
 ): Promise<GarminActivityData[]> {
-  const session = await getGarminSession(userId);
-
-  const url =
-    `${GARMIN_CONNECT_URL}/proxy/activitylist-service/activities/search/activities` +
-    `?startDate=${date}&endDate=${date}&start=0&limit=20`;
-
-  const res = await fetch(url, {
-    headers: {
-      Cookie: session,
-      NK: "NT",
-      "User-Agent": "Mozilla/5.0",
-      "DI-Backend": "connectapi.garmin.com",
-      Accept: "application/json",
-    },
-  });
-
-  if (res.status === 401 && !retrying) {
-    await invalidateGarminSession(userId);
-    return fetchGarminActivities(userId, date, true);
-  }
+  const res = await garminApiGet(
+    userId,
+    `/activitylist-service/activities/search/activities` +
+      `?startDate=${date}&endDate=${date}&start=0&limit=20`
+  );
 
   if (res.status === 204 || res.status === 404) return [];
 
@@ -716,40 +642,14 @@ export type GarminDailySteps = {
  */
 export async function fetchGarminDailySteps(
   userId: string,
-  date: string,
-  retrying = false
+  date: string
 ): Promise<GarminDailySteps | null> {
-  const session = await getGarminSession(userId);
+  const displayName = await getGarminDisplayName(userId);
 
-  let displayName: string;
-  try {
-    displayName = await getGarminDisplayName(session);
-  } catch {
-    if (!retrying) {
-      await invalidateGarminSession(userId);
-      return fetchGarminDailySteps(userId, date, true);
-    }
-    throw new Error("No se pudo autenticar con Garmin después de reintentar.");
-  }
-
-  const url =
-    `${GARMIN_CONNECT_URL}/proxy/usersummary-service/usersummary/daily/${displayName}` +
-    `?calendarDate=${date}`;
-
-  const res = await fetch(url, {
-    headers: {
-      Cookie: session,
-      NK: "NT",
-      "User-Agent": "Mozilla/5.0",
-      "DI-Backend": "connectapi.garmin.com",
-      Accept: "application/json",
-    },
-  });
-
-  if (res.status === 401 && !retrying) {
-    await invalidateGarminSession(userId);
-    return fetchGarminDailySteps(userId, date, true);
-  }
+  const res = await garminApiGet(
+    userId,
+    `/usersummary-service/usersummary/daily/${displayName}?calendarDate=${date}`
+  );
 
   if (res.status === 204 || res.status === 404) return null;
 
@@ -766,81 +666,4 @@ export async function fetchGarminDailySteps(
     totalSteps: Math.round(totalSteps),
     dailyStepGoal: (json.dailyStepGoal as number | undefined) ?? null,
   };
-}
-
-// --- Utils internos ---
-
-/**
- * Extrae el CSRF token del HTML del SSO de Garmin de forma tolerante.
- * Cubre distintos formatos que Garmin fue usando a lo largo del tiempo:
- *   - <input name="_csrf" value="X">  (orden y atributos intermedios variables)
- *   - <input value="X" name="_csrf">  (orden inverso)
- *   - comillas simples o dobles
- *   - token embebido en JS/JSON: "csrf":"X" o csrfToken = "X"
- */
-function extractCsrfToken(html: string): string | null {
-  // 1. name="_csrf" ... value="..."  (permite atributos en el medio, incluyendo type="hidden")
-  let m = html.match(/name=["']_csrf["'][^>]*?\bvalue=["']([^"']+)["']/i);
-  if (m) return m[1];
-
-  // 2. value="..." ... name="_csrf"  (orden inverso)
-  m = html.match(/\bvalue=["']([^"']+)["'][^>]*?name=["']_csrf["']/i);
-  if (m) return m[1];
-
-  // 3. Token en JS/JSON embebido: "_csrf":"X" o "csrfToken":"X" o csrf: "X"
-  m = html.match(/["']?csrf(?:[_-]?token)?["']?\s*[:=]\s*["']([^"']+)["']/i);
-  if (m) return m[1];
-
-  // 4. Meta tag: <meta name="csrf-token" content="X"> o <meta name="_csrf" content="X">
-  m = html.match(/<meta[^>]+name=["']_?csrf(?:-token)?["'][^>]+content=["']([^"']+)["']/i);
-  if (m) return m[1];
-  m = html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']_?csrf(?:-token)?["']/i);
-  if (m) return m[1];
-
-  // 5. window.csrfToken = "X" o window._csrf = "X"
-  m = html.match(/window\._?csrf(?:Token)?\s*=\s*["']([^"']+)["']/i);
-  if (m) return m[1];
-
-  // 6. data-csrf="X" o data-csrf-token="X"
-  m = html.match(/data-csrf(?:-token)?=["']([^"']+)["']/i);
-  if (m) return m[1];
-
-  // 7. Cualquier input hidden con "csrf" en el name (más genérico, último recurso)
-  m = html.match(/<input[^>]+type=["']hidden["'][^>]+name=["'][^"']*csrf[^"']*["'][^>]+value=["']([^"']+)["']/i);
-  if (m) return m[1];
-  m = html.match(/<input[^>]+name=["'][^"']*csrf[^"']*["'][^>]+type=["']hidden["'][^>]+value=["']([^"']+)["']/i);
-  if (m) return m[1];
-  m = html.match(/<input[^>]+name=["'][^"']*csrf[^"']*["'][^>]+value=["']([^"']+)["']/i);
-  if (m) return m[1];
-
-  return null;
-}
-
-function extractCookies(res: Response): string {
-  // Node 18+ expone getSetCookie() que devuelve cada Set-Cookie header por separado.
-  // Fallback a get("set-cookie") que puede devolver solo el primero.
-  let rawValues: string[] = [];
-  if (typeof (res.headers as unknown as { getSetCookie?: unknown }).getSetCookie === "function") {
-    rawValues = (res.headers as unknown as { getSetCookie(): string[] }).getSetCookie();
-  } else {
-    const combined = res.headers.get("set-cookie") ?? "";
-    // Cuando vienen múltiples cookies en un solo string, separar por coma
-    rawValues = combined ? combined.split(/,(?=[^ ][^;]*=)/) : [];
-  }
-  return rawValues
-    .map((c) => c.split(";")[0].trim())
-    .filter(Boolean)
-    .join("; ");
-}
-
-function mergeCookieStrings(...parts: string[]): string {
-  const map = new Map<string, string>();
-  for (const part of parts) {
-    if (!part) continue;
-    for (const cookie of part.split("; ")) {
-      const [key] = cookie.split("=");
-      if (key) map.set(key.trim(), cookie.trim());
-    }
-  }
-  return Array.from(map.values()).join("; ");
 }
