@@ -250,8 +250,18 @@ async function postSession(session) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session, ttlHours: TTL_HOURS, email: APP_USER_EMAIL }),
   });
-  const json = await res.json().catch(() => ({}));
+  const raw = await res.text();
+  let json;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    die(
+      `El endpoint no devolvió JSON (status ${res.status}). ¿Está deployado /api/fitness/garmin-session ` +
+        `en ${APP_URL}? Respuesta:\n${raw.slice(0, 300)}`
+    );
+  }
   if (!res.ok) die(`El endpoint respondió ${res.status}: ${json.error || JSON.stringify(json)}`);
+  if (json.success !== true) die(`Respuesta inesperada del endpoint: ${JSON.stringify(json)}`);
   return json;
 }
 
