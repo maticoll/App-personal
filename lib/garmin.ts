@@ -54,35 +54,29 @@ export type GarminStatus = {
 // --- Constantes ---
 
 const GARMIN_SSO_URL = "https://sso.garmin.com/sso";
+const GARMIN_SSO_EMBED_URL = `${GARMIN_SSO_URL}/embed`;
+const GARMIN_SSO_ORIGIN = "https://sso.garmin.com"; // Origin válido = esquema+host, SIN path
 const GARMIN_CONNECT_URL = "https://connect.garmin.com";
 const SESSION_TTL_MS = 23 * 60 * 60 * 1000; // 23 horas
 
-// SSO_PARAMS para el GET inicial a /signin (renderiza el form HTML con _csrf)
-const SSO_PARAMS = new URLSearchParams({
+// Params del GET a /sso/embed — establece cookies iniciales (Cloudflare + GARMIN-SSO-GUID)
+const SSO_EMBED_PARAMS = new URLSearchParams({
   id: "gauth-widget",
-  embedWidget: "false",         // false → Garmin devuelve HTML estático con el form
-  clientId: "GarminConnect",
-  locale: "es_AR",
+  embedWidget: "true",
   gauthHost: GARMIN_SSO_URL,
-  service: `${GARMIN_CONNECT_URL}/modern/`,
-  source: `${GARMIN_CONNECT_URL}/signin/`,
-  redirectAfterAccountLoginUrl: `${GARMIN_CONNECT_URL}/modern/`,
-  redirectAfterAccountCreationUrl: `${GARMIN_CONNECT_URL}/modern/`,
-  rememberMeShown: "true",
-  rememberMeChecked: "false",
-  createAccountShown: "true",
-  openCreateAccount: "false",
-  displayNameShown: "false",
-  initialFocus: "true",
-  generateExtraServiceTicket: "true",
-  generateTwoExtraServiceTickets: "false",
-  generateNoServiceTicket: "false",
-  globalOptInShown: "true",
-  globalOptInChecked: "false",
-  mobile: "false",
-  connectLegalTerms: "true",
-  showTermsOfUse: "false",
-  showPrivacyPolicy: "false",
+});
+
+// Params del GET/POST a /sso/signin (renderiza el form con _csrf y procesa el login).
+// Replican exactamente lo que usa garth (cliente de referencia): embedWidget=true y
+// service/source/redirect apuntando todos a /sso/embed.
+const SSO_SIGNIN_PARAMS = new URLSearchParams({
+  id: "gauth-widget",
+  embedWidget: "true",
+  gauthHost: GARMIN_SSO_EMBED_URL,
+  service: GARMIN_SSO_EMBED_URL,
+  source: GARMIN_SSO_EMBED_URL,
+  redirectAfterAccountLoginUrl: GARMIN_SSO_EMBED_URL,
+  redirectAfterAccountCreationUrl: GARMIN_SSO_EMBED_URL,
 });
 
 // Cache en memoria (se invalida si el proceso reinicia)
@@ -155,11 +149,17 @@ export async function invalidateGarminSession(userId: string): Promise<void> {
 }
 
 /**
- * Flujo SSO de Garmin Connect (no oficial).
+ * Flujo SSO de Garmin Connect (no oficial), alineado con garth.
  *
- * Paso 1: GET embed form → obtener CSRF token
- * Paso 2: POST login con credenciales + CSRF
- * Paso 3: Canjear ticket por cookies de sesión
+ * Paso 0: GET /sso/embed   → establece cookies de Cloudflare + GARMIN-SSO-GUID
+ * Paso 1: GET /sso/signin  → HTML del form con el _csrf
+ * Paso 2: POST /sso/signin → login con credenciales + CSRF, devuelve el ticket
+ * Paso 3: GET /modern/?ticket=… → canjea el ticket por cookies de sesión de Connect
+ *
+ * Claves anti-Cloudflare (por las que el POST devolvía 403 instantáneo):
+ *   - Origin debe ser solo esquema+host (sin /sso). Un Origin con path = bloqueo WAF.
+ *   - Hay que visitar /sso/embed ANTES del POST para tener las cookies de clearance.
+ *   - No fijar Accept-Encoding a mano: deja que undici descomprima la respuesta.
  */
 async function authenticateGarminSSO(
   email: string,
@@ -169,26 +169,40 @@ async function authenticateGarminSSO(
   const UA =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-  // Headers comunes browser-like para pasar Cloudflare
+  // Headers comunes browser-like. OJO: sin Accept-Encoding manual — si se fija a mano,
+  // undici no descomprime y .text() devolvería bytes crudos.
   const BROWSER_HEADERS = {
     "User-Agent": UA,
-    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    Accept:
+      "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "es-AR,es;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Cache-Control": "no-cache",
-    Pragma: "no-cache",
     "Upgrade-Insecure-Requests": "1",
   };
 
-  // Paso 1: GET /signin (con embedWidget=false) → devuelve HTML estático con el form y _csrf
-  const signinUrl = `${GARMIN_SSO_URL}/signin?${SSO_PARAMS}`;
-  const signinGetRes = await fetch(signinUrl, {
+  // Paso 0: GET /sso/embed → cookies de Cloudflare/Garmin que el POST necesita presentar.
+  const embedUrl = `${GARMIN_SSO_EMBED_URL}?${SSO_EMBED_PARAMS}`;
+  const embedRes = await fetch(embedUrl, {
     headers: {
       ...BROWSER_HEADERS,
+      Referer: `${GARMIN_CONNECT_URL}/`,
       "sec-fetch-dest": "document",
       "sec-fetch-mode": "navigate",
       "sec-fetch-site": "none",
       "sec-fetch-user": "?1",
+    },
+  });
+  let cookies = extractCookies(embedRes);
+
+  // Paso 1: GET /sso/signin → HTML estático con el form y el _csrf
+  const signinUrl = `${GARMIN_SSO_URL}/signin?${SSO_SIGNIN_PARAMS}`;
+  const signinGetRes = await fetch(signinUrl, {
+    headers: {
+      ...BROWSER_HEADERS,
+      Cookie: cookies,
+      Referer: embedUrl,
+      "sec-fetch-dest": "iframe",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-site": "same-origin",
     },
   });
 
@@ -206,32 +220,25 @@ async function authenticateGarminSSO(
         `La estructura del SSO puede haber cambiado (HTML: ${signinHtml.length} chars)`
     );
   }
-  const step1Cookies = extractCookies(signinGetRes);
+  cookies = mergeCookieStrings(cookies, extractCookies(signinGetRes));
 
-  // Paso 2: POST con credenciales al mismo /signin
+  // Paso 2: POST con credenciales al mismo /signin (con los MISMOS params en la URL).
   const loginBody = new URLSearchParams({
     username: email,
     password,
-    embed: "false",
+    embed: "true",
     _csrf: csrf,
-    id: "gauth-widget",
-    clientId: "GarminConnect",
-    gauthHost: GARMIN_SSO_URL,
-    service: `${GARMIN_CONNECT_URL}/modern/`,
-    source: `${GARMIN_CONNECT_URL}/signin/`,
-    redirectAfterAccountLoginUrl: `${GARMIN_CONNECT_URL}/modern/`,
-    redirectAfterAccountCreationUrl: `${GARMIN_CONNECT_URL}/modern/`,
   });
 
-  const loginRes = await fetch(`${GARMIN_SSO_URL}/signin`, {
+  const loginRes = await fetch(signinUrl, {
     method: "POST",
     headers: {
       ...BROWSER_HEADERS,
       "Content-Type": "application/x-www-form-urlencoded",
-      Cookie: step1Cookies,
-      Origin: GARMIN_SSO_URL,
+      Cookie: cookies,
+      Origin: GARMIN_SSO_ORIGIN, // ← solo esquema+host (antes incluía /sso = 403 de Cloudflare)
       Referer: signinUrl,
-      "sec-fetch-dest": "document",
+      "sec-fetch-dest": "iframe",
       "sec-fetch-mode": "navigate",
       "sec-fetch-site": "same-origin",
       "sec-fetch-user": "?1",
@@ -240,28 +247,34 @@ async function authenticateGarminSSO(
     redirect: "manual",
   });
 
-  const step2Cookies = extractCookies(loginRes);
-  const combinedCookies = mergeCookieStrings(step1Cookies, step2Cookies);
+  cookies = mergeCookieStrings(cookies, extractCookies(loginRes));
 
-  // Extraer ticket
+  // Extraer ticket: primero del header Location, si no del HTML (formato embed?ticket=…)
   let ticket = "";
-  let loginHtml = "";
   const locationHeader = loginRes.headers.get("location") ?? "";
-  const ticketFromLocation = locationHeader.match(/ticket=([^&"]+)/);
+  const ticketFromLocation = locationHeader.match(/ticket=([^&"']+)/);
+  let loginHtml = "";
   if (ticketFromLocation) {
     ticket = ticketFromLocation[1];
   } else {
-    // Intentar desde el HTML embebido (body se consume aquí)
     loginHtml = await loginRes.text();
-    const ticketFromHtml = loginHtml.match(/ticket=([A-Z0-9-]+)/);
+    const ticketFromHtml =
+      loginHtml.match(/embed\?ticket=([^"'&]+)/) ??
+      loginHtml.match(/ticket=([A-Za-z0-9-]+)/);
     if (ticketFromHtml) ticket = ticketFromHtml[1];
   }
 
   if (!ticket) {
     console.error(
       `[Garmin SSO] Login POST status: ${loginRes.status}, location: ${locationHeader || "(none)"}\n` +
-      `[Garmin SSO] Login response body (first 1500):\n${loginHtml.slice(0, 1500)}`
+        `[Garmin SSO] Login response body (first 1500):\n${loginHtml.slice(0, 1500)}`
     );
+    if (loginRes.status === 403) {
+      throw new Error(
+        "Garmin bloqueó el login con 403 (Cloudflare). Suele pasar al autenticar desde una " +
+          "IP de datacenter como Vercel. Si persiste, hay que cambiar de estrategia (ver nota en lib/garmin.ts)."
+      );
+    }
     throw new Error(
       "Autenticación Garmin fallida. Verificá que GARMIN_EMAIL y GARMIN_PASSWORD son correctos. " +
         "Si recientemente cambiaste la contraseña, actualizá las variables de entorno."
@@ -274,14 +287,13 @@ async function authenticateGarminSSO(
     {
       headers: {
         "User-Agent": UA,
-        Cookie: combinedCookies,
+        Cookie: cookies,
       },
       redirect: "manual",
     }
   );
 
-  const step3Cookies = extractCookies(ticketRes);
-  const finalCookies = mergeCookieStrings(combinedCookies, step3Cookies);
+  const finalCookies = mergeCookieStrings(cookies, extractCookies(ticketRes));
 
   if (
     !finalCookies.includes("GARMIN-SSO") &&
