@@ -1313,20 +1313,28 @@ export async function deleteWorkout(id: string): Promise<void> {
 /** Upsert de workout desde una actividad de Garmin */
 export async function upsertWorkoutFromGarmin(
   userId: string,
-  activity: {
-    garminActivityId: string;
-    date: Date;
-    type: "GYM" | "RUNNING" | "SWIMMING" | "WALKING" | "CYCLING" | "OTHER";
-    title: string;
-    durationSeconds: number;
-    distanceMeters: number | null;
-    calories: number | null;
-    steps: number | null;
-  }
+  activity: import("@/lib/garmin").GarminActivityData
 ): Promise<void> {
   const durationMinutes = Math.round(activity.durationSeconds / 60);
-  const distanceKm =
-    activity.distanceMeters ? activity.distanceMeters / 1000 : null;
+  const distanceKm = activity.distanceMeters ? activity.distanceMeters / 1000 : null;
+
+  // Métricas hardware: Garmin es fuente de verdad → se escriben siempre.
+  const garminFields = {
+    durationMinutes,
+    ...(distanceKm !== null && { distanceKm }),
+    ...(activity.calories !== null && { calories: activity.calories }),
+    avgHr: activity.avgHr,
+    maxHr: activity.maxHr,
+    elevationGainM: activity.elevationGainM,
+    avgSpeedMps: activity.avgSpeedMps,
+    maxSpeedMps: activity.maxSpeedMps,
+    movingSeconds: activity.movingSeconds,
+    cadence: activity.cadence,
+    locationName: activity.locationName,
+    steps: activity.steps,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    garminMetrics: (activity.metrics ?? undefined) as any,
+  };
 
   const existing = await db.workout.findFirst({
     where: { garminActivityId: activity.garminActivityId },
@@ -1335,11 +1343,7 @@ export async function upsertWorkoutFromGarmin(
   if (existing) {
     await db.workout.update({
       where: { id: existing.id },
-      data: {
-        durationMinutes,
-        ...(distanceKm !== null && { distanceKm }),
-        ...(activity.calories !== null && { calories: activity.calories }),
-      },
+      data: garminFields as Parameters<typeof db.workout.update>[0]["data"],
     });
   } else {
     await db.workout.create({
@@ -1347,13 +1351,10 @@ export async function upsertWorkoutFromGarmin(
         userId,
         date: activity.date,
         type: activity.type,
-        durationMinutes,
-        ...(distanceKm !== null && { distanceKm }),
-        ...(activity.calories !== null && { calories: activity.calories }),
         garminActivityId: activity.garminActivityId,
-        // Campos Sesión 4 (disponibles tras db:push)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...({ title: activity.title, source: "GARMIN", steps: activity.steps } as any),
+        title: activity.title,
+        source: "GARMIN",
+        ...garminFields,
       } as Parameters<typeof db.workout.create>[0]["data"],
     });
   }
