@@ -586,6 +586,14 @@ const GARMIN_ACTIVITY_TYPE_MAP: Record<
   indoor_cardio: "GYM",
   fitness_equipment: "GYM",
   yoga: "OTHER",
+  resort_snowboarding: "OTHER",
+  resort_skiing: "OTHER",
+  backcountry_snowboarding: "OTHER",
+  mountain_biking: "CYCLING",
+  gravel_cycling: "CYCLING",
+  cyclocross: "CYCLING",
+  elliptical: "GYM",
+  stair_climbing: "GYM",
   other: "OTHER",
 };
 
