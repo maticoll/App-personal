@@ -1,4 +1,4 @@
-import PageSkeleton from "@/components/ui/PageSkeleton";
+import ScoringSkeleton from "@/components/ui/skeletons/ScoringSkeleton";
 export default function Loading() {
-  return <PageSkeleton rows={4} />;
+  return <ScoringSkeleton />;
 }
