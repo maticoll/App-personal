@@ -87,9 +87,9 @@ function StatCard({ label, amount, trend, icon: Icon, color }: {
   icon: React.ElementType; color: string;
 }) {
   return (
-    <div className="flex-1 min-w-[140px] bg-[#1A1D27] border border-white/[0.06] rounded-xl p-4">
-      <p className="text-[11px] font-bold tracking-widest text-[#6B7280] uppercase mb-1">{label}</p>
-      <p className={cn("text-lg font-bold", color)}>{fmt(amount)}</p>
+    <div className="bg-[#1A1D27] border border-white/[0.06] rounded-xl p-3 sm:p-4 sm:flex-1 sm:min-w-[140px]">
+      <p className="text-[10px] sm:text-[11px] font-bold tracking-widest text-[#6B7280] uppercase mb-1">{label}</p>
+      <p className={cn("text-sm sm:text-lg font-bold truncate", color)}>{fmt(amount)}</p>
       {trend !== undefined && trend !== null && <TrendChip value={trend} />}
     </div>
   );
@@ -414,7 +414,7 @@ export function FinancesModuleClient({
 
       {/* ── Stats row ──────────────────────────────────────────── */}
       {monthly ? (
-        <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4">
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-3 sm:overflow-x-auto sm:-mx-4 sm:px-4 sm:pb-1">
           <StatCard label="Ingresos" amount={monthly.totalIncome}
             trend={incomeTrend} icon={TrendingUp} color="text-[#c0c1ff]" />
           <StatCard label="Gastos" amount={monthly.totalExpenses}

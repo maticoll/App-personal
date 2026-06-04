@@ -154,20 +154,20 @@ export default async function DashboardPage() {
     <div className="animate-fade-in">
 
       {/* Saludo */}
-      <section className="mb-10">
-        <h1 className="text-2xl font-bold text-on-surface tracking-tight">
+      <section className="mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-on-surface tracking-tight">
           {saludo}, {firstName} {emoji}
         </h1>
         <p className="text-sm text-on-surface-variant mt-0.5 capitalize">{dateLabel}</p>
       </section>
 
       {/* Score Ring */}
-      <section className="flex flex-col items-center mb-10">
+      <section className="flex flex-col items-center mb-6">
         <GlobalScoreRing score={todayScore?.global ?? null} size="lg" />
       </section>
 
       {/* Bento Grid 2x3 */}
-      <div className="grid grid-cols-2 gap-3 mb-10">
+      <div className="grid grid-cols-2 gap-3 mb-6">
         {MODULES.map(({ href, label, icon, color, key }) => {
           const score =
             key === "sleep" ? todayScore?.sleep :
@@ -183,17 +183,17 @@ export default async function DashboardPage() {
             <Link
               key={href}
               href={href}
-              className="glass-card rounded-2xl p-4 flex flex-col justify-between aspect-square active:scale-[0.97] transition-all duration-150"
+              className="glass-card rounded-2xl p-3.5 flex flex-col justify-between aspect-square active:scale-[0.97] transition-all duration-150"
             >
               <div className="flex justify-between items-start">
                 <span
-                  className="text-[11px] font-bold uppercase tracking-widest"
+                  className="text-[10px] sm:text-[11px] font-bold uppercase tracking-widest leading-tight"
                   style={{ color }}
                 >
                   {label}
                 </span>
                 <span
-                  className="material-symbols-outlined text-[22px]"
+                  className="material-symbols-outlined text-[20px] sm:text-[22px]"
                   style={{ color }}
                 >
                   {icon}
@@ -201,14 +201,14 @@ export default async function DashboardPage() {
               </div>
               <div>
                 {score !== null && score !== undefined ? (
-                  <h3 className="text-2xl font-bold text-on-surface leading-none">
+                  <h3 className="text-[22px] sm:text-2xl font-bold text-on-surface leading-none">
                     {score}
-                    <span className="text-sm font-normal text-on-surface-variant ml-1">/100</span>
+                    <span className="text-xs sm:text-sm font-normal text-on-surface-variant ml-1">/100</span>
                   </h3>
                 ) : (
                   <h3 className="text-xl font-semibold text-on-surface leading-none">&mdash;</h3>
                 )}
-                <p className="text-[11px] text-on-surface-variant mt-1.5 leading-snug line-clamp-2">
+                <p className="text-[10px] sm:text-[11px] text-on-surface-variant mt-1.5 leading-snug line-clamp-2">
                   {summary}
                 </p>
               </div>
@@ -218,7 +218,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Bloque de Tareas (sin score) */}
-      <div className="mb-10">
+      <div className="mb-6">
         <TasksBlock initialTasks={tasksData} projects={activeProjects} />
       </div>
 

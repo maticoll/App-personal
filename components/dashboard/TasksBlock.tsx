@@ -135,24 +135,26 @@ export default function TasksBlock({ initialTasks, projects }: Props) {
                 <button
                   onClick={() => handleToggle(task.id)}
                   disabled={task.done || loading}
-                  className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${
+                  className={`-m-1 p-1 shrink-0 flex items-center justify-center transition-colors rounded-full`}
+                  aria-label="Marcar tarea como hecha"
+                >
+                  <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${
                     task.done
                       ? "border-green-500 bg-green-500"
                       : "border-outline hover:border-amber-400"
-                  }`}
-                  aria-label="Marcar tarea como hecha"
-                >
-                  {task.done && (
-                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12">
-                      <path
-                        d="M2 6l3 3 5-5"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  )}
+                  }`}>
+                    {task.done && (
+                      <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12">
+                        <path
+                          d="M2 6l3 3 5-5"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    )}
+                  </span>
                 </button>
                 <div className="flex-1 min-w-0">
                   <p
@@ -195,14 +197,14 @@ export default function TasksBlock({ initialTasks, projects }: Props) {
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder="Nueva tarea..."
-            className="w-full text-sm bg-surface-container-high/50 border border-outline-variant/20 rounded-lg px-3 py-2 text-on-surface placeholder:text-outline focus:outline-none focus:border-amber-400/50 transition-colors"
+            className="w-full text-sm bg-surface-container-high/50 border border-outline-variant/20 rounded-lg px-3 py-2.5 text-on-surface placeholder:text-outline focus:outline-none focus:border-amber-400/50 transition-colors"
             disabled={creating}
           />
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-stretch">
             <select
               value={selectedProjectId}
               onChange={(e) => setSelectedProjectId(e.target.value)}
-              className="flex-1 text-xs bg-surface-container-high/50 border border-outline-variant/20 rounded-lg px-2 py-1.5 text-on-surface-variant focus:outline-none focus:border-amber-400/50 transition-colors"
+              className="flex-1 min-w-0 text-xs bg-surface-container-high/50 border border-outline-variant/20 rounded-lg px-2 py-2 text-on-surface-variant focus:outline-none focus:border-amber-400/50 transition-colors"
               disabled={creating}
             >
               {projects.map((p) => (
@@ -214,7 +216,7 @@ export default function TasksBlock({ initialTasks, projects }: Props) {
             <button
               type="submit"
               disabled={!newTitle.trim() || creating}
-              className="px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-400 text-xs font-semibold hover:bg-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="shrink-0 px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 text-xs font-semibold hover:bg-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors active:scale-95"
             >
               {creating ? "..." : "Agregar"}
             </button>

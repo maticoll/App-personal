@@ -712,7 +712,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus, goals:
       <SectionCard title="Mis objetivos" icon={Target} defaultOpen={false}>
         <div className="space-y-1 pt-2">
           <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-3 pb-1">Sueno</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <Field label="Horas objetivo">
               <input type="number" step="0.5" min="4" max="12"
                 value={goals.sleepTargetHours}
@@ -788,7 +788,7 @@ export function SettingsClient({ user, settings: initial, calendarStatus, goals:
           </div>
 
           <p className="text-xs font-semibold text-outline uppercase tracking-wider pt-4 pb-1">Finanzas</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <Field label="Ingreso mensual ($)">
               <input type="number" step="100" min="0"
                 value={goals.financesMonthlyIncome}

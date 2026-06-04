@@ -24,7 +24,7 @@ export function Header({ userImage, userName }: HeaderProps = {}) {
               </div>
             )}
           </div>
-          <span className="font-bold tracking-tighter text-primary text-2xl">
+          <span className="font-bold tracking-tighter text-primary text-xl sm:text-2xl truncate max-w-[150px] sm:max-w-none">
             {userName?.split(" ")[0] ?? "CLAUDIO"}
           </span>
         </div>
