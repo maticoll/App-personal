@@ -1,4 +1,4 @@
-import PageSkeleton from "@/components/ui/PageSkeleton";
+import SettingsSkeleton from "@/components/ui/skeletons/SettingsSkeleton";
 export default function Loading() {
-  return <PageSkeleton rows={4} />;
+  return <SettingsSkeleton />;
 }
