@@ -1,77 +1,19 @@
 "use client";
 
 import { useState } from "react";
-
-type ActivityType = "GYM" | "RUNNING" | "SWIMMING" | "WALKING" | "CYCLING";
-
-const ACTIVITIES: { type: ActivityType; icon: string; label: string; color: string }[] = [
-  { type: "GYM",      icon: "fitness_center",  label: "Gym",     color: "#06B6D4" },
-  { type: "RUNNING",  icon: "directions_run",  label: "Correr",  color: "#FB923C" },
-  { type: "SWIMMING", icon: "pool",            label: "Nadar",   color: "#60A5FA" },
-  { type: "WALKING",  icon: "directions_walk", label: "Caminar", color: "#34D399" },
-  { type: "CYCLING",  icon: "pedal_bike",      label: "Bike",    color: "#A78BFA" },
-];
+import Link from "next/link";
+import { ACTIVITY_ORDER, ACTIVITIES } from "@/lib/fitness-activities";
 
 type Props = { onLogged: () => void };
 
 export default function FitnessQuickActions({ onLogged }: Props) {
   const [nlpText, setNlpText] = useState("");
-  const [loading, setLoading] = useState<"gym" | "nlp" | "activity" | null>(null);
-  const [selectedActivity, setSelectedActivity] = useState<ActivityType | null>(null);
-  const [duration, setDuration] = useState("");
-  const [distance, setDistance] = useState("");
+  const [loading, setLoading] = useState<"nlp" | null>(null);
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const flash = (ok: boolean, msg: string) => {
     setFeedback({ ok, msg });
     setTimeout(() => setFeedback(null), 4000);
-  };
-
-  // ── Gym directo ───────────────────────────────────────────────
-  const handleGym = async () => {
-    setLoading("gym");
-    try {
-      const res = await fetch("/api/fitness/workout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "GYM" }),
-      });
-      if (!res.ok) throw new Error();
-      flash(true, "¡Sesión de gym iniciada!");
-      onLogged();
-    } catch {
-      flash(false, "Error al registrar gym");
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  // ── Actividad cardio ──────────────────────────────────────────
-  const handleActivity = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedActivity) return;
-    setLoading("activity");
-    try {
-      const res = await fetch("/api/fitness/workout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: selectedActivity,
-          ...(duration && { durationMinutes: parseInt(duration) }),
-          ...(distance && { distanceKm: parseFloat(distance) }),
-        }),
-      });
-      if (!res.ok) throw new Error();
-      flash(true, `✅ ${ACTIVITIES.find(a => a.type === selectedActivity)?.label} registrada`);
-      setSelectedActivity(null);
-      setDuration("");
-      setDistance("");
-      onLogged();
-    } catch {
-      flash(false, "Error al registrar");
-    } finally {
-      setLoading(null);
-    }
   };
 
   // ── NLP exercise log ──────────────────────────────────────────
@@ -97,8 +39,6 @@ export default function FitnessQuickActions({ onLogged }: Props) {
     }
   };
 
-  const needsDistance = selectedActivity && ["RUNNING", "SWIMMING", "CYCLING", "WALKING"].includes(selectedActivity);
-
   return (
     <div className="space-y-4">
 
@@ -108,58 +48,21 @@ export default function FitnessQuickActions({ onLogged }: Props) {
           Registrar actividad
         </span>
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-          {ACTIVITIES.map(({ type, icon, label, color }) => (
-            <button
-              key={type}
-              onClick={() => {
-                if (type === "GYM") { handleGym(); return; }
-                setSelectedActivity(selectedActivity === type ? null : type);
-              }}
-              disabled={loading === "gym"}
-              className="flex-shrink-0 flex flex-col items-center gap-1.5 px-4 py-2.5 rounded-xl transition-all active:scale-90"
-              style={{
-                background: selectedActivity === type
-                  ? `${color}25`
-                  : "rgba(255,255,255,0.04)",
-                border: `1px solid ${selectedActivity === type ? color + "50" : "rgba(255,255,255,0.08)"}`,
-                color,
-              }}
-            >
-              <span className="material-symbols-outlined text-[22px]">{icon}</span>
-              <span className="text-[11px] font-semibold">{label}</span>
-            </button>
-          ))}
+          {ACTIVITY_ORDER.map((slug) => {
+            const a = ACTIVITIES[slug];
+            return (
+              <Link
+                key={slug}
+                href={`/fitness/${slug}`}
+                className="flex-shrink-0 flex flex-col items-center gap-1.5 px-4 py-2.5 rounded-xl transition-all active:scale-90"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: a.color }}
+              >
+                <span className="material-symbols-outlined text-[22px]">{a.icon}</span>
+                <span className="text-[11px] font-semibold">{a.label}</span>
+              </Link>
+            );
+          })}
         </div>
-
-        {/* Formulario cardio (expandible) */}
-        {selectedActivity && selectedActivity !== "GYM" && (
-          <form onSubmit={handleActivity} className="space-y-2 pt-2 border-t border-white/10">
-            <div className={`grid gap-2 ${needsDistance ? "grid-cols-2" : "grid-cols-1"}`}>
-              <div>
-                <label className="text-xs text-on-surface-variant mb-1 block">Duración (min)</label>
-                <input
-                  type="number" value={duration} onChange={(e) => setDuration(e.target.value)}
-                  placeholder="45" min="1" className="input text-base"
-                />
-              </div>
-              {needsDistance && (
-                <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">Distancia (km)</label>
-                  <input
-                    type="number" step="0.1" value={distance} onChange={(e) => setDistance(e.target.value)}
-                    placeholder="5.0" min="0" className="input text-base"
-                  />
-                </div>
-              )}
-            </div>
-            <button
-              type="submit" disabled={loading === "activity"}
-              className="w-full py-2 rounded-full text-sm font-bold text-[#0D0F14] bg-accent-cyan active:scale-95 transition-all disabled:opacity-60"
-            >
-              {loading === "activity" ? "Guardando..." : "Guardar"}
-            </button>
-          </form>
-        )}
       </div>
 
       {/* ── NLP Quick Log (estilo Stitch) ────────────────────── */}
