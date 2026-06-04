@@ -199,6 +199,17 @@ model Workout {
   // Datos Garmin (sincronizado Sesión 4)
   garminActivityId String? @unique
 
+  // Métricas Garmin por actividad (sesión activity-pages)
+  avgHr          Int?
+  maxHr          Int?
+  elevationGainM Int?
+  avgSpeedMps    Float?
+  maxSpeedMps    Float?
+  movingSeconds  Int?
+  cadence        Float?   // SOLO running cadence (spm); swim cadence va en garminMetrics
+  locationName   String?
+  garminMetrics  Json?    // hrZones[5], vo2Max, strideLengthCm, nado: poolLengthM/activeLengths/avgSwolf/strokes/swimCadence
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

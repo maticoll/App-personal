@@ -15,11 +15,10 @@ import GymRoutineCard from "./GymRoutineCard";
 import FitnessQuickActions from "./FitnessQuickActions";
 import WeeklyVolumeChart from "./WeeklyVolumeChart";
 import WorkoutHistoryList from "./WorkoutHistoryList";
-import RoutineManager from "./RoutineManager";
 import SmartHabitAlert from "./SmartHabitAlert";
 import GarminSyncButton from "./GarminSyncButton";
 
-type Tab = "hoy" | "stats" | "rutinas";
+type Tab = "hoy" | "stats";
 
 type StepsInfo = { steps: number; goal: number } | null;
 
@@ -93,7 +92,6 @@ export default function FitnessModuleClient({
   const TABS = [
     { id: "hoy" as Tab, label: "Today" },
     { id: "stats" as Tab, label: "Stats" },
-    { id: "rutinas" as Tab, label: "Routines" },
   ];
 
   return (
@@ -180,14 +178,6 @@ export default function FitnessModuleClient({
             </h3>
             <WorkoutHistoryList workouts={history} onDeleted={handleWorkoutDeleted} />
           </div>
-        </div>
-      )}
-
-      {/* ── ROUTINES ──────────────────────────────────────────── */}
-      {tab === "rutinas" && (
-        <div className="space-y-4">
-          <h2 className="text-2xl font-bold text-on-surface tracking-tight">Library</h2>
-          <RoutineManager onChanged={handleLogged} />
         </div>
       )}
     </div>

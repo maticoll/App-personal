@@ -530,6 +530,17 @@ export async function checkGarminStatus(userId: string): Promise<GarminStatus> {
 // ACTIVIDADES (Fitness — Sesión 4)
 // ============================================================
 
+export type GarminActivityMetrics = {
+  hrZones?: number[];          // [z1..z5] segundos
+  vo2Max?: number;
+  strideLengthCm?: number;
+  poolLengthM?: number;
+  activeLengths?: number;
+  avgSwolf?: number;
+  strokes?: number;
+  swimCadence?: number;
+};
+
 /** Tipo de actividad Garmin mapeado a nuestro WorkoutType */
 export type GarminActivityData = {
   garminActivityId: string;
@@ -541,6 +552,16 @@ export type GarminActivityData = {
   calories: number | null;
   steps: number | null;
   startTimeGMT: Date;
+  // nuevos
+  avgHr: number | null;
+  maxHr: number | null;
+  elevationGainM: number | null;
+  avgSpeedMps: number | null;
+  maxSpeedMps: number | null;
+  movingSeconds: number | null;
+  cadence: number | null;       // running spm
+  locationName: string | null;
+  metrics: GarminActivityMetrics | null;
 };
 
 const GARMIN_ACTIVITY_TYPE_MAP: Record<
@@ -565,6 +586,14 @@ const GARMIN_ACTIVITY_TYPE_MAP: Record<
   indoor_cardio: "GYM",
   fitness_equipment: "GYM",
   yoga: "OTHER",
+  resort_snowboarding: "OTHER",
+  resort_skiing: "OTHER",
+  backcountry_snowboarding: "OTHER",
+  mountain_biking: "CYCLING",
+  gravel_cycling: "CYCLING",
+  cyclocross: "CYCLING",
+  elliptical: "GYM",
+  stair_climbing: "GYM",
   other: "OTHER",
 };
 
@@ -603,14 +632,31 @@ function parseGarminActivity(
   if (!id) return null;
 
   const typeKey =
-    ((item.activityType as Record<string, unknown>)?.typeKey as string) ??
-    "other";
+    ((item.activityType as Record<string, unknown>)?.typeKey as string) ?? "other";
   const type = GARMIN_ACTIVITY_TYPE_MAP[typeKey] ?? "OTHER";
 
   const startTimeStr = item.startTimeGMT as string | undefined;
   if (!startTimeStr) return null;
-
   const startTimeGMT = new Date(startTimeStr.replace(" ", "T") + "Z");
+
+  const num = (k: string): number | null => {
+    const v = item[k];
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  };
+
+  const zones = [1, 2, 3, 4, 5].map((z) => num(`hrTimeInZone_${z}`) ?? 0);
+  const hasZones = zones.some((z) => z > 0);
+
+  const metrics: GarminActivityMetrics = {};
+  if (hasZones) metrics.hrZones = zones;
+  if (num("vO2MaxValue") !== null) metrics.vo2Max = num("vO2MaxValue")!;
+  if (num("avgStrideLength") !== null) metrics.strideLengthCm = num("avgStrideLength")!;
+  if (num("poolLength") !== null) metrics.poolLengthM = num("poolLength")!;
+  if (num("activeLengths") !== null) metrics.activeLengths = num("activeLengths")!;
+  if (num("averageSwolf") !== null) metrics.avgSwolf = num("averageSwolf")!;
+  if (num("strokes") !== null) metrics.strokes = num("strokes")!;
+  if (num("averageSwimCadenceInStrokesPerMinute") !== null)
+    metrics.swimCadence = num("averageSwimCadenceInStrokesPerMinute")!;
 
   return {
     garminActivityId: String(id),
@@ -618,10 +664,19 @@ function parseGarminActivity(
     title: (item.activityName as string) ?? type,
     type,
     durationSeconds: Math.round((item.duration as number) ?? 0),
-    distanceMeters: (item.distance as number) ?? null,
-    calories: (item.calories as number) ?? null,
-    steps: (item.steps as number) ?? null,
+    distanceMeters: num("distance"),
+    calories: num("calories"),
+    steps: num("steps"),
     startTimeGMT,
+    avgHr: num("averageHR"),
+    maxHr: num("maxHR"),
+    elevationGainM: num("elevationGain") !== null ? Math.round(num("elevationGain")!) : null,
+    avgSpeedMps: num("averageSpeed"),
+    maxSpeedMps: num("maxSpeed"),
+    movingSeconds: num("movingDuration") !== null ? Math.round(num("movingDuration")!) : null,
+    cadence: num("averageRunningCadenceInStepsPerMinute"),
+    locationName: (item.locationName as string) ?? null,
+    metrics: Object.keys(metrics).length ? metrics : null,
   };
 }
 

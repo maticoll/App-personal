@@ -24,6 +24,15 @@ export type WorkoutWithExercises = {
   notes: string | null;
   source: string;
   garminActivityId: string | null;
+  avgHr: number | null;
+  maxHr: number | null;
+  elevationGainM: number | null;
+  avgSpeedMps: number | null;
+  maxSpeedMps: number | null;
+  movingSeconds: number | null;
+  cadence: number | null;
+  locationName: string | null;
+  garminMetrics: unknown | null;
   exercises: ExerciseWithSets[];
   createdAt: Date;
 };
@@ -155,6 +164,15 @@ function mapWorkout(w: any): WorkoutWithExercises {
     notes: w.notes ?? null,
     source: w.source ?? "MANUAL",
     garminActivityId: w.garminActivityId ?? null,
+    avgHr: w.avgHr ?? null,
+    maxHr: w.maxHr ?? null,
+    elevationGainM: w.elevationGainM ?? null,
+    avgSpeedMps: w.avgSpeedMps ?? null,
+    maxSpeedMps: w.maxSpeedMps ?? null,
+    movingSeconds: w.movingSeconds ?? null,
+    cadence: w.cadence ?? null,
+    locationName: w.locationName ?? null,
+    garminMetrics: w.garminMetrics ?? null,
     exercises: (w.exercises ?? []).map(mapExercise),
     createdAt: w.createdAt,
   };
@@ -1313,20 +1331,28 @@ export async function deleteWorkout(id: string): Promise<void> {
 /** Upsert de workout desde una actividad de Garmin */
 export async function upsertWorkoutFromGarmin(
   userId: string,
-  activity: {
-    garminActivityId: string;
-    date: Date;
-    type: "GYM" | "RUNNING" | "SWIMMING" | "WALKING" | "CYCLING" | "OTHER";
-    title: string;
-    durationSeconds: number;
-    distanceMeters: number | null;
-    calories: number | null;
-    steps: number | null;
-  }
+  activity: import("@/lib/garmin").GarminActivityData
 ): Promise<void> {
   const durationMinutes = Math.round(activity.durationSeconds / 60);
-  const distanceKm =
-    activity.distanceMeters ? activity.distanceMeters / 1000 : null;
+  const distanceKm = activity.distanceMeters ? activity.distanceMeters / 1000 : null;
+
+  // Métricas hardware: Garmin es fuente de verdad → se escriben siempre.
+  const garminFields = {
+    durationMinutes,
+    ...(distanceKm !== null && { distanceKm }),
+    ...(activity.calories !== null && { calories: activity.calories }),
+    avgHr: activity.avgHr,
+    maxHr: activity.maxHr,
+    elevationGainM: activity.elevationGainM,
+    avgSpeedMps: activity.avgSpeedMps,
+    maxSpeedMps: activity.maxSpeedMps,
+    movingSeconds: activity.movingSeconds,
+    cadence: activity.cadence,
+    locationName: activity.locationName,
+    ...(activity.steps !== null && { steps: activity.steps }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    garminMetrics: (activity.metrics ?? undefined) as any,
+  };
 
   const existing = await db.workout.findFirst({
     where: { garminActivityId: activity.garminActivityId },
@@ -1335,11 +1361,7 @@ export async function upsertWorkoutFromGarmin(
   if (existing) {
     await db.workout.update({
       where: { id: existing.id },
-      data: {
-        durationMinutes,
-        ...(distanceKm !== null && { distanceKm }),
-        ...(activity.calories !== null && { calories: activity.calories }),
-      },
+      data: garminFields as Parameters<typeof db.workout.update>[0]["data"],
     });
   } else {
     await db.workout.create({
@@ -1347,14 +1369,98 @@ export async function upsertWorkoutFromGarmin(
         userId,
         date: activity.date,
         type: activity.type,
-        durationMinutes,
-        ...(distanceKm !== null && { distanceKm }),
-        ...(activity.calories !== null && { calories: activity.calories }),
         garminActivityId: activity.garminActivityId,
-        // Campos Sesión 4 (disponibles tras db:push)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...({ title: activity.title, source: "GARMIN", steps: activity.steps } as any),
+        title: activity.title,
+        source: "GARMIN",
+        ...garminFields,
       } as Parameters<typeof db.workout.create>[0]["data"],
     });
   }
+}
+
+// -------------------------------------------------------
+// Agregaciones por tipo de actividad y stats de gym
+// -------------------------------------------------------
+
+export type ActivityTypeSummary = {
+  weekDistanceKm: number;
+  weekCount: number;
+  weekDurationMin: number;
+};
+
+const startOfWeek = (d: Date): Date => {
+  const x = startOfDay(d);
+  const day = (x.getDay() + 6) % 7; // lunes=0
+  x.setDate(x.getDate() - day);
+  return x;
+};
+
+/** Resumen de la semana actual para un tipo de actividad. */
+export async function getActivityWeekSummary(
+  userId: string,
+  type: LogActivityInput["type"]
+): Promise<ActivityTypeSummary> {
+  const from = startOfWeek(new Date());
+  const rows = await db.workout.findMany({
+    where: { userId, type, date: { gte: from } },
+  });
+  return {
+    weekDistanceKm: rows.reduce((s, w) => s + (w.distanceKm ?? 0), 0),
+    weekCount: rows.length,
+    weekDurationMin: rows.reduce((s, w) => s + (w.durationMinutes ?? 0), 0),
+  };
+}
+
+/** Última actividad registrada de un tipo (con exercises para gym). */
+export async function getLastActivityOfType(
+  userId: string,
+  type: LogActivityInput["type"]
+): Promise<WorkoutWithExercises | null> {
+  const w = await db.workout.findFirst({
+    where: { userId, type },
+    orderBy: { date: "desc" },
+    include: { exercises: { include: { sets: true }, orderBy: { order: "asc" } } },
+  });
+  return (w as unknown as WorkoutWithExercises) ?? null;
+}
+
+/** Historial de un tipo (N más recientes). */
+export async function getActivityHistory(
+  userId: string,
+  type: LogActivityInput["type"],
+  limit = 20
+): Promise<WorkoutWithExercises[]> {
+  const rows = await db.workout.findMany({
+    where: { userId, type },
+    orderBy: { date: "desc" },
+    take: limit,
+    include: { exercises: { include: { sets: true }, orderBy: { order: "asc" } } },
+  });
+  return rows as unknown as WorkoutWithExercises[];
+}
+
+export type GymStats = {
+  weekSessions: number;
+  totalVolumeKg: number;   // volumen de la última sesión
+  weekVolumeKg: number;    // volumen acumulado de la semana
+};
+
+/** Stats de gym recreadas para la página de Gym. PRs se difieren (YAGNI). */
+export async function getGymStats(userId: string): Promise<GymStats> {
+  const from = startOfWeek(new Date());
+  const sessions = await db.workout.findMany({
+    where: { userId, type: "GYM", date: { gte: from } },
+    orderBy: { date: "desc" },
+    include: { exercises: { include: { sets: true } } },
+  });
+  const volOf = (w: (typeof sessions)[number]) =>
+    w.exercises.reduce(
+      (s, e) => s + e.sets.reduce((ss, set) => ss + (set.weightKg ?? 0) * (set.reps ?? 0), 0),
+      0
+    );
+  return {
+    weekSessions: sessions.length,
+    totalVolumeKg: sessions.length ? Math.round(volOf(sessions[0])) : 0,
+    weekVolumeKg: Math.round(sessions.reduce((s, w) => s + volOf(w), 0)),
+  };
 }
