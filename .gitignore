@@ -45,3 +45,6 @@ prisma/*.db-journal
 # Codex (contiene API keys)
 .codex/
 .superpowers/
+
+# Datos temporales (JSON de Garmin, etc.)
+temp/
