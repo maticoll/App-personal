@@ -1349,7 +1349,7 @@ export async function upsertWorkoutFromGarmin(
     movingSeconds: activity.movingSeconds,
     cadence: activity.cadence,
     locationName: activity.locationName,
-    steps: activity.steps,
+    ...(activity.steps !== null && { steps: activity.steps }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     garminMetrics: (activity.metrics ?? undefined) as any,
   };
@@ -1450,6 +1450,7 @@ export async function getGymStats(userId: string): Promise<GymStats> {
   const from = startOfWeek(new Date());
   const sessions = await db.workout.findMany({
     where: { userId, type: "GYM", date: { gte: from } },
+    orderBy: { date: "desc" },
     include: { exercises: { include: { sets: true } } },
   });
   const volOf = (w: (typeof sessions)[number]) =>
