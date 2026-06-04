@@ -1,4 +1,4 @@
-import PageSkeleton from "@/components/ui/PageSkeleton";
+import FitnessSkeleton from "@/components/ui/skeletons/FitnessSkeleton";
 export default function Loading() {
-  return <PageSkeleton rows={4} />;
+  return <FitnessSkeleton />;
 }
