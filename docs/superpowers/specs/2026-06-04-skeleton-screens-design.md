@@ -1,13 +1,13 @@
 # Skeleton Screens — Spec de Diseño
 **Fecha:** 2026-06-04  
-**Estado:** Aprobado  
+**Estado:** Aprobado (v2 — post review)  
 **Páginas cubiertas:** 10 (`/`, `/sleep`, `/fitness`, `/nutrition`, `/projects`, `/ideas`, `/finances`, `/scoring`, `/tasks`, `/settings`)
 
 ---
 
 ## Contexto y problema
 
-Todas las páginas de la app ya tienen archivos `loading.tsx` de Next.js App Router, pero todos usan el mismo `PageSkeleton` genérico (4 cards rectangulares idénticas). Esto produce una experiencia de carga visualmente desconectada del contenido real: el usuario ve 4 bloques genéricos en lugar de la estructura real de la página.
+Todas las páginas de la app ya tienen archivos `loading.tsx` de Next.js App Router, pero todos usan el mismo `PageSkeleton` genérico (4 cards rectangulares idénticas). La excepción es `/tasks`, que no tiene `loading.tsx` y debe crearse. Esto produce una experiencia de carga visualmente desconectada del contenido real.
 
 El objetivo es reemplazar ese skeleton genérico por **skeleton screens específicos por página** que repliquen fielmente la estructura visual de cada módulo, con una animación shimmer premium.
 
@@ -17,11 +17,11 @@ El objetivo es reemplazar ese skeleton genérico por **skeleton screens específ
 
 | Decisión | Elección | Motivo |
 |----------|----------|--------|
-| Animación | **Shimmer** (ola de gradiente) | Más premium que `animate-pulse`. Estándar en Linear, Notion, Vercel. |
+| Animación | **Shimmer** — clase CSS `.skeleton-shimmer` en `globals.css` | Más premium que `animate-pulse`. NO se agrega una clase Tailwind `animate-shimmer` para evitar ambigüedad. |
 | Arquitectura | **Componente por página** + primitivos base | Separación de responsabilidades. Fácil de mantener por módulo. |
 | Colores skeleton | `#1c1f29` (surface-container) → `#272a34` (surface-container-high) | Ya existentes en el design system Stitch. |
-| Estructura | Réplica fiel del layout real | El skeleton debe ser "la página vacía", no una abstracción genérica. |
-| Responsividad | Mobile-first (mismas clases responsive que el contenido real) | La app es mobile-first. |
+| `Sk.Card` | **Solo shell estático** — NO aplica shimmer | La card es el contenedor glass (`glass-card rounded-2xl`). Solo los primitivos hoja (`Sk.Line`, `Sk.Circle`, `Sk.Block`) aplican `.skeleton-shimmer`. |
+| Accesibilidad | `aria-busy="true"` en el root de cada skeleton | Screen readers anuncian el estado de carga. |
 
 ---
 
@@ -42,13 +42,14 @@ components/ui/skeletons/
 ├── ScoringSkeleton.tsx
 ├── TasksSkeleton.tsx
 └── SettingsSkeleton.tsx
+
+app/(app)/tasks/loading.tsx   ← CREAR (no existe actualmente)
 ```
 
 ### Archivos a modificar
 
 ```
-tailwind.config.ts            ← agrega keyframe shimmer + clase animate-shimmer
-app/globals.css               ← clase .skeleton-shimmer con gradiente + keyframe
+app/globals.css               ← agrega @keyframes shimmer + .skeleton-shimmer
 app/(app)/loading.tsx         ← usa DashboardSkeleton
 app/(app)/sleep/loading.tsx   ← usa SleepSkeleton
 app/(app)/fitness/loading.tsx ← usa FitnessSkeleton
@@ -57,17 +58,17 @@ app/(app)/projects/loading.tsx  ← usa ProjectsSkeleton
 app/(app)/ideas/loading.tsx     ← usa IdeasSkeleton
 app/(app)/finances/loading.tsx  ← usa FinancesSkeleton
 app/(app)/scoring/loading.tsx   ← usa ScoringSkeleton
-app/(app)/tasks/loading.tsx     ← usa TasksSkeleton
 app/(app)/settings/loading.tsx  ← usa SettingsSkeleton
 ```
 
-`PageSkeleton.tsx` **no se elimina** — se mantiene como fallback genérico.
+**`PageSkeleton.tsx` no se elimina** — se mantiene como fallback genérico.  
+**`tailwind.config.ts` no se modifica** — el shimmer vive solo en `globals.css`.
 
 ---
 
 ## Implementación del shimmer
 
-### `app/globals.css`
+### `app/globals.css` — agregar al final
 
 ```css
 @keyframes shimmer {
@@ -88,43 +89,38 @@ app/(app)/settings/loading.tsx  ← usa SettingsSkeleton
 }
 ```
 
-### `tailwind.config.ts` (dentro de `theme.extend`)
-
-```ts
-animation: {
-  shimmer: "shimmer 1.6s ease-in-out infinite",
-},
-keyframes: {
-  shimmer: {
-    "0%":   { backgroundPosition: "-200% 0" },
-    "100%": { backgroundPosition: "200% 0" },
-  },
-},
-```
-
 ---
 
 ## SkeletonBase — Primitivos
 
-`components/ui/skeletons/SkeletonBase.tsx` exporta el objeto `Sk` con sub-componentes:
+`components/ui/skeletons/SkeletonBase.tsx` exporta el objeto `Sk` con sub-componentes. **Solo los primitivos hoja aplican `skeleton-shimmer`**. `Sk.Card` es un shell estático.
 
 ### API
 
-| Componente | Props | Uso |
-|------------|-------|-----|
-| `Sk.Line` | `w?: string`, `h?: string`, `className?: string` | Líneas de texto |
-| `Sk.Circle` | `size: number`, `className?: string` | Avatars, score ring, iconos |
-| `Sk.Block` | `h?: string`, `w?: string`, `className?: string` | Bloques de contenido (charts, imágenes) |
-| `Sk.Card` | `children`, `className?: string` | Shell de glass card con padding |
-| `Sk.TabNav` | `tabs?: number` | Placeholder de tab navigation (default 2 tabs) |
+| Componente | Props | Defaults | Uso |
+|------------|-------|---------|-----|
+| `Sk.Line` | `w?: string`, `h?: string`, `className?: string` | `h="h-4"`, `w="w-full"`, `rounded-lg` | Líneas de texto body |
+| `Sk.LineH` | igual que `Sk.Line` | `h="h-6"`, `w="w-full"`, `rounded-lg` | Líneas heading (h1/h2 level) |
+| `Sk.Circle` | `size: number`, `className?: string` | `rounded-full`, `flex-shrink-0` | Avatars, score ring, iconos, dots |
+| `Sk.Block` | `h?: string`, `w?: string`, `className?: string` | `h="h-16"`, `w="w-full"`, `rounded-xl` | Bloques de contenido (charts, áreas) |
+| `Sk.Card` | `children`, `className?: string` | `glass-card rounded-2xl p-4 space-y-3` | Shell de card — **sin shimmer** |
+| `Sk.TabNav` | `tabs?: number` | 2 | Tab nav placeholder (segmented control) |
 
-**Defaults:**
-- `Sk.Line`: `h="h-4"`, `w="w-full"`, rounded-lg
-- `Sk.Circle`: rounded-full, flex-shrink-0
-- `Sk.Block`: `h="h-16"`, `w="w-full"`, rounded-xl
-- `Sk.Card`: `glass-card rounded-2xl p-4 space-y-3`
+**`Sk.TabNav` estructura:**  
+```tsx
+<div className="flex p-1 bg-surface-container rounded-xl">
+  {Array.from({ length: tabs }).map((_, i) => (
+    <div key={i} className="flex-1 h-9 rounded-lg skeleton-shimmer" />
+  ))}
+</div>
+```
 
-Todos los primitivos aplican la clase `skeleton-shimmer`.
+**Root de cada skeleton page:**  
+```tsx
+<div className="space-y-6" aria-busy="true" aria-label="Cargando...">
+  {/* contenido */}
+</div>
+```
 
 ---
 
@@ -132,271 +128,363 @@ Todos los primitivos aplican la clase `skeleton-shimmer`.
 
 ### 1. Dashboard (`/`)
 
-Replica: saludo header, GlobalScoreRing, bento grid 2×3, TasksBlock.
+Replica: saludo header, GlobalScoreRing, bento grid 2×3, TasksBlock, Garmin Sync button.
 
 ```
-Sk.Line w-44           ← "Buenos dias, Matias ☀️"
-Sk.Line w-32 h-3       ← fecha
+space-y-6 aria-busy:
 
-Sk.Circle size=120     ← GlobalScoreRing (centrado)
+section:
+  Sk.LineH w-44          ← "Buenos dias, Matias ☀️"
+  Sk.Line w-32 h-3 mt-1  ← fecha
+
+section flex justify-center:
+  Sk.Circle size=120     ← GlobalScoreRing
 
 Grid grid-cols-2 gap-3:
-  × 6 Sk.Card aspect-square
-      flex justify-between:
-        Sk.Line w-16 h-2   ← label módulo
-        Sk.Circle size=20  ← icon
-      Sk.Line w-10 h-6     ← score "85"
-      Sk.Line w-24 h-2     ← summary text
+  × 6 Sk.Card (aspect-square — no shimmer en card)
+       flex justify-between:
+         Sk.Line w-16 h-2    ← label módulo
+         Sk.Circle size=20   ← icon
+       mt-auto:
+         Sk.LineH w-10       ← score "85"
+         Sk.Line w-24 h-2 mt-1.5  ← summary text
 
-Sk.Card                ← TasksBlock
-  Sk.Line w-28         ← "Tareas de la semana"
-  × 3 flex gap-2:
-      Sk.Circle size=16
-      Sk.Line w-48
+Sk.Card:
+  Sk.Line w-36           ← "Tareas de la semana"
+  space-y-2 mt-2:
+    × 3 flex gap-2 items-center:
+        Sk.Circle size=16
+        Sk.Line w-48
+
+flex justify-center:
+  Sk.Block h-11 w-44 rounded-full  ← Garmin Sync button
 ```
 
 ### 2. Sleep (`/sleep`)
 
-Replica: header, QuickActions (2 botones), TodayCard, WeekStats (4 pills), TabNav, 3 charts.
+Replica: header, QuickActions (2 botones pill), TodayCard, WeekStats (4 pills), TabNav, 3 charts.
 
 ```
-Header: Sk.Circle size=20 + Sk.Line w-16
+space-y-6 aria-busy:
 
-Sk.Card                ← QuickActions
+Header:
+  flex gap-2: Sk.Circle size=20 + Sk.LineH w-20
+
+Sk.Card:
   flex gap-3:
-    Sk.Block h-10 w-full rounded-full  × 2
+    Sk.Block h-10 w-full rounded-full  ← botón "Registrar"
+    Sk.Block h-10 w-full rounded-full  ← botón "Despertar"
 
-Sk.Card                ← TodayCard
-  Sk.Line w-24
-  Sk.Line h-8 w-16     ← "7h 30min"
-  flex gap-4: Sk.Block h-14 × 3      ← calidad/inicio/fin
+Sk.Card:
+  Sk.LineH w-24          ← "Hoy"
+  Sk.LineH h-8 w-20 mt-1 ← "7h 30min"
+  flex gap-4 mt-3:
+    × 3 Sk.Block h-14 w-full rounded-xl  ← calidad / inicio / fin
 
-Grid grid-cols-4:
-  × 4 Sk.Card text-center
-      Sk.Line h-5 w-8 mx-auto
+Grid grid-cols-4 gap-3:
+  × 4 Sk.Card p-3 text-center:
+      Sk.LineH h-5 w-8 mx-auto
       Sk.Line h-3 w-12 mx-auto
 
 Sk.TabNav              ← Gráficos | Historial
 
-Sk.Card h-40           ← DurationChart
-Sk.Card h-32           ← QualityChart
-Sk.Card h-32           ← TimingChart
+Sk.Card:
+  Sk.Block h-40          ← DurationChart
+
+Sk.Card:
+  Sk.Block h-32          ← QualityChart
+
+Sk.Card:
+  Sk.Block h-32          ← TimingChart
 ```
 
 ### 3. Fitness (`/fitness`)
 
-Replica: header, TabNav, StepsCard, GymRoutineCard, CTA button, QuickActions.
+Replica: header, TabNav (Today | Stats), StepsCard, GymRoutineCard, CTA button, FitnessQuickActions (carrusel de actividades).
 
 ```
-Header: Sk.Circle size=20 + Sk.Line w-20
+space-y-6 aria-busy:
+
+Header:
+  flex gap-2: Sk.Circle size=20 + Sk.LineH w-24
 
 Sk.TabNav              ← Today | Stats
 
-Sk.Card                ← StepsCard
-  flex gap-4:
-    Sk.Circle size=64  ← ring de pasos
+Sk.Card:               ← StepsCard
+  flex gap-4 items-center:
+    Sk.Circle size=64
     div space-y-2:
       Sk.Line w-24
-      Sk.Line h-6 w-32
-      Sk.Line h-2 w-full  ← progress bar
+      Sk.LineH h-6 w-32
+      Sk.Block h-2 w-full rounded-full  ← progress bar
 
-Sk.Card                ← GymRoutineCard
-  Sk.Line w-32
-  × 3 flex gap-2:
-      Sk.Circle size=16
-      Sk.Line w-40
-      Sk.Line w-20 ml-auto
+Sk.Card:               ← GymRoutineCard
+  Sk.LineH w-36
+  space-y-3 mt-2:
+    × 3 flex gap-2 items-center:
+        Sk.Circle size=16
+        Sk.Line w-40
+        Sk.Line w-20 ml-auto
 
 Sk.Block h-12 w-full rounded-full   ← CTA "Empezar workout"
 
-Sk.Card                ← FitnessQuickActions (NLP input)
-  Sk.Block h-10 rounded-lg
+Sk.Card:               ← FitnessQuickActions (carrusel actividades)
+  Sk.Line h-2 w-32     ← "Registrar actividad"
+  flex gap-2 overflow-hidden pb-1:
+    × 5 Sk.Block h-16 w-14 flex-shrink-0 rounded-xl  ← activity icon+label
 ```
 
 ### 4. Nutrition (`/nutrition`)
 
-Replica: header, WaterTracker, QuickActions, MealCards, MacrosChart, WeekStats.
+Replica: header, WaterTracker, QuickActions NLP, MealCards (3), MacrosChart, WeekStats.
 
 ```
-Header: Sk.Circle size=20 + Sk.Line w-24
+space-y-6 aria-busy:
 
-Sk.Card                ← WaterTracker
+Header:
+  flex gap-2: Sk.Circle size=20 + Sk.LineH w-24
+
+Sk.Card:               ← WaterTracker
   flex justify-between:
     Sk.Line w-24
     Sk.Line w-16
-  Sk.Block h-3 w-full rounded-full  ← progress bar
-  flex gap-2: Sk.Block h-8 rounded-full × 4  ← botones +0.5L
+  Sk.Block h-3 w-full rounded-full mt-2  ← progress bar
+  flex gap-2 mt-3:
+    × 4 Sk.Block h-8 w-full rounded-full
 
-Sk.Card                ← QuickActions
+Sk.Card:               ← NutritionQuickActions
   Sk.Block h-10 rounded-lg
 
-× 3 Sk.Card            ← MealLogCards
+× 3 Sk.Card:           ← MealLogCards
   flex justify-between:
-    Sk.Line w-20
+    Sk.LineH w-20
     Sk.Line w-16
-  Sk.Line h-3 w-32
+  Sk.Line h-3 w-40 mt-1
 
-Sk.Card                ← MacrosChart
+Sk.Card:               ← MacrosChart
   Sk.Block h-40
 
-Grid grid-cols-3:
-  × 3 Sk.Card          ← WeekStats
-      Sk.Line h-5 w-12 mx-auto
+Grid grid-cols-3 gap-3:
+  × 3 Sk.Card text-center:
+      Sk.LineH h-5 w-12 mx-auto
       Sk.Line h-3 w-16 mx-auto
 ```
 
 ### 5. Projects (`/projects`)
 
-Replica: header, lista de project cards activos.
+Replica: header, lista de 4 project cards activos.
 
 ```
-Header: Sk.Circle size=20 + Sk.Line w-24
+space-y-6 aria-busy:
 
-× 4 Sk.Card            ← ProjectCard
-  flex justify-between:
-    Sk.Line w-40
-    Sk.Block h-6 w-20 rounded-full  ← status badge
-  Sk.Line h-3 w-full
-  Sk.Line h-3 w-3/4
-  flex gap-2 mt-2:
-    Sk.Block h-5 w-16 rounded-full  ← tag
-    Sk.Line w-20 ml-auto h-3       ← "2 tareas"
+Header:
+  flex gap-2: Sk.Circle size=20 + Sk.LineH w-24
+
+space-y-3:
+  × 4 Sk.Card:
+      flex justify-between items-start:
+        Sk.LineH w-40
+        Sk.Block h-6 w-20 rounded-full   ← status badge
+      Sk.Line h-3 w-full mt-2
+      Sk.Line h-3 w-3/4
+      flex gap-2 mt-3:
+        Sk.Block h-5 w-16 rounded-full   ← tag
+        Sk.Line h-3 w-20 ml-auto        ← "2 tareas"
 ```
 
 ### 6. Ideas (`/ideas`)
 
-Replica: header, stats row (3 pills), capture form, filter tabs, search, idea cards.
+Replica: header, stats row (3 pills), capture form, filter tabs, search, 4 idea cards.
 
 ```
-Header: Sk.Circle size=20 + Sk.Line w-16
+space-y-6 aria-busy:
 
-Grid grid-cols-3:
-  × 3 Sk.Card text-center
-      Sk.Line h-6 w-8 mx-auto
+Header:
+  flex gap-2: Sk.Circle size=20 + Sk.LineH w-16
+
+Grid grid-cols-3 gap-3:
+  × 3 Sk.Card text-center:
+      Sk.LineH h-6 w-8 mx-auto
       Sk.Line h-3 w-14 mx-auto
 
-Sk.Card                ← Capture form
-  flex gap-2:
+Sk.Card:               ← Capture form
+  flex gap-2 items-center:
     Sk.Circle size=16
     Sk.Line w-24
-  Sk.Block h-16 rounded-lg     ← textarea
-  flex gap-2:
+  Sk.Block h-16 rounded-lg mt-2         ← textarea
+  flex gap-2 mt-3 flex-wrap:
     × 4 Sk.Block h-6 w-16 rounded-full  ← priority pills
     Sk.Block h-7 w-20 rounded-lg ml-auto ← submit
 
 flex gap-2 overflow-hidden:
-  × 4 Sk.Block h-7 w-20 rounded-full   ← filter tabs
+  × 4 Sk.Block h-7 w-20 rounded-full flex-shrink-0  ← filter tabs
 
 Sk.Block h-9 w-full rounded-lg         ← search input
 
-× 4 Sk.Card            ← IdeaCards
-  flex gap-3:
-    Sk.Circle size=8   ← priority dot
-    div:
-      Sk.Line w-48
-      flex gap-1: Sk.Block h-4 w-12 rounded-full × 2  ← tags
-    Sk.Block h-5 w-16 rounded-full ml-auto  ← status
+space-y-2:
+  × 4 Sk.Card:         ← IdeaCards
+      flex gap-3 items-start:
+        Sk.Circle size=8   ← priority dot (mt-1.5)
+        div flex-1:
+          Sk.LineH w-48
+          flex gap-1 mt-1:
+            × 2 Sk.Block h-4 w-12 rounded-full  ← tags
+        Sk.Block h-5 w-16 rounded-full ml-auto  ← status badge
 ```
 
 ### 7. Finances (`/finances`)
 
-Replica: header, stats 3 cards, top categorías, donut, evolution chart, last6months, card expenses, balances, transacciones.
+Replica: header con refresh icon, stats 3 cards, top categorías (5 barras), donut, evolution chart, last6months, card expenses, balances, transacciones (8 rows).
 
 ```
-Header: Sk.Line w-28 + Sk.Circle size=28 ml-auto
+space-y-6 aria-busy:
+
+flex justify-between items-center:
+  Sk.Line w-28           ← mes actual
+  Sk.Circle size=28      ← refresh icon button
 
 Grid grid-cols-3 gap-2:
-  × 3 Sk.Card
+  × 3 Sk.Card:
       Sk.Line h-2 w-16
-      Sk.Line h-5 w-24
-      Sk.Block h-5 w-14 rounded-full  ← trend chip
+      Sk.LineH h-5 w-24 mt-1
+      Sk.Block h-5 w-14 rounded-full mt-2  ← trend chip
 
-Sk.Card                ← Top Categorías
-  Sk.Line h-2 w-24     ← section label
+Sk.Card space-y-4:      ← Top Categorías
+  Sk.Line h-2 w-24      ← section label
   × 5 div:
-      flex justify-between: Sk.Line w-24 + Sk.Line w-16
+      flex justify-between:
+        Sk.Line w-24
+        Sk.Line w-16
       Sk.Block h-2 w-full rounded-full
 
-Sk.Card flex-col items-center ← Donut
-  Sk.Circle size=176         ← donut (sin agujero; shimmer sobre el círculo)
-  Grid grid-cols-2 mt-4:
-    × 6 flex gap-2: Sk.Circle size=10 + Sk.Line w-20
+Sk.Card flex-col items-center:  ← Donut
+  Sk.Circle size=176
+  Grid grid-cols-2 gap-x-6 gap-y-2 w-full mt-5:
+    × 6 flex gap-2 items-center:
+        Sk.Circle size=10
+        Sk.Line w-20
 
-Sk.Card h-36           ← DailyEvolution SVG
+Sk.Card:               ← DailyEvolution
+  Sk.Block h-36
 
-Sk.Card                ← Last6Months
-  flex items-end h-24 gap-2:
-    × 6 div: Sk.Block h-[60%] w-5 rounded-t-sm
+Sk.Card:               ← Last6Months
+  flex items-end justify-between h-24 gap-2:
+    × 6 div flex-col items-center gap-1:
+        Sk.Block h-[60%] w-5 rounded-t-sm  (height varies per bar)
 
-Sk.Card                ← Balances
-  × 3 flex justify-between:
-      Sk.Line w-24 + Sk.Line w-20
+Sk.Card:               ← CardExpenses
+  space-y-4:
+    × 3 div:
+        flex justify-between: Sk.Line w-24 + Sk.Line w-20
+        Sk.Block h-2 w-full rounded-full
 
-Sk.Card                ← Transactions
-  × 8 flex justify-between py-2 border-b:
-      div: Sk.Line w-40 + Sk.Line h-3 w-24
+Sk.Card:               ← Balances
+  space-y-2:
+    × 3 flex justify-between items-center:
+        Sk.Line w-24
+        Sk.Line w-20
+
+Sk.Card px-4:          ← Transactions
+  × 8 flex justify-between items-center py-2.5 border-b border-outline-variant/10:
+      div:
+        Sk.Line w-40
+        Sk.Line h-3 w-28 mt-1
       Sk.Line w-20
 ```
 
 ### 8. Scoring (`/scoring`)
 
-Replica: header, PeriodSelector, ScoreTrendChart grande, ScoreCardModule × módulos.
+Replica real (`ScoringHistoryClient`): PeriodSelector → Stats grid 3 cols → Chart card → "Días recientes" lista de DailyScoreCard.
 
 ```
-Header: Sk.Circle size=20 + Sk.Line w-20
+space-y-4 aria-busy:
 
-flex gap-2:
-  × 3 Sk.Block h-8 w-24 rounded-full  ← period selector pills
+Header:
+  flex gap-2: Sk.Circle size=20 + Sk.LineH w-24
 
-Sk.Card                ← ScoreTrendChart
-  Sk.Block h-48
+PeriodSelector placeholder:
+  flex gap-2:
+    × 3 Sk.Block h-9 w-24 rounded-full  ← daily / weekly / monthly
 
-Grid grid-cols-2 gap-3:
-  × 5 Sk.Card          ← ScoreCardModule por módulo
-      Sk.Line h-2 w-16
-      Sk.Line h-8 w-12
-      Sk.Block h-2 w-full rounded-full  ← progress bar
+Grid grid-cols-3 gap-3:  ← stats Promedio/Máximo/Mínimo
+  × 3 Sk.Card text-center py-3:
+      Sk.LineH h-6 w-10 mx-auto
+      Sk.Line h-3 w-16 mx-auto
+
+Sk.Card space-y-4:       ← Gráfico tendencia
+  flex justify-between:
+    Sk.Line w-32
+    Sk.Line w-28 ml-auto
+  Sk.Block h-[220px] rounded-xl
+
+div:                     ← Días recientes
+  Sk.Line h-3 w-28 mb-3
+  space-y-3:
+    × 7 Sk.Card:         ← DailyScoreCard
+        flex justify-between items-center:
+          div:
+            Sk.Line w-24
+            Sk.Line h-3 w-16 mt-1
+          Sk.LineH h-7 w-12  ← score "85"
+        Sk.Block h-2 w-full rounded-full mt-2  ← progress bar
 ```
 
 ### 9. Tasks (`/tasks`)
 
-Replica: header, stats row (3 cols), ThisWeekSection (task rows), CompletedSection.
+Replica real (`TasksPageClient`): 3 secciones — Pendientes (task rows) + Tablero (tab switcher + KanbanBoard) + Tareas terminadas.
+
+`app/(app)/tasks/loading.tsx` debe ser **creado** (no existe actualmente).
 
 ```
-Header: Sk.Circle size=20 + Sk.Line w-16
+space-y-8 aria-busy:
 
-Grid grid-cols-3:
-  × 3 Sk.Card text-center
-      Sk.Line h-5 w-8 mx-auto
-      Sk.Line h-3 w-20 mx-auto
+section:               ← Sección A: Pendientes
+  flex justify-between mb-3:
+    Sk.Line h-2 w-20   ← "Pendientes" label
+    Sk.Block h-5 w-8 rounded-full  ← count badge
+  space-y-2:
+    × 5 Sk.Card:
+        flex gap-3 items-center:
+          Sk.Circle size=18   ← checkbox
+          div:
+            Sk.Line w-48
+            Sk.Line h-3 w-32 mt-1
 
-Sk.Line h-2 w-24       ← "Esta semana" label
-× 5 Sk.Card            ← TaskRow
-  flex gap-3:
-    Sk.Circle size=18  ← checkbox
-    div:
-      Sk.Line w-48
-      Sk.Line h-3 w-32
+section:               ← Sección B: Tablero (CRÍTICO — no omitir)
+  flex justify-between mb-3:
+    Sk.Line h-2 w-16   ← "Tablero" label
+    flex gap-2:
+      Sk.Block h-7 w-20 rounded-full   ← Notion sync
+      Sk.Block h-7 w-28 rounded-xl     ← Kanban | Timeline switcher
+  Sk.Block h-64 w-full rounded-2xl    ← KanbanBoard placeholder
 
-Sk.Line h-2 w-28 mt-2  ← "Completadas" label
-× 3 Sk.Card opacity-60 ← CompletedTask rows
-  flex gap-3: Sk.Circle size=18 + Sk.Line w-40
+section:               ← Sección C: Tareas terminadas
+  Sk.Line h-2 w-32 mb-3  ← "Tareas terminadas" label
+  space-y-2:
+    × 3 Sk.Card opacity-60:
+        flex gap-3 items-center:
+          Sk.Circle size=18
+          Sk.Line w-40
 ```
 
 ### 10. Settings (`/settings`)
 
-Replica: header, secciones con rows de form (labels + inputs + toggles).
+Replica: header + 4 secciones con form rows (label + control) y toggles.
 
 ```
-Header: Sk.Circle size=20 + Sk.Line w-28
+space-y-6 aria-busy:
 
-× 4 Sk.Card space-y-4  ← secciones (Sueño / Gym / General / Integraciones)
-  Sk.Line h-2 w-24     ← section label
-  × 3 flex justify-between items-center:
-      div:
-        Sk.Line w-32
-        Sk.Line h-3 w-48
-      Sk.Block h-7 w-12 rounded-full  ← toggle / input / badge
+Header:
+  flex gap-2: Sk.Circle size=20 + Sk.LineH w-28
+
+× 4 Sk.Card space-y-4:  ← secciones (Sueño / Gym / General / Integraciones)
+  Sk.Line h-2 w-24      ← section label
+  space-y-4:
+    × 3 flex justify-between items-center:
+        div:
+          Sk.Line w-32
+          Sk.Line h-3 w-48 mt-1
+        Sk.Block h-7 w-12 rounded-full  ← toggle / input / badge
 ```
 
 ---
@@ -404,8 +492,8 @@ Header: Sk.Circle size=20 + Sk.Line w-28
 ## Transición skeleton → contenido
 
 - Next.js App Router reemplaza el `loading.tsx` automáticamente cuando el Server Component termina de renderizar
-- El `animate-fade-in` ya presente en cada `page.tsx` (`<div className="space-y-6 animate-fade-in">`) garantiza que el contenido real aparezca con un fade suave de 0.3s
-- No hay saltos bruscos porque el skeleton replica el mismo layout y alturas aproximadas
+- El `animate-fade-in` ya presente en cada `page.tsx` garantiza que el contenido aparezca con un fade suave de 0.3s
+- Los skeletons replican las mismas alturas aproximadas del contenido real, evitando layout shifts
 
 ---
 
@@ -414,12 +502,13 @@ Header: Sk.Circle size=20 + Sk.Line w-28
 - Los componentes skeleton son **100% estáticos** — solo CSS, cero JS ejecutado, cero fetch
 - La animación shimmer usa `background-position` (composited, no layout/paint)
 - `SkeletonBase` es tree-shakeable: cada skeleton importa solo lo que usa
+- Usar `.skeleton-shimmer` CSS (globals.css), **no** una clase Tailwind custom
 
 ---
 
 ## No incluido en este spec
 
-- `/fitness/session` (workout activo) — tiene estado muy dinámico, no tiene `loading.tsx` estático
+- `/fitness/session` — workout activo, no tiene `loading.tsx` y el estado es muy dinámico
 - `/fitness/[actividad]` — página de actividad específica, mismo motivo
-- `/fitness/gym` — derivado de fitness, misma lógica
+- `/fitness/gym` — derivado de fitness
 - `PageSkeleton.tsx` original — se mantiene sin cambios como fallback
