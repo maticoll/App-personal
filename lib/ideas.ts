@@ -12,6 +12,13 @@ import { callClaude } from "@/lib/claude";
 export type IdeaPriority = "baja" | "media" | "alta" | "urgente";
 export type IdeaStatus = "idea" | "progreso" | "hecha";
 
+export type IdeaBreakdown = {
+  steps: string[];                                   // pasos ordenados, concretos
+  research: { question: string; where: string }[];   // qué investigar y dónde
+  evaluation: { effort: string; risks: string[]; verdict: string };
+  firstStep: string;                                 // una acción chica para hoy
+};
+
 export type IdeaWithMeta = {
   id: string;
   rawText: string;
@@ -21,6 +28,8 @@ export type IdeaWithMeta = {
   priority: IdeaPriority;
   status: IdeaStatus;
   luminaId: string | null;
+  breakdown: IdeaBreakdown | null;
+  breakdownAt: Date | null;
   wordCount: number;
   createdAt: Date;
   updatedAt: Date;
@@ -39,6 +48,7 @@ export type CapturedIdea = {
   title: string;
   content: string;
   tags: string[];
+  breakdown: IdeaBreakdown | null;
 };
 
 // -------------------------------------------------------
@@ -59,6 +69,49 @@ export function nextStatus(current: IdeaStatus): IdeaStatus {
 // Helpers
 // -------------------------------------------------------
 
+// -------------------------------------------------------
+// parseBreakdown — valida campo por campo el JSON de Claude
+// (o el Json crudo de la DB). Devuelve null si no hay nada usable.
+// -------------------------------------------------------
+
+export function parseBreakdown(raw: unknown): IdeaBreakdown | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const obj = raw as Record<string, unknown>;
+
+  const steps = Array.isArray(obj.steps)
+    ? obj.steps.map((s) => String(s).trim()).filter(Boolean)
+    : [];
+
+  const research = Array.isArray(obj.research)
+    ? obj.research
+        .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
+        .map((r) => ({
+          question: String(r.question ?? "").trim(),
+          where: String(r.where ?? "").trim(),
+        }))
+        .filter((r) => r.question)
+    : [];
+
+  const evalRaw =
+    obj.evaluation && typeof obj.evaluation === "object" && !Array.isArray(obj.evaluation)
+      ? (obj.evaluation as Record<string, unknown>)
+      : {};
+  const evaluation = {
+    effort: String(evalRaw.effort ?? "").trim(),
+    risks: Array.isArray(evalRaw.risks)
+      ? evalRaw.risks.map((r) => String(r).trim()).filter(Boolean)
+      : [],
+    verdict: String(evalRaw.verdict ?? "").trim(),
+  };
+
+  const firstStep = String(obj.firstStep ?? "").trim();
+
+  // Sin pasos, sin investigación y sin primer paso → no hay desglose usable
+  if (steps.length === 0 && research.length === 0 && !firstStep) return null;
+
+  return { steps, research, evaluation, firstStep };
+}
+
 function toIdeaWithMeta(idea: {
   id: string;
   rawText: string;
@@ -68,6 +121,8 @@ function toIdeaWithMeta(idea: {
   priority: string;
   status: string;
   luminaId: string | null;
+  breakdown: unknown;
+  breakdownAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }): IdeaWithMeta {
@@ -77,6 +132,8 @@ function toIdeaWithMeta(idea: {
     ...idea,
     priority: (idea.priority as IdeaPriority) ?? "media",
     status: (idea.status as IdeaStatus) ?? "idea",
+    breakdown: parseBreakdown(idea.breakdown),
+    breakdownAt: idea.breakdownAt,
     wordCount,
   };
 }
@@ -146,20 +203,30 @@ export async function getIdea(
 // Capturar idea con NLP — Claude estructura el texto
 // -------------------------------------------------------
 
+// Especificación del bloque "breakdown" — compartida entre captura y regeneración
+const BREAKDOWN_SPEC = `"breakdown": {
+    "steps": ["paso 1", "paso 2"] (3 a 6 pasos concretos y ordenados, una línea cada uno),
+    "research": [{ "question": "qué averiguar", "where": "fuente concreta: sitio, comunidad, herramienta o persona" }] (2 a 4 ítems),
+    "evaluation": { "effort": "estimación breve del esfuerzo", "risks": ["riesgo u obstáculo"] (1 a 3), "verdict": "una línea: por qué vale (o no) la pena" },
+    "firstStep": "una sola acción chiquita y concreta que se puede hacer hoy mismo"
+  }`;
+
 async function callClaudeForIdea(rawText: string): Promise<CapturedIdea> {
   const prompt = `El usuario capturó la siguiente idea en texto informal/criollo:
 "${rawText}"
 
-Estructurá esta idea. Devolvé ÚNICAMENTE un objeto JSON con exactamente estas claves, sin texto adicional:
+Estructurá y desglosá esta idea. Devolvé ÚNICAMENTE un objeto JSON con exactamente estas claves, sin texto adicional:
 {
   "title": "título conciso de máximo 8 palabras",
   "content": "idea expandida y estructurada en máximo 3 párrafos, manteniendo la esencia del input original. No la transformes radicalmente, solo clarificá y expandí levemente.",
-  "tags": ["tag1", "tag2"] (array de 1 a 4 tags relevantes en minúsculas, en español, sin símbolos)
-}`;
+  "tags": ["tag1", "tag2"] (array de 1 a 4 tags relevantes en minúsculas, en español, sin símbolos),
+  ${BREAKDOWN_SPEC}
+}
+Sé breve y accionable, en español rioplatense.`;
 
   const text = await callClaude({
     model: "claude-haiku-4-5-20251001",
-    maxTokens: 600,
+    maxTokens: 1500,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -175,6 +242,7 @@ Estructurá esta idea. Devolvé ÚNICAMENTE un objeto JSON con exactamente estas
     tags: Array.isArray(parsed.tags)
       ? parsed.tags.map((t: unknown) => String(t).toLowerCase()).slice(0, 4)
       : [],
+    breakdown: parseBreakdown(parsed.breakdown),
   };
 }
 
@@ -187,6 +255,7 @@ export async function captureIdeaNLP(
     title: rawText.slice(0, 80),
     content: rawText,
     tags: [],
+    breakdown: null,
   };
 
   try {
@@ -204,6 +273,9 @@ export async function captureIdeaNLP(
       tags: structured.tags,
       priority: options?.priority ?? "media",
       status: "idea",
+      ...(structured.breakdown
+        ? { breakdown: structured.breakdown, breakdownAt: new Date() }
+        : {}),
     },
   });
 
