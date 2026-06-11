@@ -13,7 +13,7 @@ Cuando entra una idea (por WhatsApp o por la web), la IA la desglosa automática
 - **Respuesta de WhatsApp al capturar:** confirmación + desglose completo en el mismo mensaje.
 - **Secciones del desglose:** pasos a seguir, qué investigar y dónde, evaluación rápida, primer paso de hoy.
 - **Arquitectura (Opción A):** campo JSON en el modelo `Idea`, sin modelo separado ni historial de versiones (YAGNI).
-- **Modelo de IA:** una sola llamada a `claude-sonnet-4-6` que reemplaza la llamada actual a Haiku en `captureIdeaNLP` y devuelve estructura + desglose juntos. Más simple y barato que Haiku + Sonnet por separado; la latencia no importa porque el webhook procesa en `after()`.
+- **Modelo de IA:** una sola llamada a `claude-haiku-4-5-20251001` (el mismo modelo que ya usa `captureIdeaNLP`) que devuelve estructura + desglose juntos, con `maxTokens: 1500`. **Decisión por costo:** Haiku cuesta $1/$5 por MTok vs $3/$15 de Sonnet (verificado en doc oficial, 2026-06-11). Cada desglose ronda ~500 tokens de input y ~1.000 de output → ~$0.006 por idea con Haiku; como reemplaza la llamada existente, el costo marginal vs hoy es ~$0.003 por idea. El desglose se genera una sola vez por idea, no por turno de conversación.
 
 ## 1. Datos
 
@@ -48,7 +48,7 @@ export type IdeaBreakdown = {
 
 ## 2. Generación (`lib/ideas.ts`)
 
-- `callClaudeForIdea(rawText)` pasa a usar `claude-sonnet-4-6` (maxTokens ~2000) y devuelve `{ title, content, tags, breakdown }` en un único JSON. El prompt pide las 4 secciones en español rioplatense, con pasos accionables y fuentes concretas (sitios, comunidades, herramientas, personas).
+- `callClaudeForIdea(rawText)` sigue usando `claude-haiku-4-5-20251001`, sube `maxTokens` a 1500 y devuelve `{ title, content, tags, breakdown }` en un único JSON. El prompt pide las 4 secciones en español rioplatense, con pasos accionables y fuentes concretas (sitios, comunidades, herramientas, personas), e indica brevedad (pasos de una línea, 3-6 pasos, 2-4 ítems de investigación) para contener el output.
 - `captureIdeaNLP` guarda `breakdown` y `breakdownAt` junto con el resto. **Fallback sin cambios de espíritu:** si la llamada a Claude falla o el JSON es inválido, la idea se guarda igual con texto crudo y `breakdown: null` — nunca se pierde una idea.
 - Nueva función `generateIdeaBreakdown(userId, ideaId): Promise<IdeaWithMeta>`: carga la idea, valida ownership, llama al mismo prompt (solo la parte de desglose, usando `cleanedText ?? rawText`), persiste `breakdown` + `breakdownAt` y devuelve la idea actualizada. Si falla, lanza error claro sin tocar el desglose anterior.
 - Parseo del JSON con validación defensiva por campo (igual estilo que el parseo actual): arrays coaccionados, strings con `String(...)`, secciones faltantes → valores vacíos razonables.
