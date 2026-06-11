@@ -33,19 +33,24 @@ export function formatBreakdownPlain(b: IdeaBreakdown): string {
     b.steps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
   }
   if (b.research.length > 0) {
-    lines.push("", "Para investigar:");
+    if (lines.length > 0) lines.push("");
+    lines.push("Para investigar:");
     b.research.forEach((r) =>
       lines.push(`- ${r.question}${r.where ? ` (donde: ${r.where})` : ""}`)
     );
   }
   const ev = b.evaluation;
   if (ev.effort || ev.risks.length > 0 || ev.verdict) {
-    lines.push("", "Evaluacion rapida:");
+    if (lines.length > 0) lines.push("");
+    lines.push("Evaluacion rapida:");
     if (ev.effort) lines.push(`Esfuerzo: ${ev.effort}`);
     if (ev.risks.length > 0) lines.push(`Riesgos: ${ev.risks.join("; ")}`);
     if (ev.verdict) lines.push(`Veredicto: ${ev.verdict}`);
   }
-  if (b.firstStep) lines.push("", `Primer paso de hoy: ${b.firstStep}`);
+  if (b.firstStep) {
+    if (lines.length > 0) lines.push("");
+    lines.push(`Primer paso de hoy: ${b.firstStep}`);
+  }
   return lines.join("\n");
 }
 
@@ -72,7 +77,7 @@ function extractIdeaText(text: string): string {
 function extractExpandQuery(text: string): string {
   return text
     .replace(/^(desglos[aá](me)?|desarroll[aá](me)?|expand[ií](me)?|profundiz[aá]r?)\s*/i, "")
-    .replace(/^(la|una)?\s*idea\s*(de|del|sobre)?\s*/i, "")
+    .replace(/^(la|una|mi|tu|su)?\s*idea\s*(del|de la|de|sobre)?\s*/i, "")
     .replace(/["""]/g, "")
     .trim();
 }
