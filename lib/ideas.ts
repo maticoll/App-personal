@@ -66,12 +66,8 @@ export function nextStatus(current: IdeaStatus): IdeaStatus {
 }
 
 // -------------------------------------------------------
-// Helpers
-// -------------------------------------------------------
-
-// -------------------------------------------------------
-// parseBreakdown — valida campo por campo el JSON de Claude
-// (o el Json crudo de la DB). Devuelve null si no hay nada usable.
+// Helpers — parseBreakdown (valida campo por campo el JSON de Claude
+// o el Json crudo de la DB). Devuelve null si no hay nada usable.
 // -------------------------------------------------------
 
 export function parseBreakdown(raw: unknown): IdeaBreakdown | null {
@@ -235,7 +231,12 @@ Sé breve y accionable, en español rioplatense.`;
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("No JSON in Claude response");
 
-  const parsed = JSON.parse(jsonMatch[0]);
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    throw new Error("Claude returned invalid JSON");
+  }
   return {
     title: String(parsed.title ?? "Idea sin título").slice(0, 100),
     content: String(parsed.content ?? rawText),
