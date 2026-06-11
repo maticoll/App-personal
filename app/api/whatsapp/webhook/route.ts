@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   parseIncomingWebhook,
   sendTextMessage,
-  markAsRead,
+  sendTypingIndicator,
   downloadAudio,
   transcribeAudio,
   verifyWebhookSignature,
@@ -83,8 +83,9 @@ async function processIncomingMessage(body: any): Promise<void> {
     const { from, messageId, type, text, audioId, timestamp, forwarded } = parsed;
     logger.info("whatsapp/webhook", { event: "message_received", type, timestamp, forwarded });
 
-    // 2. Marcar como leido (best-effort)
-    void markAsRead(messageId);
+    // 2. Marcar como leido + mostrar "escribiendo…" (best-effort).
+    //    El indicador se borra solo al enviar la respuesta o tras 25s.
+    void sendTypingIndicator(messageId);
 
     // 2b. Audio reenviado: transcribir y devolver texto directamente
     if (forwarded && type === "audio" && audioId) {

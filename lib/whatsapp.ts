@@ -108,6 +108,37 @@ export async function markAsRead(messageId: string): Promise<void> {
   }
 }
 
+/**
+ * Marca el mensaje como leído Y muestra el indicador "escribiendo…" al usuario.
+ * (La Cloud API combina ambas acciones en una sola llamada cuando se incluye
+ * typing_indicator junto a status: "read".)
+ *
+ * El indicador se borra solo cuando enviás la respuesta, o tras 25 segundos
+ * si no respondés. Como el bot responde en pocos segundos, encaja bien.
+ *
+ * @param messageId  wamid del mensaje ENTRANTE al que respondemos
+ */
+export async function sendTypingIndicator(messageId: string): Promise<void> {
+  const phoneId = process.env.WHATSAPP_PHONE_ID;
+  const token = process.env.WHATSAPP_TOKEN;
+  if (!phoneId || !token) return;
+  const url = "https://graph.facebook.com/v21.0/" + phoneId + "/messages";
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      status: "read",
+      message_id: messageId,
+      typing_indicator: { type: "text" },
+    }),
+  });
+  if (!res.ok) {
+    const errorBody = await res.text();
+    console.warn("[whatsapp] No se pudo enviar el indicador de escribiendo " + res.status + ": " + errorBody);
+  }
+}
+
 export async function downloadAudio(audioId: string): Promise<Buffer> {
   const token = process.env.WHATSAPP_TOKEN;
   if (!token) throw new Error("[whatsapp] WHATSAPP_TOKEN no configurado");
