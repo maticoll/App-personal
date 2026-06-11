@@ -291,7 +291,7 @@ async function callClaudeForBreakdown(text: string): Promise<IdeaBreakdown | nul
   const prompt = `El usuario quiere desglosar esta idea para llevarla a la acción:
 "${text}"
 
-Devolvé ÚNICAMENTE un objeto JSON con exactamente esta clave, sin texto adicional:
+Devolvé ÚNICAMENTE un objeto JSON con exactamente estas claves, sin texto adicional:
 {
   ${BREAKDOWN_SPEC}
 }
