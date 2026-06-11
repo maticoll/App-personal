@@ -284,6 +284,62 @@ export async function captureIdeaNLP(
 }
 
 // -------------------------------------------------------
+// Desglose bajo demanda — para ideas viejas o regeneración
+// -------------------------------------------------------
+
+async function callClaudeForBreakdown(text: string): Promise<IdeaBreakdown | null> {
+  const prompt = `El usuario quiere desglosar esta idea para llevarla a la acción:
+"${text}"
+
+Devolvé ÚNICAMENTE un objeto JSON con exactamente esta clave, sin texto adicional:
+{
+  ${BREAKDOWN_SPEC}
+}
+Sé breve y accionable, en español rioplatense.`;
+
+  const response = await callClaude({
+    model: "claude-haiku-4-5-20251001",
+    maxTokens: 1200,
+    messages: [{ role: "user", content: prompt }],
+  });
+  if (!response) return null;
+
+  const jsonMatch = response.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+
+  try {
+    const parsed: Record<string, unknown> = JSON.parse(jsonMatch[0]);
+    // Claude puede devolver { breakdown: {...} } o el objeto desglose directo
+    return parseBreakdown(parsed.breakdown ?? parsed);
+  } catch {
+    return null;
+  }
+}
+
+export async function generateIdeaBreakdown(
+  userId: string,
+  ideaId: string
+): Promise<IdeaWithMeta> {
+  const idea = await db.idea.findUnique({ where: { id: ideaId } });
+  if (!idea || idea.userId !== userId) {
+    throw new Error("Idea no encontrada o sin permiso");
+  }
+
+  const breakdown = await callClaudeForBreakdown(idea.cleanedText ?? idea.rawText);
+  if (!breakdown) {
+    // No tocar el desglose anterior si la generación falló
+    throw new Error("No se pudo generar el desglose. Intentá de nuevo.");
+  }
+
+  const updated = await db.idea.update({
+    where: { id: ideaId },
+    data: { breakdown, breakdownAt: new Date() },
+  });
+
+  return toIdeaWithMeta(updated);
+}
+
+// -------------------------------------------------------
 // Actualizar idea (edición manual)
 // -------------------------------------------------------
 
