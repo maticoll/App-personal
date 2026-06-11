@@ -11,6 +11,7 @@ import {
   markAsRead,
   downloadAudio,
   transcribeAudio,
+  verifyWebhookSignature,
 } from "@/lib/whatsapp";
 import { orchestrate } from "@/lib/orchestrator";
 import { db } from "@/lib/db";
@@ -43,7 +44,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 // ----------------------------------------------------------------
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const body = await req.json().catch(() => null);
+  // Leer el cuerpo como texto crudo para poder validar la firma HMAC
+  // (req.json() re-serializa y el hash dejaría de coincidir).
+  const rawBody = await req.text();
+
+  const signature = req.headers.get("x-hub-signature-256");
+  if (!verifyWebhookSignature(rawBody, signature)) {
+    logger.warn("whatsapp/webhook", { event: "invalid_signature" });
+    // Devolvemos 200 igualmente para no filtrar a un atacante si la firma es
+    // válida o no, pero NO procesamos el mensaje.
+    return NextResponse.json({ ok: true }, { status: 200 });
+  }
+
+  let body: unknown = null;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    body = null;
+  }
+
   after(() => processIncomingMessage(body));
   return NextResponse.json({ ok: true }, { status: 200 });
 }

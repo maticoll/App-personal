@@ -39,6 +39,7 @@ import {
   type PendingRecord,
   type PendingTransactionData,
 } from "@/lib/pending-transaction";
+import { callClaude } from "@/lib/claude";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -91,51 +92,36 @@ async function extractTransaction(
   type: "gasto" | "ingreso",
   categoryNames: { gasto: string[]; ingreso: string[] }
 ): Promise<ExtractedTransaction | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
-
   const today = new Date().toISOString().split("T")[0];
   const catList = type === "gasto"
     ? categoryNames.gasto.join(", ")
     : categoryNames.ingreso.join(", ");
 
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 150,
-        messages: [
-          {
-            role: "user",
-            content:
-              `Hoy es ${today}. Extraé la información de esta transacción financiera en Uruguay.\n` +
-              `Categorías disponibles para ${type}: ${catList || "sin categorías"}\n\n` +
-              `Respondé SOLO con JSON (sin texto extra):\n` +
-              `{"type":"${type}","amount":NUMBER,"currency":"UYU"|"USD","categoryHint":"STRING","cardHint":"STRING","description":"STRING","date":"YYYY-MM-DD"|null,"confidence":"high"|"low"}\n\n` +
-              `Reglas:\n` +
-              `- Moneda por defecto: UYU\n` +
-              `- cardHint vacío ("") si no se menciona tarjeta\n` +
-              `- categoryHint: usá EXACTAMENTE un nombre de la lista si coincide\n` +
-              `- description: descripción breve (máx 40 chars)\n` +
-              `- date: null si no se menciona fecha\n\n` +
-              `Texto: "${text}"`,
-          },
-        ],
-      }),
+    const raw = await callClaude({
+      model: "claude-haiku-4-5-20251001",
+      maxTokens: 150,
+      messages: [
+        {
+          role: "user",
+          content:
+            `Hoy es ${today}. Extraé la información de esta transacción financiera en Uruguay.\n` +
+            `Categorías disponibles para ${type}: ${catList || "sin categorías"}\n\n` +
+            `Respondé SOLO con JSON (sin texto extra):\n` +
+            `{"type":"${type}","amount":NUMBER,"currency":"UYU"|"USD","categoryHint":"STRING","cardHint":"STRING","description":"STRING","date":"YYYY-MM-DD"|null,"confidence":"high"|"low"}\n\n` +
+            `Reglas:\n` +
+            `- Moneda por defecto: UYU\n` +
+            `- cardHint vacío ("") si no se menciona tarjeta\n` +
+            `- categoryHint: usá EXACTAMENTE un nombre de la lista si coincide\n` +
+            `- description: descripción breve (máx 40 chars)\n` +
+            `- date: null si no se menciona fecha\n\n` +
+            `Texto: "${text}"`,
+        },
+      ],
     });
 
-    if (!res.ok) return null;
+    if (!raw) return null;
 
-    const data = (await res.json()) as {
-      content: Array<{ type: string; text: string }>;
-    };
-    const raw = data.content?.[0]?.text?.trim() ?? "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
 

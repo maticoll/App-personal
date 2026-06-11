@@ -5,6 +5,7 @@
 // ============================================================
 
 import { db } from "@/lib/db";
+import { callClaude } from "@/lib/claude";
 import type { FitnessSummary, WorkoutSummary } from "@/lib/types";
 
 // -------------------------------------------------------
@@ -667,13 +668,6 @@ export async function parseAndLogExerciseNLP(
  * Retorna un array de ParsedExercise con name + sets expandidas.
  */
 async function parseExercisesFromText(text: string): Promise<ParsedExercise[]> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "ANTHROPIC_API_KEY no configurada. Agregala en .env.local para habilitar el parsing NLP."
-    );
-  }
-
   const system = `Sos un asistente de fitness que parsea ejercicios de gym desde texto en español informal de Argentina.
 Respondé SOLO con un JSON válido (sin markdown, sin texto extra) con esta estructura exacta:
 {"exercises":[{"name":"string","sets":[{"setNumber":1,"reps":número_o_null,"weightKg":número_o_null}]}]}
@@ -688,30 +682,12 @@ Ejemplos de entrada → salida:
 "press plano 100kg 4 reps 3 series" → {"exercises":[{"name":"Press Plano","sets":[{"setNumber":1,"reps":4,"weightKg":100},{"setNumber":2,"reps":4,"weightKg":100},{"setNumber":3,"reps":4,"weightKg":100}]}]}
 "sentadillas 80kg 3x12" → {"exercises":[{"name":"Sentadilla","sets":[{"setNumber":1,"reps":12,"weightKg":80},{"setNumber":2,"reps":12,"weightKg":80},{"setNumber":3,"reps":12,"weightKg":80}]}]}`;
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 1024,
-      system,
-      messages: [{ role: "user", content: text }],
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Claude API error ${res.status}: ${err}`);
-  }
-
-  const data = (await res.json()) as {
-    content: Array<{ type: string; text: string }>;
-  };
-  const raw = data.content[0]?.text ?? "{}";
+  const raw = (await callClaude({
+    model: "claude-haiku-4-5-20251001",
+    maxTokens: 1024,
+    system,
+    messages: [{ role: "user", content: text }],
+  })) ?? "{}";
 
   // Extraer JSON aunque venga envuelto en ```json ... ```
   const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/) ?? raw.match(/(\{[\s\S]*\})/);

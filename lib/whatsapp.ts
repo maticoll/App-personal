@@ -1,5 +1,41 @@
 // lib/whatsapp.ts — WhatsApp Business API + Whisper
 
+import crypto from "crypto";
+
+/**
+ * Verifica la firma X-Hub-Signature-256 que Meta envía con cada webhook.
+ * El header tiene formato "sha256=<hex>" y es el HMAC-SHA256 del cuerpo RAW
+ * (bytes exactos recibidos) usando el App Secret de la app de Meta.
+ *
+ * @param rawBody   Cuerpo del request como texto crudo (NO re-serializado)
+ * @param signature Valor del header "x-hub-signature-256"
+ * @returns true si la firma es válida. Si WHATSAPP_APP_SECRET no está
+ *          configurado, devuelve true (omite la validación) y loguea un aviso.
+ */
+export function verifyWebhookSignature(
+  rawBody: string,
+  signature: string | null
+): boolean {
+  const appSecret = process.env.WHATSAPP_APP_SECRET;
+  if (!appSecret) {
+    console.warn("[whatsapp] WHATSAPP_APP_SECRET no configurado — firma del webhook NO validada");
+    return true;
+  }
+
+  if (!signature || !signature.startsWith("sha256=")) return false;
+
+  const expected = "sha256=" + crypto
+    .createHmac("sha256", appSecret)
+    .update(rawBody, "utf8")
+    .digest("hex");
+
+  // Comparación en tiempo constante para evitar timing attacks.
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expected);
+  if (sigBuf.length !== expBuf.length) return false;
+  return crypto.timingSafeEqual(sigBuf, expBuf);
+}
+
 export type WhatsAppIncomingMessage = {
   from: string;
   messageId: string;

@@ -3,6 +3,8 @@
 // Reemplaza la deteccion por regex en todos los agentes.
 // Una sola llamada a la API por invocacion de agente.
 
+import { callClaude } from "@/lib/claude";
+
 type IntentMap = Record<string, string>; // { intent: "descripcion corta" }
 
 /**
@@ -22,12 +24,6 @@ export async function detectIntentAI(
   message: string,
   systemPrompt?: string
 ): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    console.warn("[nlp] ANTHROPIC_API_KEY no configurada - usando fallback unknown");
-    return "unknown";
-  }
-
   const intentList = Object.entries(intents)
     .map(([k, v]) => k + ": " + v)
     .join("\n");
@@ -47,40 +43,20 @@ export async function detectIntentAI(
       "Mensaje: \"" + message + "\"\n\n" +
       "Responde SOLO con el nombre del intent (" + validKeys + "). Sin explicaciones.";
 
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 20,
-        ...(systemContent ? { system: systemContent } : {}),
-        messages: [{ role: "user", content: userContent }],
-      }),
-    });
+  const result = await callClaude({
+    model: "claude-haiku-4-5-20251001",
+    maxTokens: 20,
+    ...(systemContent ? { system: systemContent } : {}),
+    messages: [{ role: "user", content: userContent }],
+  });
 
-    if (!res.ok) {
-      console.error("[nlp] Error de API: " + res.status);
-      return "unknown";
-    }
+  if (!result) return "unknown";
 
-    const data = (await res.json()) as {
-      content: Array<{ type: string; text: string }>;
-    };
-
-    const raw = data.content?.[0]?.text?.trim().toLowerCase() ?? "";
-    // Validar que la respuesta sea un intent conocido
-    const valid = Object.keys(intents);
-    const match = valid.find((k) => raw === k || raw.startsWith(k));
-    return match ?? "unknown";
-  } catch (err) {
-    console.error("[nlp] Error llamando a Claude:", err);
-    return "unknown";
-  }
+  const raw = result.toLowerCase();
+  // Validar que la respuesta sea un intent conocido
+  const valid = Object.keys(intents);
+  const match = valid.find((k) => raw === k || raw.startsWith(k));
+  return match ?? "unknown";
 }
 
 /**

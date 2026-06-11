@@ -26,6 +26,7 @@ import {
   formatTimeLabel,
 } from "@/lib/reminders";
 import { detectIntentAI } from "@/lib/nlp";
+import { callClaude } from "@/lib/claude";
 
 // ─── Tipos de intención ───────────────────────────────────────────────────────
 
@@ -74,9 +75,6 @@ async function parseEventFromText(
   end: Date;
   recurrence: string[] | null;
 } | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
-
   const dateStr = referenceDate.toLocaleDateString("es-UY", {
     weekday: "long",
     year: "numeric",
@@ -90,21 +88,14 @@ async function parseEventFromText(
     : "";
 
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 250,
-        messages: [
-          {
-            role: "user",
-            content:
-              `Hoy es ${dateStr}.${contextSection}\n` +
+    const raw = await callClaude({
+      model: "claude-haiku-4-5-20251001",
+      maxTokens: 250,
+      messages: [
+        {
+          role: "user",
+          content:
+            `Hoy es ${dateStr}.${contextSection}\n` +
               `Extrae del siguiente texto: título del evento, fecha y hora de inicio (la PRIMERA ocurrencia), fecha y hora de fin de esa primera ocurrencia, y si es un evento recurrente. ` +
               `Si no se menciona duración, asumir 1 hora. ` +
               `Si el texto hace referencia a un evento mencionado antes en el contexto, usá esa información para completar los datos faltantes.\n\n` +
@@ -122,17 +113,12 @@ async function parseEventFromText(
               `Responde SOLO con JSON con este formato exacto: ` +
               `{"title":"...","start":"YYYY-MM-DDTHH:MM:SS-03:00","end":"YYYY-MM-DDTHH:MM:SS-03:00","recurrence":"RRULE:..." o null} ` +
               `Texto: "${text}"`,
-          },
-        ],
-      }),
+        },
+      ],
     });
 
-    if (!res.ok) return null;
+    if (!raw) return null;
 
-    const data = (await res.json()) as {
-      content: Array<{ type: string; text: string }>;
-    };
-    const raw = data.content?.[0]?.text?.trim() ?? "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
 
@@ -229,9 +215,6 @@ async function parseEventUpdateFromText(
   newStart: Date;
   newEnd: Date;
 } | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
-
   const dateStr = referenceDate.toLocaleDateString("es-UY", {
     weekday: "long",
     year: "numeric",
@@ -245,41 +228,29 @@ async function parseEventUpdateFromText(
     : "";
 
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 150,
-        messages: [
-          {
-            role: "user",
-            content:
-              `Hoy es ${dateStr}.${contextSection}\n` +
-              `El usuario quiere modificar la hora de un evento de su Google Calendar. ` +
-              `Basándote en el contexto de la conversación (si está disponible), identificá:\n` +
-              `1. El título o palabras clave del evento a modificar\n` +
-              `2. La nueva fecha y hora de inicio\n` +
-              `3. La nueva fecha y hora de fin (si no se menciona duración, mantener 1 hora)\n\n` +
-              `IMPORTANTE: Devuelve las horas en formato de Uruguay (UTC-3), usando el offset -03:00. ` +
-              `Responde SOLO con JSON con este formato exacto: ` +
-              `{"searchTitle":"...","newStart":"YYYY-MM-DDTHH:MM:SS-03:00","newEnd":"YYYY-MM-DDTHH:MM:SS-03:00"} ` +
-              `Texto: "${text}"`,
-          },
-        ],
-      }),
+    const raw = await callClaude({
+      model: "claude-haiku-4-5-20251001",
+      maxTokens: 150,
+      messages: [
+        {
+          role: "user",
+          content:
+            `Hoy es ${dateStr}.${contextSection}\n` +
+            `El usuario quiere modificar la hora de un evento de su Google Calendar. ` +
+            `Basándote en el contexto de la conversación (si está disponible), identificá:\n` +
+            `1. El título o palabras clave del evento a modificar\n` +
+            `2. La nueva fecha y hora de inicio\n` +
+            `3. La nueva fecha y hora de fin (si no se menciona duración, mantener 1 hora)\n\n` +
+            `IMPORTANTE: Devuelve las horas en formato de Uruguay (UTC-3), usando el offset -03:00. ` +
+            `Responde SOLO con JSON con este formato exacto: ` +
+            `{"searchTitle":"...","newStart":"YYYY-MM-DDTHH:MM:SS-03:00","newEnd":"YYYY-MM-DDTHH:MM:SS-03:00"} ` +
+            `Texto: "${text}"`,
+        },
+      ],
     });
 
-    if (!res.ok) return null;
+    if (!raw) return null;
 
-    const data = (await res.json()) as {
-      content: Array<{ type: string; text: string }>;
-    };
-    const raw = data.content?.[0]?.text?.trim() ?? "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
 

@@ -37,6 +37,7 @@ import {
   formatContextForPrompt,
 } from "@/lib/conversation";
 import { getPending } from "@/lib/pending-transaction";
+import { callClaude } from "@/lib/claude";
 
 type Module =
   | "sleep"
@@ -67,62 +68,37 @@ const MODULE_DESCRIPTIONS: Record<Module, string> = {
 // classifyModule — Claude Haiku para clasificación rápida
 // -------------------------------------------------------
 async function classifyModule(text: string): Promise<Module> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    console.warn("[orchestrator] ANTHROPIC_API_KEY no configurada — usando fallback 'general'");
-    return "general";
-  }
-
   const moduleList = (Object.entries(MODULE_DESCRIPTIONS) as [Module, string][])
     .map(([k, v]) => `${k}: ${v}`)
     .join("\n");
 
   const validModules = (Object.keys(MODULE_DESCRIPTIONS) as Module[]).join(", ");
 
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
+  const result = await callClaude({
+    model: "claude-haiku-4-5-20251001",
+    maxTokens: 20,
+    system:
+      "Eres el clasificador de intenciones de HERMES, una app personal. " +
+      "Tu tarea es leer un mensaje del usuario y responder SOLO con el nombre del módulo correcto. " +
+      "Nunca expliques. Nunca respondas con más de una palabra.",
+    messages: [
+      {
+        role: "user",
+        content:
+          "Módulos disponibles:\n" +
+          moduleList +
+          "\n\nMensaje del usuario: \"" + text + "\"\n\n" +
+          "Responde SOLO con uno de estos: " + validModules,
       },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 20,
-        system:
-          "Eres el clasificador de intenciones de HERMES, una app personal. " +
-          "Tu tarea es leer un mensaje del usuario y responder SOLO con el nombre del módulo correcto. " +
-          "Nunca expliques. Nunca respondas con más de una palabra.",
-        messages: [
-          {
-            role: "user",
-            content:
-              "Módulos disponibles:\n" +
-              moduleList +
-              "\n\nMensaje del usuario: \"" + text + "\"\n\n" +
-              "Responde SOLO con uno de estos: " + validModules,
-          },
-        ],
-      }),
-    });
+    ],
+  });
 
-    if (!res.ok) {
-      console.error("[orchestrator] Error llamando a Claude:", res.status, await res.text());
-      return "general";
-    }
+  if (!result) return "general";
 
-    const data = (await res.json()) as {
-      content: Array<{ type: string; text: string }>;
-    };
-    const raw = data.content?.[0]?.text?.trim().toLowerCase() ?? "";
-    const valid = Object.keys(MODULE_DESCRIPTIONS) as Module[];
-    const matched = valid.find((m) => raw === m || raw.startsWith(m));
-    return matched ?? "general";
-  } catch (err) {
-    console.error("[orchestrator] Error en classifyModule:", err);
-    return "general";
-  }
+  const raw = result.toLowerCase();
+  const valid = Object.keys(MODULE_DESCRIPTIONS) as Module[];
+  const matched = valid.find((m) => raw === m || raw.startsWith(m));
+  return matched ?? "general";
 }
 
 // -------------------------------------------------------
@@ -204,17 +180,6 @@ async function generateFinalResponse(
   userMessage: string,
   agentData: string
 ): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return agentData; // Fallback: devolver datos crudos del agente
-
-  // Si el módulo es 'general' y el mensaje es un saludo simple, responder directo
-  const simpleGreeting = /^(hola|buenas|hey|hi|buen[ao]s (días|tardes|noches))$/i.test(
-    userMessage.trim()
-  );
-  if (simpleGreeting) {
-    // Para saludos, generar respuesta breve personalizada
-  }
-
   const contextSection = conversationContext
     ? `\n\n${conversationContext}\n\n---`
     : "";
@@ -234,35 +199,14 @@ async function generateFinalResponse(
     `Máximo 3-4 oraciones para respuestas simples. Para análisis pedidos explícitamente, podés extenderte. ` +
     `No uses asteriscos para negrita. No hagas listas a menos que sean imprescindibles.`;
 
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 350,
-        system: systemPrompt + contextSection,
-        messages: [{ role: "user", content: userContent }],
-      }),
-    });
+  const result = await callClaude({
+    model: "claude-sonnet-4-6",
+    maxTokens: 350,
+    system: systemPrompt + contextSection,
+    messages: [{ role: "user", content: userContent }],
+  });
 
-    if (!res.ok) {
-      console.error("[orchestrator] Error en generateFinalResponse:", res.status);
-      return agentData; // Fallback
-    }
-
-    const data = (await res.json()) as {
-      content: Array<{ type: string; text: string }>;
-    };
-    return data.content?.[0]?.text?.trim() ?? agentData;
-  } catch (err) {
-    console.error("[orchestrator] Error en generateFinalResponse:", err);
-    return agentData; // Fallback al dato crudo
-  }
+  return result ?? agentData; // Fallback al dato crudo del agente
 }
 
 // -------------------------------------------------------

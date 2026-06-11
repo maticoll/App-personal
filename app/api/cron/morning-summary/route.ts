@@ -22,6 +22,7 @@ import { sleepAgent } from "@/agents/sleep";
 import { synthesisAgent } from "@/agents/synthesis";
 import { getNutritionSummaryText } from "@/lib/nutrition";
 import { getTodayEventsText } from "@/lib/calendar";
+import { callClaude } from "@/lib/claude";
 import { logger } from "@/lib/logger";
 
 // -------------------------------------------------------
@@ -64,46 +65,26 @@ async function fetchVerse(): Promise<{ reference: string; text: string } | null>
 // -------------------------------------------------------
 
 async function generateMotivation(globalScore: number | null): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return "Que tengas un gran dia hoy!";
-
   const scoreContext =
     globalScore !== null
       ? "El score de ayer fue " + globalScore + "/100."
       : "No hay score registrado ayer.";
 
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
+  const line = await callClaude({
+    model: "claude-haiku-4-5-20251001",
+    maxTokens: 60,
+    messages: [
+      {
+        role: "user",
+        content:
+          "Genera UNA sola linea motivacional en espanol, amigable y directa, para el inicio del dia. " +
+          scoreContext +
+          " Sin asteriscos, sin markdown, sin comillas. Maximo 15 palabras.",
       },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 60,
-        messages: [
-          {
-            role: "user",
-            content:
-              "Genera UNA sola linea motivacional en espanol, amigable y directa, para el inicio del dia. " +
-              scoreContext +
-              " Sin asteriscos, sin markdown, sin comillas. Maximo 15 palabras.",
-          },
-        ],
-      }),
-    });
+    ],
+  });
 
-    if (!res.ok) return "Que tengas un gran dia hoy!";
-    const data = (await res.json()) as {
-      content: Array<{ type: string; text: string }>;
-    };
-    const line = data.content?.[0]?.text?.trim() ?? "";
-    return line || "Que tengas un gran dia hoy!";
-  } catch {
-    return "Que tengas un gran dia hoy!";
-  }
+  return line || "Que tengas un gran dia hoy!";
 }
 
 // -------------------------------------------------------

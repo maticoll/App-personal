@@ -3,6 +3,7 @@
 // ============================================================
 
 import { db } from "@/lib/db";
+import { callClaude } from "@/lib/claude";
 
 // -------------------------------------------------------
 // Tipos
@@ -156,26 +157,13 @@ Estructurá esta idea. Devolvé ÚNICAMENTE un objeto JSON con exactamente estas
   "tags": ["tag1", "tag2"] (array de 1 a 4 tags relevantes en minúsculas, en español, sin símbolos)
 }`;
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": process.env.ANTHROPIC_API_KEY!,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 600,
-      messages: [{ role: "user", content: prompt }],
-    }),
+  const text = await callClaude({
+    model: "claude-haiku-4-5-20251001",
+    maxTokens: 600,
+    messages: [{ role: "user", content: prompt }],
   });
 
-  if (!response.ok) {
-    throw new Error(`Claude API error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const text = data.content[0].text.trim();
+  if (!text) throw new Error("Claude API: sin respuesta");
 
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("No JSON in Claude response");

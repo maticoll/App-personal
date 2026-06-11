@@ -16,6 +16,7 @@ import { db } from "@/lib/db";
 import { getGoals } from "@/lib/goals";
 import { buildSynthesisPrompt } from "@/agents/prompts";
 import { getStoredScore } from "@/lib/scoring";
+import { callClaude } from "@/lib/claude";
 
 // ── Tipos ──────────────────────────────────────────────────
 
@@ -181,9 +182,6 @@ async function callSynthesisAI(
   systemPrompt: string,
   dataSummary: string
 ): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return "No se pudo generar análisis (API key faltante).";
-
   const userContent =
     `Estos son los datos de Corea de los últimos días:\n\n${dataSummary}\n\n` +
     `Analizá los datos y generá:\n` +
@@ -192,35 +190,14 @@ async function callSynthesisAI(
     `Respondé en español rioplatense. Sé específico con los datos. No generalices.\n` +
     `Formato: párrafos cortos, sin markdown, sin asteriscos.`;
 
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 400,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userContent }],
-      }),
-    });
+  const result = await callClaude({
+    model: "claude-sonnet-4-6",
+    maxTokens: 400,
+    system: systemPrompt,
+    messages: [{ role: "user", content: userContent }],
+  });
 
-    if (!res.ok) {
-      console.error("[synthesis] Error llamando a Claude:", res.status);
-      return "No se pudo generar el análisis.";
-    }
-
-    const data = (await res.json()) as {
-      content: Array<{ type: string; text: string }>;
-    };
-    return data.content?.[0]?.text?.trim() ?? "Sin respuesta.";
-  } catch (err) {
-    console.error("[synthesis] Error:", err);
-    return "Error generando análisis.";
-  }
+  return result ?? "No se pudo generar el análisis.";
 }
 
 // ── API pública del agente ─────────────────────────────────

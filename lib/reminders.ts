@@ -7,6 +7,7 @@
 // ============================================================
 
 import { db } from "@/lib/db";
+import { callClaude } from "@/lib/claude";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -135,9 +136,6 @@ export async function parseReminderRequest(
   referenceDate: Date,
   context?: string
 ): Promise<{ message: string; fireAt: Date } | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
-
   const dateStr = referenceDate.toLocaleDateString("es-UY", {
     weekday: "long",
     year: "numeric",
@@ -157,38 +155,26 @@ export async function parseReminderRequest(
     : "";
 
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 120,
-        messages: [
-          {
-            role: "user",
-            content:
-              `Hoy es ${dateStr} y son las ${timeStr} en Uruguay (UTC-3).${contextSection}\n` +
-              `El usuario quiere configurar un recordatorio. Extrae:\n` +
-              `1. Qué hay que recordar (máximo 4 palabras, ej: "dentista", "reunión con Pablo", "gym")\n` +
-              `2. Cuándo disparar el recordatorio (fecha y hora exactas)\n\n` +
-              `IMPORTANTE: Devuelve la hora en formato de Uruguay (UTC-3), con el offset -03:00.\n` +
-              `Responde SOLO con JSON: {"message":"...","fireAt":"YYYY-MM-DDTHH:MM:SS-03:00"}\n` +
-              `Texto: "${text}"`,
-          },
-        ],
-      }),
+    const raw = await callClaude({
+      model: "claude-haiku-4-5-20251001",
+      maxTokens: 120,
+      messages: [
+        {
+          role: "user",
+          content:
+            `Hoy es ${dateStr} y son las ${timeStr} en Uruguay (UTC-3).${contextSection}\n` +
+            `El usuario quiere configurar un recordatorio. Extrae:\n` +
+            `1. Qué hay que recordar (máximo 4 palabras, ej: "dentista", "reunión con Pablo", "gym")\n` +
+            `2. Cuándo disparar el recordatorio (fecha y hora exactas)\n\n` +
+            `IMPORTANTE: Devuelve la hora en formato de Uruguay (UTC-3), con el offset -03:00.\n` +
+            `Responde SOLO con JSON: {"message":"...","fireAt":"YYYY-MM-DDTHH:MM:SS-03:00"}\n` +
+            `Texto: "${text}"`,
+        },
+      ],
     });
 
-    if (!res.ok) return null;
+    if (!raw) return null;
 
-    const data = (await res.json()) as {
-      content: Array<{ type: string; text: string }>;
-    };
-    const raw = data.content?.[0]?.text?.trim() ?? "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
 

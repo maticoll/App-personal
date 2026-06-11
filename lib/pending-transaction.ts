@@ -13,6 +13,17 @@
 import { db } from "@/lib/db";
 import type { FinancesCard } from "@/lib/finances";
 
+// ─── Configuración ────────────────────────────────────────────────────────────
+
+/**
+ * TTL de una transacción pendiente. Si el usuario abandona el flujo de
+ * confirmación a mitad de camino, el pending queda colgado y —como userId es
+ * UNIQUE— bloquea TODOS los mensajes futuros (el orquestrador los desvía a
+ * handleConfirmation). Con este TTL, un pending vencido se trata como
+ * inexistente y se borra al consultarlo, evitando el bloqueo.
+ */
+const PENDING_TTL_MS = 30 * 60 * 1000; // 30 minutos
+
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export type PendingStep = "select_card" | "confirm";
@@ -72,6 +83,15 @@ export async function getPending(userId: string): Promise<PendingRecord | null> 
     .catch(() => null);
 
   if (!record) return null;
+
+  // Si el pending venció (flujo abandonado), borrarlo y tratar como inexistente
+  // para no bloquear los mensajes siguientes del usuario.
+  if (Date.now() - record.createdAt.getTime() > PENDING_TTL_MS) {
+    await db.pendingTransaction
+      .deleteMany({ where: { userId } })
+      .catch(() => null);
+    return null;
+  }
 
   return {
     data: record.data as unknown as PendingTransactionData,

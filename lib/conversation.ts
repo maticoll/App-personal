@@ -8,6 +8,7 @@
 // ============================================================
 
 import { db } from "@/lib/db";
+import { callClaude } from "@/lib/claude";
 import type { ConversationTurn } from "@/lib/types";
 
 // ── Configuración ──────────────────────────────────────────
@@ -151,9 +152,6 @@ async function summarizeTurns(
   turns: ConversationTurn[],
   previousSummary: string | null
 ): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return previousSummary ?? "";
-
   const conversationText = turns
     .map((t) => `${t.role === "user" ? "Usuario" : "Asistente"}: ${t.content}`)
     .join("\n");
@@ -164,34 +162,13 @@ async function summarizeTurns(
 
   const prompt = `${contextSection}CONVERSACIÓN A RESUMIR:\n${conversationText}\n\nResumí esta conversación en tercera persona, en español, en máximo 120 palabras. Enfocate en los temas tratados, lo que quedó pendiente y cualquier dato personal mencionado (objetivos, números, intenciones). Sé conciso y factual.`;
 
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 200,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
+  const result = await callClaude({
+    model: "claude-haiku-4-5-20251001",
+    maxTokens: 200,
+    messages: [{ role: "user", content: prompt }],
+  });
 
-    if (!res.ok) {
-      console.error("[conversation] Error en summarizeTurns:", res.status);
-      return previousSummary ?? "";
-    }
-
-    const data = (await res.json()) as {
-      content: Array<{ type: string; text: string }>;
-    };
-    return data.content?.[0]?.text?.trim() ?? previousSummary ?? "";
-  } catch (err) {
-    console.error("[conversation] Error llamando a Claude para summary:", err);
-    return previousSummary ?? "";
-  }
+  return result ?? previousSummary ?? "";
 }
 
 /**

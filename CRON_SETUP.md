@@ -29,8 +29,11 @@ Estos no están en `vercel.json` porque necesitan correr más de una vez por dí
 |-----|-----|----------|-----------------|----------|
 | Water Reminder — mediodía | `https://[TU-APP].vercel.app/api/cron/water-reminder` | `0 12 * * *` | `x-cron-secret: [TU_CRON_SECRET]` | Recordatorio de hidratación al mediodía |
 | Water Reminder — tarde | `https://[TU-APP].vercel.app/api/cron/water-reminder` | `0 17 * * *` | `x-cron-secret: [TU_CRON_SECRET]` | Recordatorio de hidratación a las 17 hs |
+| **Reminders** | `https://[TU-APP].vercel.app/api/cron/reminders` | `*/15 * * * *` (cada 15 min) | `x-cron-secret: [TU_CRON_SECRET]` | Dispara recordatorios manuales del usuario + alertas de Google Calendar (2 hs antes). **Sin este cron, los "recordame que..." nunca se envían.** |
 
 > **Reemplazá** `[TU-APP]` con el dominio real de tu app en Vercel (ej: `app-personal-maticoll.vercel.app`) y `[TU_CRON_SECRET]` con el valor de tu variable `CRON_SECRET`.
+>
+> ⚠️ El cron de **Reminders NO puede ir en `vercel.json`**: corre cada 15 min y el plan Hobby rechaza el deploy si un cron de `vercel.json` corre más de 1×/día. Por eso va sí o sí en cron-job.org.
 
 ---
 
