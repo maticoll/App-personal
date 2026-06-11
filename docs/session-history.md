@@ -704,3 +704,21 @@ Spec/plan en `docs/superpowers/specs|plans/2026-06-02-active-workout-logger*`. P
 - **Flujo**: "Empezar"/"Hacer hoy"/"Empezar vacio" → `/fitness/session?routine=<id>`; logueas series con "anterior" precargado, ✓ marca + descanso, agregar/quitar series y ejercicios; **Finish** → 1 POST → resumen con volumen/series/duracion/PRs (peso max, volumen, reps a un peso). PRs en vivo son tentativos; el server es la fuente de verdad. El registro por WhatsApp y "traeme push A" quedan intactos.
 
 *Ultima actualizacion: Junio 2026 - Sesion 11: Calendar recurrente, reconexion Google, pasos Garmin, rutinas avanzadas, workout activo estilo Hevy.*
+
+---
+
+## Sesion 12 (2026-06-11) - Desglose de ideas con IA
+
+Spec/plan en `docs/superpowers/specs|plans/2026-06-11-idea-breakdown*`. Al capturar una idea (WhatsApp o web), Haiku la desglosa en una sola llamada (pasos, que investigar y donde, evaluacion rapida, primer paso de hoy). Ideas existentes se desglosan/regeneran bajo demanda (boton en la web, "desglosa la idea de X" por WhatsApp con respuesta verbatim).
+
+**Cambio de schema** (correr en Supabase SQL Editor ANTES de deployar - sin las columnas, Prisma rompe TODO el modulo de ideas):
+```sql
+ALTER TABLE ideas ADD COLUMN IF NOT EXISTS breakdown jsonb;
+ALTER TABLE ideas ADD COLUMN IF NOT EXISTS "breakdownAt" timestamp(3);
+```
+
+- **`lib/ideas.ts`**: tipo `IdeaBreakdown`, `parseBreakdown` (parser defensivo compartido entre JSON de Claude y Json de DB), `BREAKDOWN_SPEC` (prompt compartido), `callClaudeForIdea` ahora devuelve estructura + desglose juntos (Haiku, maxTokens 1500; decision de costo: ~$0.006/idea), `generateIdeaBreakdown` (regeneracion; no pisa el desglose anterior si falla).
+- **`agents/ideas`**: `formatBreakdownPlain` (texto plano WhatsApp), capture responde con desglose **verbatim**, intent `expand` real (busca por texto; 1 match genera, varios lista candidatos, ninguno muestra recientes). `processIdeasMessage` ahora devuelve `{message, verbatim}`.
+- **`lib/orchestrator.ts`**: case "ideas" usa `ideasAgent.process` y respeta verbatim (antes hardcodeaba false).
+- **Endpoint**: `POST /api/ideas/[id]/breakdown`.
+- **UI**: seccion "Desglose" en la tarjeta expandida con boton Desglosar/Regenerar (`BreakdownView`).
