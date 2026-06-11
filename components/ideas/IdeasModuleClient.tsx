@@ -7,8 +7,8 @@
 // ============================================================
 
 import { useState, useTransition, useRef, useEffect } from "react";
-import { Lightbulb, Plus, Search, Tag, Trash2, RotateCcw, Loader2, X } from "lucide-react";
-import type { IdeaWithMeta, IdeasStats, IdeaPriority, IdeaStatus } from "@/lib/ideas";
+import { Lightbulb, Plus, Search, Tag, Trash2, RotateCcw, Loader2, X, ListChecks, Sparkles } from "lucide-react";
+import type { IdeaWithMeta, IdeasStats, IdeaPriority, IdeaStatus, IdeaBreakdown } from "@/lib/ideas";
 
 // ─── Constantes de UI ─────────────────────────────────────────────────────────
 
@@ -73,6 +73,8 @@ export default function IdeasModuleClient({ initialIdeas, initialStats }: Props)
   // In-flight actions
   const [cyclingId, setCyclingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [breakdownLoadingId, setBreakdownLoadingId] = useState<string | null>(null);
+  const [breakdownError, setBreakdownError] = useState<{ id: string; message: string } | null>(null);
 
   // ── Auto-resize textarea ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -218,6 +220,29 @@ export default function IdeasModuleClient({ initialIdeas, initialStats }: Props)
         setEditingId(null);
       }
     });
+  }
+
+  // ── Desglose IA ───────────────────────────────────────────────────────────────
+  async function handleGenerateBreakdown(ideaId: string) {
+    setBreakdownLoadingId(ideaId);
+    setBreakdownError(null);
+    try {
+      const res = await fetch(`/api/ideas/${ideaId}/breakdown`, { method: "POST" });
+      if (res.ok) {
+        const updated: IdeaWithMeta = await res.json();
+        setIdeas((prev) => prev.map((i) => (i.id === ideaId ? updated : i)));
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setBreakdownError({
+          id: ideaId,
+          message: (err as { error?: string }).error ?? "Error generando el desglose",
+        });
+      }
+    } catch {
+      setBreakdownError({ id: ideaId, message: "Error de conexión" });
+    } finally {
+      setBreakdownLoadingId(null);
+    }
   }
 
   // ── Tags list ──────────────────────────────────────────────────────────────────
@@ -402,6 +427,9 @@ export default function IdeasModuleClient({ initialIdeas, initialStats }: Props)
               onEditContent={setEditContent}
               onTagClick={(tag) => setActiveTag(activeTag === tag ? null : tag)}
               activeTag={activeTag}
+              isGeneratingBreakdown={breakdownLoadingId === idea.id}
+              breakdownError={breakdownError?.id === idea.id ? breakdownError.message : null}
+              onGenerateBreakdown={() => handleGenerateBreakdown(idea.id)}
             />
           ))}
         </div>
@@ -450,7 +478,65 @@ type IdeaCardProps = {
   onEditContent: (v: string) => void;
   onTagClick: (tag: string) => void;
   activeTag: string | null;
+  isGeneratingBreakdown: boolean;
+  breakdownError: string | null;
+  onGenerateBreakdown: () => void;
 };
+
+// ─── Breakdown View ───────────────────────────────────────────────────────────
+
+function BreakdownView({ breakdown }: { breakdown: IdeaBreakdown }) {
+  const ev = breakdown.evaluation;
+  return (
+    <div className="space-y-3">
+      {breakdown.steps.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-on-surface mb-1">Pasos a seguir</p>
+          <ol className="space-y-1">
+            {breakdown.steps.map((step, i) => (
+              <li key={i} className="flex gap-2 text-xs text-on-surface-variant leading-relaxed">
+                <span className="text-module-ideas font-semibold flex-shrink-0">{i + 1}.</span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {breakdown.research.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-on-surface mb-1">Qué investigar</p>
+          <ul className="space-y-1">
+            {breakdown.research.map((r, i) => (
+              <li key={i} className="text-xs leading-relaxed">
+                <span className="text-on-surface-variant">{r.question}</span>
+                {r.where && <span className="text-outline"> — {r.where}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {(ev.effort || ev.risks.length > 0 || ev.verdict) && (
+        <div>
+          <p className="text-xs font-semibold text-on-surface mb-1">Evaluación rápida</p>
+          <div className="space-y-0.5 text-xs text-on-surface-variant">
+            {ev.effort && <p>Esfuerzo: {ev.effort}</p>}
+            {ev.risks.length > 0 && <p>Riesgos: {ev.risks.join("; ")}</p>}
+            {ev.verdict && <p>Veredicto: {ev.verdict}</p>}
+          </div>
+        </div>
+      )}
+
+      {breakdown.firstStep && (
+        <div className="bg-module-ideas/10 border border-module-ideas/20 rounded-lg px-3 py-2">
+          <p className="text-xs font-semibold text-module-ideas mb-0.5">Primer paso de hoy</p>
+          <p className="text-xs text-on-surface-variant">{breakdown.firstStep}</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function IdeaCard({
   idea,
@@ -471,6 +557,9 @@ function IdeaCard({
   onEditContent,
   onTagClick,
   activeTag,
+  isGeneratingBreakdown,
+  breakdownError,
+  onGenerateBreakdown,
 }: IdeaCardProps) {
   const pri = PRIORITY_CONFIG[idea.priority] ?? PRIORITY_CONFIG.media;
   const sta = STATUS_CONFIG[idea.status] ?? STATUS_CONFIG.idea;
@@ -579,6 +668,49 @@ function IdeaCard({
               </p>
             )}
           </div>
+
+          {/* ── Desglose IA ──────────────────────────────────────────────── */}
+          {!isEditing && (
+            <div className="border-t border-outline-variant/20 pt-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-on-surface flex items-center gap-1.5">
+                  <ListChecks className="w-3.5 h-3.5 text-module-ideas" />
+                  Desglose
+                </span>
+                <button
+                  onClick={onGenerateBreakdown}
+                  disabled={isGeneratingBreakdown}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border border-module-ideas/30 text-module-ideas bg-module-ideas/10 hover:opacity-80 disabled:opacity-50 transition-all"
+                >
+                  {isGeneratingBreakdown ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3 h-3" />
+                  )}
+                  {isGeneratingBreakdown
+                    ? "Generando…"
+                    : idea.breakdown
+                      ? "Regenerar"
+                      : "Desglosar"}
+                </button>
+              </div>
+
+              {breakdownError && (
+                <p className="text-xs text-red-400">{breakdownError}</p>
+              )}
+
+              {idea.breakdown ? (
+                <BreakdownView breakdown={idea.breakdown} />
+              ) : (
+                !isGeneratingBreakdown && (
+                  <p className="text-xs text-outline">
+                    Todavía no hay desglose. Tocá &quot;Desglosar&quot; para generar pasos,
+                    investigación y evaluación con IA.
+                  </p>
+                )
+              )}
+            </div>
+          )}
 
           {/* Action bar */}
           {!isEditing && (
