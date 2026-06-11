@@ -23,7 +23,7 @@ import { sleepAgent } from "@/agents/sleep";
 import { fitnessAgent } from "@/agents/fitness";
 import { processNutritionMessage } from "@/agents/nutrition";
 import { processProjectsMessage } from "@/agents/projects";
-import { processIdeasMessage } from "@/agents/ideas";
+import { ideasAgent } from "@/agents/ideas";
 import { scoringAgent } from "@/agents/scoring";
 import { calendarAgent } from "@/agents/calendar";
 import { financesAgent } from "@/agents/finances";
@@ -143,7 +143,9 @@ async function callSpecialistAgent(
         return { text: await processProjectsMessage(userId, text), verbatim: false };
       }
       case "ideas": {
-        return { text: await processIdeasMessage(userId, text), verbatim: false };
+        const result = await ideasAgent.process(input);
+        const verbatim = !!(result.data as { verbatim?: boolean } | undefined)?.verbatim;
+        return { text: result.message, verbatim };
       }
       case "scoring": {
         const result = await scoringAgent.process(input);
