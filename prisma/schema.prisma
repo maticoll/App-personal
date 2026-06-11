@@ -412,6 +412,10 @@ model Idea {
   // Estado: "idea" | "progreso" | "hecha"
   status      String   @default("idea")
 
+  // Desglose IA: pasos, investigación, evaluación, primer paso (IdeaBreakdown)
+  breakdown   Json?
+  breakdownAt DateTime?
+
   // Integración Lumina (pendiente)
   luminaId String? @unique
 
