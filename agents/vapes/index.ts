@@ -30,6 +30,12 @@ import {
   createTransaction,
   formatCurrency,
 } from "@/lib/finances";
+import {
+  saveVapePending,
+  clearVapePending,
+  type VapePending,
+  type VapePendingLinea,
+} from "@/lib/pending-vape";
 
 // ─── Helpers de texto ───────────────────────────────────────────────────────────
 
@@ -350,45 +356,13 @@ async function handlePromoSale(
   }
 
   const unit = Math.round(total / units);
-
-  // DISPARO 1 — un movimiento por sabor (cantidad = count, precio unitario = total/units)
-  const resultados: { nombre: string; rest: number; bajo: boolean; ok: boolean }[] = [];
-  for (const g of grupos.values()) {
-    const mov = await registrarMovimientoNubez({
-      tipo: "venta",
-      alias: g.producto.alias,
-      cantidad: g.count,
-      precio: unit,
-      comentario: `promo ${units}x${total} whatsapp`,
-    });
-    resultados.push({
-      nombre: g.producto.nombre,
-      rest: mov?.stockRestante ?? NaN,
-      bajo: !!mov?.stockBajo,
-      ok: !!(mov && mov.ok),
-    });
-  }
-
-  // DISPARO 2 — finanzas: un solo ingreso por el total del pack
-  const saboresDesc = [...grupos.values()].map((g) => `${g.count}x ${g.producto.nombre}`).join(", ");
-  const fin = await registrarFinanzas(userId, "venta", total, `Venta promo ${units}x: ${saboresDesc}`).catch(
-    () => ({ ok: false, reason: "error inesperado" })
-  );
-
-  // Respuesta
-  let message = `✅ Vendiste la promo de ${units} (${formatCurrency(total)}): ${saboresDesc}.`;
-  const detalle = resultados
-    .filter((r) => !isNaN(r.rest))
-    .map((r) =>
-      r.rest <= 0 ? `${r.nombre}: 🔴 sin stock` : r.bajo ? `${r.nombre}: ${r.rest} ⚠️` : `${r.nombre}: ${r.rest}`
-    );
-  if (detalle.length) message += `\nStock: ${detalle.join(" · ")}.`;
-
-  const fallos = resultados.filter((r) => !r.ok);
-  if (fallos.length) message += `\n(No pude descontar: ${fallos.map((f) => f.nombre).join(", ")}.)`;
-  if (!fin.ok) message += `\n(Ojo: no lo registré en finanzas — ${fin.reason}.)`;
-
-  return { message };
+  const lineasVenta: VapePendingLinea[] = [...grupos.values()].map((g) => ({
+    alias: g.producto.alias,
+    nombre: g.producto.nombre,
+    count: g.count,
+    price: unit,
+  }));
+  return pedirComprador(userId, lineasVenta);
 }
 
 // ─── Venta/compra normal (uno o varios sabores, separados por coma/"y") ───────
@@ -467,26 +441,50 @@ async function handleItemsSale(
     return { message: `¿A qué costo unitario? Decímelo con "a", ej: "compré 10 mountain berry a 900".` };
   }
 
-  // DISPARO 1 — un movimiento por item (en el stock de Nubez)
+  const lineas: VapePendingLinea[] = items.map((it) => ({
+    alias: it.producto.alias,
+    nombre: it.producto.nombre,
+    count: it.count,
+    price: it.price,
+  }));
+
+  // Compra: se registra al toque (comprador = proveedor, sin preguntar)
+  if (tipo === "compra") {
+    return ejecutarMovimientos(userId, "compra", lineas);
+  }
+  // Venta: preguntar el comprador antes de registrar
+  return pedirComprador(userId, lineas);
+}
+
+// ─── Ejecución del movimiento (Nubez + finanzas + respuesta) ──────────────────
+
+async function ejecutarMovimientos(
+  userId: string,
+  tipo: "venta" | "compra",
+  lineas: VapePendingLinea[],
+  comprador?: string
+): Promise<VapeResult> {
+  // DISPARO 1 — un movimiento por línea (stock en Nubez)
   const resultados: { nombre: string; rest: number; bajo: boolean; ok: boolean }[] = [];
-  for (const it of items) {
+  for (const l of lineas) {
     const mov = await registrarMovimientoNubez({
       tipo,
-      alias: it.producto.alias,
-      cantidad: it.count,
-      precio: it.price,
+      alias: l.alias,
+      cantidad: l.count,
+      precio: l.price,
+      comprador,
       comentario: `${tipo} whatsapp`,
     });
     resultados.push({
-      nombre: it.producto.nombre,
+      nombre: l.nombre,
       rest: mov?.stockRestante ?? NaN,
       bajo: !!mov?.stockBajo,
       ok: !!(mov && mov.ok),
     });
   }
 
-  const total = items.reduce((a, it) => a + it.count * it.price, 0);
-  const desc = items.map((it) => `${it.count}x ${it.producto.nombre}`).join(", ");
+  const total = lineas.reduce((a, l) => a + l.count * l.price, 0);
+  const desc = lineas.map((l) => `${l.count}x ${l.nombre}`).join(", ");
 
   // DISPARO 2 — finanzas (un solo movimiento por el total)
   const fin = await registrarFinanzas(userId, tipo, total, `${tipo === "venta" ? "Venta" : "Compra"}: ${desc}`).catch(
@@ -495,7 +493,7 @@ async function handleItemsSale(
 
   // Respuesta
   const verbo = tipo === "venta" ? "Vendiste" : "Compraste";
-  let message = `✅ ${verbo} ${desc} (${formatCurrency(total)}).`;
+  let message = `✅ ${verbo} ${desc} (${formatCurrency(total)})${comprador ? ` a ${comprador}` : ""}.`;
   const detalle = resultados
     .filter((r) => !isNaN(r.rest))
     .map((r) =>
@@ -507,6 +505,32 @@ async function handleItemsSale(
   if (!fin.ok) message += `\n(Ojo: no lo registré en finanzas — ${fin.reason}.)`;
 
   return { message };
+}
+
+// ─── Pregunta de comprador (guarda pendiente y pide el nombre) ─────────────────
+
+async function pedirComprador(userId: string, lineas: VapePendingLinea[]): Promise<VapeResult> {
+  await saveVapePending(userId, { kind: "vape_buyer", tipo: "venta", lineas });
+  const desc = lineas.map((l) => `${l.count}x ${l.nombre}`).join(", ");
+  const total = lineas.reduce((a, l) => a + l.count * l.price, 0);
+  return {
+    message: `Anotado: ${desc} (${formatCurrency(total)}). ¿A quién se la vendiste? (poné el nombre, o "nadie")`,
+  };
+}
+
+// ─── Respuesta con el nombre del comprador (segundo paso) ──────────────────────
+
+export async function handleBuyerReply(
+  userId: string,
+  text: string,
+  pending: VapePending
+): Promise<string> {
+  await clearVapePending(userId);
+  const t = normalize(text).trim();
+  const skip = t === "" || /^(nadie|ninguno|anonimo|anonim|nn|na|paso|sin nombre|-|\.)$/.test(t);
+  const comprador = skip ? "" : text.trim(); // "" → celda comprador vacía
+  const { message } = await ejecutarMovimientos(userId, pending.tipo, pending.lineas, comprador);
+  return message;
 }
 
 async function processVapesMessage(userId: string, text: string): Promise<VapeResult> {

@@ -28,7 +28,8 @@ import { scoringAgent } from "@/agents/scoring";
 import { calendarAgent } from "@/agents/calendar";
 import { financesAgent } from "@/agents/finances";
 import { synthesisAgent } from "@/agents/synthesis";
-import { vapesAgent, looksLikeVapeMessage } from "@/agents/vapes";
+import { vapesAgent, looksLikeVapeMessage, handleBuyerReply } from "@/agents/vapes";
+import { getVapePending } from "@/lib/pending-vape";
 import { getGoals } from "@/lib/goals";
 import { buildOrchestratorPrompt } from "@/agents/prompts";
 import { db } from "@/lib/db";
@@ -217,6 +218,23 @@ async function generateFinalResponse(
 // -------------------------------------------------------
 export async function orchestrate(userId: string, text: string): Promise<string> {
   console.log(`[orchestrator] userId=${userId} texto="${text}"`);
+
+  // 0.0 Pendiente de vapes (esperando el nombre del comprador) — antes que finanzas.
+  //     Si hay uno activo, este mensaje es el nombre del comprador.
+  const vapePending = await getVapePending(userId).catch(() => null);
+  if (vapePending) {
+    console.log(`[orchestrator] Vape pending (buyer) — desviando a handleBuyerReply`);
+    const response = await handleBuyerReply(userId, text, vapePending);
+    await Promise.all([
+      addTurn(userId, "user", text).catch((err) =>
+        console.error("[orchestrator] Error guardando turno user (vape-pending):", err)
+      ),
+      addTurn(userId, "assistant", response).catch((err) =>
+        console.error("[orchestrator] Error guardando turno assistant (vape-pending):", err)
+      ),
+    ]);
+    return response;
+  }
 
   // 0. Chequear transacción pendiente ANTES de clasificar módulo.
   //    Si hay un pending activo, el mensaje es una respuesta al flujo de

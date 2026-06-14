@@ -82,6 +82,9 @@ export async function registrarMovimientoNubez(input: {
   cantidad: number;
   precio: number;
   comentario?: string;
+  /** Nombre del comprador (col "comprador" en Sheets). Si se omite, Nubez usa
+   *  su default por tipo (venta→"whatsapp", compra→"proveedor"). */
+  comprador?: string;
 }): Promise<MovimientoResult | null> {
   try {
     return await nubezFetch<MovimientoResult>("/api/movimiento", {
@@ -93,6 +96,7 @@ export async function registrarMovimientoNubez(input: {
         cantidad: input.cantidad,
         precio: input.precio,
         comentario: input.comentario ?? "",
+        ...(input.comprador !== undefined ? { comprador: input.comprador } : {}),
       }),
     });
   } catch (err) {
