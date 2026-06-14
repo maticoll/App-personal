@@ -28,6 +28,7 @@ import { scoringAgent } from "@/agents/scoring";
 import { calendarAgent } from "@/agents/calendar";
 import { financesAgent } from "@/agents/finances";
 import { synthesisAgent } from "@/agents/synthesis";
+import { vapesAgent, looksLikeVapeMessage } from "@/agents/vapes";
 import { getGoals } from "@/lib/goals";
 import { buildOrchestratorPrompt } from "@/agents/prompts";
 import { db } from "@/lib/db";
@@ -234,6 +235,28 @@ export async function orchestrate(userId: string, text: string): Promise<string>
       ),
     ]);
     return response;
+  }
+
+  // 0.5. Fast-path de vapes (registro de ventas/compras de stock).
+  //    Se ejecuta ANTES de clasificar con Haiku para no colisionar con el módulo
+  //    de finanzas (que captura "compré" como gasto). El parseo es regex puro,
+  //    sin IA. Si el agente determina que NO es un movimiento de vapes (notVapes),
+  //    se cae al flujo normal de clasificación.
+  if (looksLikeVapeMessage(text)) {
+    const result = await vapesAgent.process({ userId, message: text, timestamp: new Date() });
+    const notVapes = !!(result.data as { notVapes?: boolean } | undefined)?.notVapes;
+    if (!notVapes) {
+      const finalResponse = result.message;
+      await Promise.all([
+        addTurn(userId, "user", text).catch((err) =>
+          console.error("[orchestrator] Error guardando turno user (vapes):", err)
+        ),
+        addTurn(userId, "assistant", finalResponse).catch((err) =>
+          console.error("[orchestrator] Error guardando turno assistant (vapes):", err)
+        ),
+      ]);
+      return finalResponse;
+    }
   }
 
   // 1. Cargar contexto de conversación + objetivos + nombre del usuario en paralelo

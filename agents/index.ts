@@ -12,3 +12,4 @@ export { ideasAgent } from "./ideas";
 export { financesAgent } from "./finances";
 export { calendarAgent } from "./calendar";
 export { scoringAgent } from "./scoring";
+export { vapesAgent } from "./vapes";
