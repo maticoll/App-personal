@@ -104,3 +104,20 @@ export async function registrarMovimientoNubez(input: {
     return null;
   }
 }
+
+// ─── Marcar ventas de un comprador como pagadas (debe → pago) ──────────────────
+
+export async function marcarPagoNubez(
+  comprador: string
+): Promise<{ ok: boolean; comprador: string; actualizados: number } | null> {
+  try {
+    return await nubezFetch<{ ok: boolean; comprador: string; actualizados: number }>("/api/marcar-pago", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${NUBEZ_KEY}` },
+      body: JSON.stringify({ comprador }),
+    });
+  } catch (err) {
+    console.error("[vapes] marcarPagoNubez error:", err);
+    return null;
+  }
+}

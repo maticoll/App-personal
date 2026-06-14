@@ -22,6 +22,7 @@ import type { AgentInput, AgentOutput } from "@/lib/types";
 import {
   getProductos,
   registrarMovimientoNubez,
+  marcarPagoNubez,
   type VapeProducto,
 } from "@/lib/vapes";
 import {
@@ -105,6 +106,33 @@ function isStockQuery(text: string): boolean {
 }
 
 /**
+ * ¿Es un aviso de pago de una deuda? (ej: "Juan me pagó", "marcá pago de Juan")
+ * Usa "me pagó" (singular) y "marcá pago" — distintos de "me pagaron" (finanzas).
+ */
+function isMarkPaid(text: string): boolean {
+  const t = normalize(text);
+  if (/\bmarc\w*\s+(como\s+)?pag/.test(t)) return true; // "marcá (como) pago"
+  if (/\bme pago\b/.test(t)) return true;               // "X me pagó" / "me pagó X"
+  if (/\bsald/.test(t)) return true;                    // "saldó (la deuda)"
+  return false;
+}
+
+// Palabras a descartar al extraer el nombre del comprador (maneja tildes vía norm)
+const NAME_EXACT = new Set(["me", "la", "el", "los", "las", "de", "del", "lo", "que", "ya", "su", "mi", "todo", "como", "cuenta", "deuda", "y", "a", "no", "todavia", "aun"]);
+const NAME_STEM = /^(marc|pag|deb|sald|abon)/;
+
+function extractPaidName(text: string): string {
+  return text
+    .split(/\s+/)
+    .filter((w) => {
+      const n = normalize(w.replace(/[.,;:!?]/g, ""));
+      return n !== "" && !NAME_EXACT.has(n) && !NAME_STEM.test(n);
+    })
+    .join(" ")
+    .trim();
+}
+
+/**
  * Pre-filtro barato para el orquestrador: ¿vale la pena llamar al agente
  * (que hace fetch del catálogo)? Es deliberadamente permisivo — el agente
  * decide definitivamente y marca notVapes si no aplica.
@@ -114,7 +142,7 @@ export function looksLikeVapeMessage(text: string): boolean {
     const t = normalize(text);
     return /\d/.test(t) || mentionsFlavor(text);
   }
-  return isStockQuery(text);
+  return isStockQuery(text) || isMarkPaid(text);
 }
 
 // ─── Extracción de precio / sabor ─────────────────────────────────────────────
@@ -462,7 +490,8 @@ async function ejecutarMovimientos(
   userId: string,
   tipo: "venta" | "compra",
   lineas: VapePendingLinea[],
-  comprador?: string
+  comprador?: string,
+  estado?: "pago" | "debe"
 ): Promise<VapeResult> {
   // DISPARO 1 — un movimiento por línea (stock en Nubez)
   const resultados: { nombre: string; rest: number; bajo: boolean; ok: boolean }[] = [];
@@ -473,7 +502,7 @@ async function ejecutarMovimientos(
       cantidad: l.count,
       precio: l.price,
       comprador,
-      comentario: `${tipo} whatsapp`,
+      comentario: estado ?? `${tipo} whatsapp`,
     });
     resultados.push({
       nombre: l.nombre,
@@ -494,6 +523,8 @@ async function ejecutarMovimientos(
   // Respuesta
   const verbo = tipo === "venta" ? "Vendiste" : "Compraste";
   let message = `✅ ${verbo} ${desc} (${formatCurrency(total)})${comprador ? ` a ${comprador}` : ""}.`;
+  if (estado === "pago") message += " Pagado.";
+  else if (estado === "debe") message += " 🟠 Queda debiendo.";
   const detalle = resultados
     .filter((r) => !isNaN(r.rest))
     .map((r) =>
@@ -520,24 +551,87 @@ async function pedirComprador(userId: string, lineas: VapePendingLinea[]): Promi
 
 // ─── Respuesta con el nombre del comprador (segundo paso) ──────────────────────
 
+function parseEstado(text: string): "pago" | "debe" | null {
+  const t = normalize(text);
+  if (/\bdeb/.test(t)) return "debe";
+  if (/\bno\b|todav|aun no|aún no/.test(t)) return "debe";
+  if (/\bpag/.test(t) || /\b(si|sí|ya|listo|ok|dale|abon)\w*/.test(t)) return "pago";
+  return null;
+}
+
+const SKIP_BUYER = /^(nadie|ninguno|anonimo|anonim|nn|na|paso|sin nombre|-|\.)$/;
+
+function parseBuyer(text: string): { comprador: string; estado: "pago" | "debe" | null } {
+  const estado = parseEstado(text);
+  const n = normalize(text).trim();
+  const skip = n === "" || SKIP_BUYER.test(n);
+  // El nombre es el texto sin las palabras de estado (pago/debe/ya/no/todavía)
+  const comprador = skip
+    ? ""
+    : text
+        .split(/\s+/)
+        .filter((w) => {
+          const nw = normalize(w.replace(/[.,;:!?]/g, ""));
+          return nw !== "" && !["ya", "no", "todavia", "aun"].includes(nw) && !/^(pag|deb|abon)/.test(nw);
+        })
+        .join(" ")
+        .trim();
+  return { comprador, estado };
+}
+
 export async function handleBuyerReply(
   userId: string,
   text: string,
   pending: VapePending
 ): Promise<string> {
-  await clearVapePending(userId);
-  const t = normalize(text).trim();
-  const skip = t === "" || /^(nadie|ninguno|anonimo|anonim|nn|na|paso|sin nombre|-|\.)$/.test(t);
-  const comprador = skip ? "" : text.trim(); // "" → celda comprador vacía
-  const { message } = await ejecutarMovimientos(userId, pending.tipo, pending.lineas, comprador);
-  return message;
+  const step = pending.step ?? "buyer";
+
+  // Paso 2: esperando pago/debe
+  if (step === "payment") {
+    const estado = parseEstado(text);
+    if (!estado) {
+      await saveVapePending(userId, pending); // mantener el pendiente
+      return 'Decime "pago" si ya te pagó, o "debe" si todavía no.';
+    }
+    await clearVapePending(userId);
+    const { message } = await ejecutarMovimientos(userId, pending.tipo, pending.lineas, pending.comprador, estado);
+    return message;
+  }
+
+  // Paso 1: comprador (puede traer el estado en el mismo mensaje, ej "Juan pago")
+  const { comprador, estado } = parseBuyer(text);
+  if (estado) {
+    await clearVapePending(userId);
+    const { message } = await ejecutarMovimientos(userId, pending.tipo, pending.lineas, comprador, estado);
+    return message;
+  }
+
+  // Falta el estado → preguntar pago/debe
+  await saveVapePending(userId, { ...pending, step: "payment", comprador });
+  return `Dale${comprador ? `, ${comprador}` : ""}. ¿Ya te pagó? (pago / debe)`;
+}
+
+async function handleMarkPaid(text: string): Promise<VapeResult> {
+  const name = extractPaidName(text);
+  if (!name) {
+    return { message: '¿Quién te pagó? Decime el nombre, ej: "Juan me pagó".' };
+  }
+  const r = await marcarPagoNubez(name);
+  if (!r || !r.ok) {
+    return { message: "No pude actualizar el estado de pago. Probá de nuevo en un momento." };
+  }
+  if (r.actualizados === 0) {
+    return { message: `No encontré ventas en "debe" a nombre de ${name}.` };
+  }
+  return { message: `✅ Marqué como pago ${r.actualizados} venta(s) de ${name}.` };
 }
 
 async function processVapesMessage(userId: string, text: string): Promise<VapeResult> {
   const tipo = detectTipo(text);
 
-  // Sin verbo de registro → puede ser una consulta de stock
+  // Sin verbo de registro → marcar pago / consulta de stock
   if (!tipo) {
+    if (isMarkPaid(text)) return handleMarkPaid(text);
     if (isStockQuery(text)) return handleStockQuery(text);
     return { message: "", notVapes: true };
   }

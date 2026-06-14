@@ -23,6 +23,10 @@ export type VapePending = {
   kind: "vape_buyer";
   tipo: "venta" | "compra";
   lineas: VapePendingLinea[];
+  /** Paso del flujo: "buyer" (esperando comprador) | "payment" (esperando pago/debe) */
+  step?: "buyer" | "payment";
+  /** Comprador ya capturado (cuando step = "payment") */
+  comprador?: string;
 };
 
 export async function saveVapePending(userId: string, pending: VapePending): Promise<void> {
