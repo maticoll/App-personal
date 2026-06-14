@@ -332,6 +332,12 @@ Salidas:  SUMIFS(Movimientos!D ; Movimientos!B; "Salida"  ; Movimientos!C; Inven
 - Causa probable: (a) los cambios nuevos no están desplegados (no se hizo deploy), y/o (b) el Express de Nubez **no está servido como API en Vercel** (una app Express necesita config de serverless/catch-all en `vercel.json`), y/o (c) la URL de prod real es otra.
 - **Acción:** confirmar la URL real del backend y desplegar Nubez con `/api/movimiento`. Hasta entonces no se puede probar E2E. La lógica local de Nubez sí pasó los tests (curl en localhost).
 
+### Promos (packs multi-sabor) ✅ lado HERMES
+- Packs: **2x2600 · 3x3900 · 5x6000**. Pueden **repetir sabor**.
+- HERMES usa el **total dicho por el usuario** (no necesita que Nubez exponga precios).
+- Formato: `vendí promo 3x3900 menta, sandía, uva` (sabores separados por coma/y/+; repeticiones OK; un solo sabor → N de ese sabor). Registra un movimiento Salida por sabor (unit = total/N) + un ingreso por el total.
+- **Pendiente lado Nubez:** los precios de promo están **hardcodeados y desactualizados** en `public/index.html` (dice 2800/4200/6500). Centralizarlos en `config.js` y actualizar la web a 2600/3900/6000 (el backend ya expande packs con `expandirParaSheets`).
+
 ### Cabos sueltos restantes
 - [ ] `VAPES_FINANCES_CARD`: nombre de la cuenta de finanzas a usar (si queda vacío, usa la primera cuenta). Completar en `.env.local`.
 - [ ] Categoría "vapes" ingreso/gasto: el agente la resuelve por nombre+tipo y cae a "Otros" si falta — verificar que exista del lado correcto.
