@@ -257,6 +257,138 @@ async function handleStockQuery(text: string): Promise<VapeResult> {
   return { message: (wantsLow ? "Por agotarse:\n" : "Stock actual:\n") + lines.join("\n") };
 }
 
+// ─── Venta de promo (pack de varios sabores, con repetición) ──────────────────
+
+function isPromoSale(text: string): boolean {
+  const t = normalize(text);
+  if (/\b(promo|pack)\b/.test(t)) return true;
+  return /\b\d+\s*x\s*\$?\s*\d{3,}/.test(t); // "2x2600"
+}
+
+async function handlePromoSale(
+  userId: string,
+  text: string,
+  productos: VapeProducto[]
+): Promise<VapeResult> {
+  const t = normalize(text);
+
+  // Cantidad (N) y total del pack
+  let units: number | undefined;
+  let total: number | undefined;
+  const mx = t.match(/(\d+)\s*x\s*\$?\s*(\d[\d.,]*)/);
+  if (mx) {
+    units = parseInt(mx[1], 10);
+    total = toNum(mx[2]);
+  }
+  if (units === undefined) {
+    const md = t.match(/\bde\s+(\d+)/);
+    if (md) units = parseInt(md[1], 10);
+  }
+  if (total === undefined) total = extractPrecio(text);
+
+  const ejemplo = `Ej: "vendí promo ${units || 3}x${total || 3900} menta, sandía, uva".`;
+  if (!units || !total) {
+    return { message: `Para registrar una promo decime cantidad, total y los sabores. ${ejemplo}` };
+  }
+
+  // Región de sabores: sacar verbo, promo/pack, "NxTotal", "de N", "a Total"
+  const region = t
+    .replace(/\b(vend\w*|sali\w*|saqu\w*)\b/g, " ")
+    .replace(/\b(promo|pack)\b/g, " ")
+    .replace(/\d+\s*x\s*\$?\s*\d[\d.,]*/g, " ")
+    .replace(/\bde\s+\d+/g, " ")
+    .replace(/(?:\ba\b|\bpor\b|\$)\s*\$?\s*\d[\d.,]*/g, " ")
+    .trim();
+
+  const pieces = region.split(/,|\by\b|\+|\//).map((s) => s.trim()).filter(Boolean);
+  if (pieces.length === 0) {
+    return { message: `¿Qué sabores entran en la promo? ${ejemplo}` };
+  }
+
+  type Linea = { producto: VapeProducto; count: number; explicit: boolean };
+  const lineas: Linea[] = [];
+  const noMatch: string[] = [];
+  const ambiguas: string[] = [];
+
+  for (const piece of pieces) {
+    const cm = piece.match(/^(\d+)\s+(.*)$/);
+    const count = cm ? Math.max(1, parseInt(cm[1], 10)) : 1;
+    const query = cm ? cm[2] : piece;
+    const ms = matchProductos(query, productos);
+    if (ms.length === 0) noMatch.push(query);
+    else if (ms.length > 1) ambiguas.push(query);
+    else lineas.push({ producto: ms[0], count, explicit: cm !== null });
+  }
+
+  if (noMatch.length > 0) {
+    return { message: `No reconocí: ${noMatch.join(", ")}. Nombralos como en el catálogo. ${ejemplo}` };
+  }
+  if (ambiguas.length > 0) {
+    return { message: `Hay varias opciones para: ${ambiguas.join(", ")}. Sé más específico (ej: "watermelon ice elf").` };
+  }
+
+  // Promo de un solo sabor sin cantidad explícita → N de ese sabor
+  if (lineas.length === 1 && !lineas[0].explicit) {
+    lineas[0].count = units;
+  }
+
+  // Agrupar repetidos por alias
+  const grupos = new Map<string, { producto: VapeProducto; count: number }>();
+  for (const l of lineas) {
+    const g = grupos.get(l.producto.alias);
+    if (g) g.count += l.count;
+    else grupos.set(l.producto.alias, { producto: l.producto, count: l.count });
+  }
+
+  const sum = [...grupos.values()].reduce((a, g) => a + g.count, 0);
+  if (sum !== units) {
+    return {
+      message: `La promo es de ${units} pero me diste ${sum} unidad(es). Revisá los sabores. ${ejemplo}`,
+    };
+  }
+
+  const unit = Math.round(total / units);
+
+  // DISPARO 1 — un movimiento por sabor (cantidad = count, precio unitario = total/units)
+  const resultados: { nombre: string; rest: number; bajo: boolean; ok: boolean }[] = [];
+  for (const g of grupos.values()) {
+    const mov = await registrarMovimientoNubez({
+      tipo: "venta",
+      alias: g.producto.alias,
+      cantidad: g.count,
+      precio: unit,
+      comentario: `promo ${units}x${total} whatsapp`,
+    });
+    resultados.push({
+      nombre: g.producto.nombre,
+      rest: mov?.stockRestante ?? NaN,
+      bajo: !!mov?.stockBajo,
+      ok: !!(mov && mov.ok),
+    });
+  }
+
+  // DISPARO 2 — finanzas: un solo ingreso por el total del pack
+  const saboresDesc = [...grupos.values()].map((g) => `${g.count}x ${g.producto.nombre}`).join(", ");
+  const fin = await registrarFinanzas(userId, "venta", total, `Venta promo ${units}x: ${saboresDesc}`).catch(
+    () => ({ ok: false, reason: "error inesperado" })
+  );
+
+  // Respuesta
+  let message = `✅ Vendiste la promo de ${units} (${formatCurrency(total)}): ${saboresDesc}.`;
+  const detalle = resultados
+    .filter((r) => !isNaN(r.rest))
+    .map((r) =>
+      r.rest <= 0 ? `${r.nombre}: 🔴 sin stock` : r.bajo ? `${r.nombre}: ${r.rest} ⚠️` : `${r.nombre}: ${r.rest}`
+    );
+  if (detalle.length) message += `\nStock: ${detalle.join(" · ")}.`;
+
+  const fallos = resultados.filter((r) => !r.ok);
+  if (fallos.length) message += `\n(No pude descontar: ${fallos.map((f) => f.nombre).join(", ")}.)`;
+  if (!fin.ok) message += `\n(Ojo: no lo registré en finanzas — ${fin.reason}.)`;
+
+  return { message };
+}
+
 async function processVapesMessage(userId: string, text: string): Promise<VapeResult> {
   const tipo = detectTipo(text);
 
@@ -269,6 +401,11 @@ async function processVapesMessage(userId: string, text: string): Promise<VapeRe
   const productos = await getProductos();
   if (productos.length === 0) {
     return { message: "No pude leer el catálogo de la tienda. Intentá de nuevo en un rato." };
+  }
+
+  // Venta de promo (pack de varios sabores)
+  if (tipo === "venta" && isPromoSale(text)) {
+    return handlePromoSale(userId, text, productos);
   }
 
   const flavor = extractFlavor(text);
