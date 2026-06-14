@@ -111,12 +111,7 @@ export function looksLikeVapeMessage(text: string): boolean {
   return isStockQuery(text);
 }
 
-// ─── Extracción de cantidad / precio / sabor ──────────────────────────────────
-
-function extractCantidad(text: string): number {
-  const m = normalize(text).match(/\b(?:vend\w*|compr\w*|repus\w*|saqu\w*)\s+(\d[\d.,]*)/);
-  return m ? Math.max(1, Math.round(toNum(m[1]))) : 1;
-}
+// ─── Extracción de precio / sabor ─────────────────────────────────────────────
 
 function extractPrecio(text: string): number | undefined {
   const m = normalize(text).match(/(?:\ba\b|\bpor\b|\$)\s*\$?\s*(\d[\d.,]*)/);
@@ -151,6 +146,13 @@ function extractFlavor(text: string): string {
 function matchProductos(flavor: string, productos: VapeProducto[]): VapeProducto[] {
   const q = normalize(flavor);
   if (!q) return [];
+
+  // Match exacto por alias/sabor/nombre tiene prioridad (ej: "watermelon" es un
+  // alias exacto aunque esté contenido en "watermelon ice elf").
+  const exact = productos.filter(
+    (p) => normalize(p.alias) === q || normalize(p.sabor ?? "") === q || normalize(p.nombre) === q
+  );
+  if (exact.length === 1) return exact;
 
   const test = (terms: string[]) =>
     productos.filter((p) => {
@@ -389,6 +391,124 @@ async function handlePromoSale(
   return { message };
 }
 
+// ─── Venta/compra normal (uno o varios sabores, separados por coma/"y") ───────
+
+function parsePiece(piece: string): { count: number; price?: number; flavorQuery: string } {
+  const pm = normalize(piece).match(/(?:\ba\b|\bpor\b|\$)\s*\$?\s*(\d[\d.,]*)/);
+  const price = pm ? toNum(pm[1]) : undefined;
+  const cm = normalize(piece).match(/^\s*(\d+)\b/);
+  const count = cm ? Math.max(1, parseInt(cm[1], 10)) : 1;
+  return { count, price, flavorQuery: extractFlavor(piece) };
+}
+
+async function handleItemsSale(
+  userId: string,
+  text: string,
+  productos: VapeProducto[],
+  tipo: "venta" | "compra"
+): Promise<VapeResult> {
+  // Precio global: si hay exactamente uno en todo el mensaje, aplica a los items sin precio propio
+  const allPrices = [...normalize(text).matchAll(/(?:\ba\b|\bpor\b|\$)\s*\$?\s*(\d[\d.,]*)/g)].map((m) => toNum(m[1]));
+  const globalPrice = allPrices.length === 1 ? allPrices[0] : undefined;
+
+  // Separar sabores por coma / "y" / "+" / "/"
+  const region = normalize(text).replace(/\b(vend\w*|compr\w*|repus\w*|sali\w*|saqu\w*|ingres\w*)\b/g, " ");
+  const pieces = region.split(/,|\by\b|\+|\//).map((s) => s.trim()).filter(Boolean);
+
+  type Item = { producto: VapeProducto; count: number; price: number };
+  const items: Item[] = [];
+  const noMatch: string[] = [];
+  const ambiguas: string[] = [];
+  let needCost = false;
+
+  for (const piece of pieces) {
+    const { count, price, flavorQuery } = parsePiece(piece);
+    if (!flavorQuery) continue; // "2 vapes", conectores sueltos, etc.
+    const ms = matchProductos(flavorQuery, productos);
+    if (ms.length === 0) { noMatch.push(flavorQuery); continue; }
+    if (ms.length > 1) { ambiguas.push(flavorQuery); continue; }
+    let finalPrice = price ?? globalPrice;
+    if (finalPrice === undefined) {
+      if (tipo === "venta") finalPrice = ms[0].precio; // default: precio de catálogo
+      else { needCost = true; continue; }
+    }
+    items.push({ producto: ms[0], count, price: finalPrice });
+  }
+
+  // Ambigüedad → pedir precisión (es claramente de vapes)
+  if (ambiguas.length > 0) {
+    const opciones = ambiguas
+      .flatMap((q) => matchProductos(q, productos))
+      .slice(0, 8)
+      .map((p) => `- ${p.nombre}`)
+      .join("\n");
+    return { message: `Hay varias opciones para: ${ambiguas.join(", ")}. ¿Cuál?\n${opciones}` };
+  }
+
+  // Nada reconocido como producto
+  if (items.length === 0 && !needCost) {
+    const ej = tipo === "venta" ? "vendí 2 ice mint a 1500" : "compré 10 ice mint a 900";
+    // "compré ..." sin sabor de vape → puede ser un gasto común → dejar pasar a finanzas
+    if (tipo === "compra" && !hasVapeKeyword(text)) {
+      return { message: "", notVapes: true };
+    }
+    // "vendí ..." finanzas no lo maneja, así que asumimos venta de vape
+    if (noMatch.length > 0) {
+      return { message: `No reconocí: ${noMatch.join(", ")}. Nombralo como en el catálogo. Ej: "${ej}".` };
+    }
+    return { message: `¿Qué sabor? Decímelo con el nombre, ej: "${ej}".` };
+  }
+
+  // Algún sabor no matcheó pero otros sí → es de vapes, avisar
+  if (noMatch.length > 0) {
+    return { message: `No reconocí: ${noMatch.join(", ")}. Nombralos como en el catálogo.` };
+  }
+  if (needCost) {
+    return { message: `¿A qué costo unitario? Decímelo con "a", ej: "compré 10 mountain berry a 900".` };
+  }
+
+  // DISPARO 1 — un movimiento por item (en el stock de Nubez)
+  const resultados: { nombre: string; rest: number; bajo: boolean; ok: boolean }[] = [];
+  for (const it of items) {
+    const mov = await registrarMovimientoNubez({
+      tipo,
+      alias: it.producto.alias,
+      cantidad: it.count,
+      precio: it.price,
+      comentario: `${tipo} whatsapp`,
+    });
+    resultados.push({
+      nombre: it.producto.nombre,
+      rest: mov?.stockRestante ?? NaN,
+      bajo: !!mov?.stockBajo,
+      ok: !!(mov && mov.ok),
+    });
+  }
+
+  const total = items.reduce((a, it) => a + it.count * it.price, 0);
+  const desc = items.map((it) => `${it.count}x ${it.producto.nombre}`).join(", ");
+
+  // DISPARO 2 — finanzas (un solo movimiento por el total)
+  const fin = await registrarFinanzas(userId, tipo, total, `${tipo === "venta" ? "Venta" : "Compra"}: ${desc}`).catch(
+    () => ({ ok: false, reason: "error inesperado" })
+  );
+
+  // Respuesta
+  const verbo = tipo === "venta" ? "Vendiste" : "Compraste";
+  let message = `✅ ${verbo} ${desc} (${formatCurrency(total)}).`;
+  const detalle = resultados
+    .filter((r) => !isNaN(r.rest))
+    .map((r) =>
+      r.rest <= 0 ? `${r.nombre}: 🔴 sin stock` : r.bajo ? `${r.nombre}: ${r.rest} ⚠️` : `${r.nombre}: ${r.rest}`
+    );
+  if (detalle.length) message += `\nStock: ${detalle.join(" · ")}.`;
+  const fallos = resultados.filter((r) => !r.ok);
+  if (fallos.length) message += `\n(No pude descontar: ${fallos.map((f) => f.nombre).join(", ")}.)`;
+  if (!fin.ok) message += `\n(Ojo: no lo registré en finanzas — ${fin.reason}.)`;
+
+  return { message };
+}
+
 async function processVapesMessage(userId: string, text: string): Promise<VapeResult> {
   const tipo = detectTipo(text);
 
@@ -408,88 +528,7 @@ async function processVapesMessage(userId: string, text: string): Promise<VapeRe
     return handlePromoSale(userId, text, productos);
   }
 
-  const flavor = extractFlavor(text);
-  const matches = matchProductos(flavor, productos);
-
-  // 0 coincidencias → probablemente NO es un mensaje de vapes (ej: "compré café")
-  if (matches.length === 0) {
-    if (hasVapeKeyword(text)) {
-      return {
-        message:
-          "¿Qué sabor? Decímelo con el nombre, por ejemplo: \"vendí 2 ice mint a 1500\".",
-      };
-    }
-    return { message: "", notVapes: true };
-  }
-
-  // Varias coincidencias → pedir que precise
-  if (matches.length > 1) {
-    const lista = matches.slice(0, 6).map((p) => `- ${p.nombre}`).join("\n");
-    return {
-      message: `Encontré varios que coinciden, ¿cuál es?\n${lista}\nRepetilo con el nombre más completo.`,
-    };
-  }
-
-  const producto = matches[0];
-  const cantidad = extractCantidad(text);
-  let precio = extractPrecio(text);
-
-  if (precio === undefined) {
-    if (tipo === "venta") {
-      precio = producto.precio; // default: precio de catálogo
-    } else {
-      return {
-        message: `¿A qué costo unitario compraste ${producto.nombre}? Ej: "compré ${cantidad} ${producto.alias} a 900".`,
-      };
-    }
-  }
-
-  // DISPARO 1 — Nubez (fuente de verdad del stock)
-  const mov = await registrarMovimientoNubez({
-    tipo,
-    alias: producto.alias,
-    cantidad,
-    precio,
-    comentario: `${tipo} whatsapp`,
-  });
-
-  if (!mov || !mov.ok) {
-    return {
-      message: `No pude registrar ${tipo === "venta" ? "la venta" : "la compra"} en el stock. Probá de nuevo en un momento.`,
-    };
-  }
-
-  const total = cantidad * precio;
-
-  // DISPARO 2 — Finanzas (no bloquea el stock si falla)
-  const fin = await registrarFinanzas(
-    userId,
-    tipo,
-    total,
-    `${tipo === "venta" ? "Venta" : "Compra"} ${cantidad}x ${producto.nombre}`
-  ).catch(() => ({ ok: false, reason: "error inesperado" }));
-
-  // Armar respuesta
-  const verbo = tipo === "venta" ? "Vendiste" : "Compraste";
-  let message = `✅ ${verbo} ${cantidad} ${producto.nombre} (${formatCurrency(total)}).`;
-
-  if (tipo === "venta") {
-    if (mov.stockRestante <= 0) {
-      message += ` 🔴 Te quedaste sin ${producto.nombre}.`;
-    } else if (mov.stockBajo) {
-      message += ` ⚠️ Te quedan ${mov.stockRestante}, reponé pronto.`;
-    } else {
-      message += ` Te quedan ${mov.stockRestante}.`;
-    }
-  } else {
-    message += ` Stock ahora: ${mov.stockRestante}.`;
-  }
-
-  if (!fin.ok) {
-    message += ` (Ojo: no lo pude registrar en finanzas — ${fin.reason}.)`;
-  }
-
-  return { message };
+  return handleItemsSale(userId, text, productos, tipo);
 }
 
 // ─── Agente ───────────────────────────────────────────────────────────────────
