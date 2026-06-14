@@ -79,17 +79,36 @@ function hasVapeKeyword(text: string): boolean {
   return /\bvape/.test(normalize(text));
 }
 
+function mentionsFlavor(text: string): boolean {
+  const t = normalize(text);
+  return hasVapeKeyword(text) || Object.keys(SINONIMOS).some((k) => t.includes(k));
+}
+
+/**
+ * ¿Es una consulta de stock? (sin verbo de registro)
+ * Disparadores específicos para no pisar consultas de otros módulos
+ * (ej: "qué tareas tengo"): requiere "stock"/"inventario", o un patrón de
+ * cantidad restante junto a un sabor/keyword de vape.
+ */
+function isStockQuery(text: string): boolean {
+  const t = normalize(text);
+  if (/\b(stock|inventario)\b/.test(t)) return true;
+  if (/\bpor agotar|agotad/.test(t)) return true;
+  const askQty = /\bme qued/.test(t) || (/\bcuant/.test(t) && /\b(qued|tengo|hay|tenes)\b/.test(t));
+  return askQty && mentionsFlavor(text);
+}
+
 /**
  * Pre-filtro barato para el orquestrador: ¿vale la pena llamar al agente
  * (que hace fetch del catálogo)? Es deliberadamente permisivo — el agente
  * decide definitivamente y marca notVapes si no aplica.
  */
 export function looksLikeVapeMessage(text: string): boolean {
-  if (!detectTipo(text)) return false;
-  const t = normalize(text);
-  const hasSignal =
-    /\d/.test(t) || hasVapeKeyword(text) || Object.keys(SINONIMOS).some((k) => t.includes(k));
-  return hasSignal;
+  if (detectTipo(text)) {
+    const t = normalize(text);
+    return /\d/.test(t) || mentionsFlavor(text);
+  }
+  return isStockQuery(text);
 }
 
 // ─── Extracción de cantidad / precio / sabor ──────────────────────────────────
@@ -109,6 +128,11 @@ function extractFlavor(text: string): string {
     "a", "de", "del", "la", "el", "los", "las", "un", "una", "x", "por",
     "c", "u", "cu", "unidad", "unidades", "vape", "vapes", "sabor", "sabores",
     "peso", "pesos", "cada", "uno", "mi", "tu",
+    // palabras de consulta de stock
+    "cuanto", "cuanta", "cuantos", "cuantas", "queda", "quedan", "quedo", "quedando",
+    "tengo", "tenes", "tenemos", "hay", "stock", "inventario", "que", "cual", "cuales",
+    "esta", "estan", "agotar", "agotarse", "agotado", "agotada", "agotados",
+    "bajo", "baja", "me", "disponible", "disponibles",
   ]);
   const verbRe = /^(vend|compr|repus|saqu|sali|ingres)/;
   const words = normalize(text).replace(/[$]/g, " ").split(/\s+/).filter(Boolean);
@@ -197,9 +221,50 @@ async function registrarFinanzas(
 
 type VapeResult = { message: string; notVapes?: boolean };
 
+async function handleStockQuery(text: string): Promise<VapeResult> {
+  const productos = await getProductos();
+  if (productos.length === 0) {
+    return { message: "No pude leer el stock de la tienda. Probá de nuevo en un rato." };
+  }
+
+  const t = normalize(text);
+  const wantsLow = /\bpor agotar|agotad|baj/.test(t);
+  const flavor = extractFlavor(text);
+  const matches = flavor ? matchProductos(flavor, productos) : [];
+
+  const tag = (p: VapeProducto) =>
+    p.stock <= 0 ? " (agotado)" : p.stock <= p.stockMinimo ? " (bajo)" : "";
+
+  // Consulta de un sabor puntual
+  if (flavor && matches.length === 1) {
+    const p = matches[0];
+    if (p.stock <= 0) return { message: `🔴 Estás sin stock de ${p.nombre}.` };
+    let m = `Te quedan ${p.stock} de ${p.nombre}.`;
+    if (p.stock <= p.stockMinimo) m += " ⚠️ Reponé pronto.";
+    return { message: m };
+  }
+  if (flavor && matches.length > 1) {
+    const lista = matches.slice(0, 6).map((p) => `- ${p.nombre}: ${p.stock}`).join("\n");
+    return { message: `¿Cuál de estos?\n${lista}` };
+  }
+
+  // Listado completo o solo lo que está por agotarse
+  const lista = wantsLow ? productos.filter((p) => p.stock <= p.stockMinimo) : productos;
+  if (wantsLow && lista.length === 0) {
+    return { message: "Ningún sabor está bajo de stock por ahora. 👌" };
+  }
+  const lines = lista.map((p) => `- ${p.nombre}: ${p.stock}${tag(p)}`);
+  return { message: (wantsLow ? "Por agotarse:\n" : "Stock actual:\n") + lines.join("\n") };
+}
+
 async function processVapesMessage(userId: string, text: string): Promise<VapeResult> {
   const tipo = detectTipo(text);
-  if (!tipo) return { message: "", notVapes: true };
+
+  // Sin verbo de registro → puede ser una consulta de stock
+  if (!tipo) {
+    if (isStockQuery(text)) return handleStockQuery(text);
+    return { message: "", notVapes: true };
+  }
 
   const productos = await getProductos();
   if (productos.length === 0) {
