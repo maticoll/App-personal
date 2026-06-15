@@ -1,6 +1,21 @@
 # Plan de implementación — Integración HERMES × Nubez (vapes) × Finanzas
 
-> Estado: **Fase 0 + Fase 1 (Nubez y HERMES) IMPLEMENTADAS y compiladas**. Bloqueado en deploy de Nubez. Ver §9 (Progreso).
+> Estado: **Fase 1 COMPLETA y verificada E2E en producción** (sept-2026). Incluye: ventas (1 o varios sabores), promos, pregunta de comprador, estado pago/debe, y marcar-pago posterior. Falta opcional: Fase 2 (dashboard de métricas). Ver §9–§10.
+
+## 10. Funcionalidades vivas (verificadas E2E)
+
+Por WhatsApp, HERMES entiende:
+- **Venta 1 sabor:** "vendí 2 ice mint a 1500" (precio opcional → catálogo).
+- **Venta varios sabores:** "vendí blackberry blueberry y mountain berry" (coma/"y"/+).
+- **Promo:** "vendí promo 2x2600 menta, kiwi" (repite sabor; total ÷ N).
+- **Compra de stock:** "compré 10 mountain berry a 900" (registra al toque).
+- **Consulta:** "¿cuánto stock tengo?", "¿cuántos X me quedan?", "¿qué está por agotarse?".
+- **Flujo de venta (2 pasos):** pregunta comprador → pregunta pago/debe → registra. Atajo: "Juan pago". Saltear comprador: "nadie".
+- **Marcar pago:** "Juan me pagó" / "marcá pago de Juan" → flips sus ventas de "debe" a "pago".
+
+Nubez expone: `GET /api/productos`, `POST /api/movimiento` (acepta `comprador` y `comentario`=pago/debe), `POST /api/marcar-pago` ({comprador}→{actualizados}). Todos los de escritura con Bearer `NUBEZ_API_KEY`. Firewall: regla Bypass para `/api/*` (Attack Challenge Mode bloquea server-to-server).
+
+Estado interno (HERMES): pendiente de comprador/pago reusa la tabla `pending_transactions` con `data.kind="vape_buyer"` (sin schema nuevo); el orquestrador lo chequea antes del pending de finanzas. Fast-path regex en `orchestrator.ts` antes de Haiku.
 > Generado a partir de la auditoría de los 3 repos:
 > - `App personal` (HERMES) — `C:\Users\Usuario\OneDrive\Desktop\CLAUDIO\App personal`
 > - `Nubez` (web vapes) — `C:\Users\Usuario\OneDrive\Desktop\CLAUDIO\vapes\Nubez`
