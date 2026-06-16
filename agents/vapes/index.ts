@@ -137,9 +137,13 @@ function extractPaidName(text: string): string {
  * decide definitivamente y marca notVapes si no aplica.
  */
 export function looksLikeVapeMessage(text: string): boolean {
-  if (detectTipo(text)) {
+  const tipo = detectTipo(text);
+  // "vendí ..." finanzas no lo maneja → siempre lo evalúa el agente (decide adentro).
+  if (tipo === "venta") return true;
+  // "compré ..." puede ser un gasto común → exigir señal para no pisar finanzas.
+  if (tipo === "compra") {
     const t = normalize(text);
-    return /\d/.test(t) || mentionsFlavor(text);
+    return /\d/.test(t) || mentionsFlavor(text) || isPromoSale(text);
   }
   return isStockQuery(text) || isMarkPaid(text);
 }
@@ -340,8 +344,30 @@ async function clarify(userId: string, tipo: "venta" | "compra", message: string
 
 function isPromoSale(text: string): boolean {
   const t = normalize(text);
-  if (/\b(promo|pack)\b/.test(t)) return true;
+  if (/\b(promo|pack|duo|premium)\b/.test(t)) return true;
   return /\b\d+\s*x\s*\$?\s*\d{3,}/.test(t); // "2x2600"
+}
+
+// Precios de promo por cantidad. Default 2→2600, 3→3900, 5→6000.
+// Override con env VAPES_PROMOS="2:2600,3:3900,5:6000".
+const PROMOS: Record<number, number> = (() => {
+  const def: Record<number, number> = { 2: 2600, 3: 3900, 5: 6000 };
+  const raw = process.env.VAPES_PROMOS;
+  if (!raw) return def;
+  const m: Record<number, number> = {};
+  for (const part of raw.split(",")) {
+    const [u, p] = part.split(":").map((x) => parseInt(x.trim(), 10));
+    if (u && p) m[u] = p;
+  }
+  return Object.keys(m).length ? m : def;
+})();
+
+// Nombre de pack → cantidad (la web usa Dúo=2, Pro=3, Premium=5).
+function packUnits(t: string): number | undefined {
+  if (/\bpremium\b/.test(t)) return 5;
+  if (/\bpro\b/.test(t)) return 3;
+  if (/\bduo\b/.test(t)) return 2;
+  return undefined;
 }
 
 async function handlePromoSale(
@@ -351,7 +377,7 @@ async function handlePromoSale(
 ): Promise<VapeResult> {
   const t = normalize(text);
 
-  // Cantidad (N) y total del pack
+  // Cantidad (N) y total — de "NxTotal", "de N", "a Total", o nombre de pack
   let units: number | undefined;
   let total: number | undefined;
   const mx = t.match(/(\d+)\s*x\s*\$?\s*(\d[\d.,]*)/);
@@ -361,19 +387,16 @@ async function handlePromoSale(
   }
   if (units === undefined) {
     const md = t.match(/\bde\s+(\d+)/);
-    if (md) units = parseInt(md[1], 10);
+    units = md ? parseInt(md[1], 10) : packUnits(t);
   }
   if (total === undefined) total = extractPrecio(text);
 
-  const ejemplo = `Ej: "vendí promo ${units || 3}x${total || 3900} menta, sandía, uva".`;
-  if (!units || !total) {
-    return clarify(userId, "venta", `Para registrar una promo decime cantidad, total y los sabores. ${ejemplo}`);
-  }
+  const ejemplo = `Ej: "vendí promo de 2 black mint, blackberry blueberry".`;
 
   // Región de sabores: sacar verbo, promo/pack, "NxTotal", "de N", "a Total"
   const region = t
     .replace(/\b(vend\w*|sali\w*|saqu\w*)\b/g, " ")
-    .replace(/\b(promo|pack)\b/g, " ")
+    .replace(/\b(promo|pack|duo|pro|premium)\b/g, " ")
     .replace(/\d+\s*x\s*\$?\s*\d[\d.,]*/g, " ")
     .replace(/\bde\s+\d+/g, " ")
     .replace(/(?:\ba\b|\bpor\b|\$)\s*\$?\s*\d[\d.,]*/g, " ")
@@ -406,8 +429,8 @@ async function handlePromoSale(
     return clarify(userId, "venta", `Hay varias opciones para: ${ambiguas.join(", ")}. Sé más específico (ej: "watermelon ice elf").`);
   }
 
-  // Promo de un solo sabor sin cantidad explícita → N de ese sabor
-  if (lineas.length === 1 && !lineas[0].explicit) {
+  // Promo de un solo sabor con N conocido → N de ese sabor
+  if (units !== undefined && lineas.length === 1 && !lineas[0].explicit) {
     lineas[0].count = units;
   }
 
@@ -420,8 +443,17 @@ async function handlePromoSale(
   }
 
   const sum = [...grupos.values()].reduce((a, g) => a + g.count, 0);
-  if (sum !== units) {
-    return clarify(userId, "venta", `La promo es de ${units} pero me diste ${sum} unidad(es). Revisá los sabores. ${ejemplo}`);
+
+  // Resolver cantidad: si no la dijiste, se infiere por los sabores
+  if (units === undefined) units = sum;
+  else if (units !== sum) {
+    return clarify(userId, "venta", `La promo es de ${units} pero me diste ${sum} sabor(es). Revisá. ${ejemplo}`);
+  }
+
+  // Resolver total: lo que dijiste, o la tabla de precios de promo por cantidad
+  if (total === undefined) total = PROMOS[units];
+  if (total === undefined) {
+    return clarify(userId, "venta", `¿Cuál es el total de la promo de ${units}? Ej: "${units}x${units * 1300}".`);
   }
 
   const unit = Math.round(total / units);
