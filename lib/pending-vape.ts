@@ -19,7 +19,7 @@ export type VapePendingLinea = {
   price: number;
 };
 
-export type VapePending = {
+export type VapeBuyerPending = {
   kind: "vape_buyer";
   tipo: "venta" | "compra";
   lineas: VapePendingLinea[];
@@ -28,6 +28,16 @@ export type VapePending = {
   /** Comprador ya capturado (cuando step = "payment") */
   comprador?: string;
 };
+
+/** Esperando que el usuario complete/repita una venta que no se pudo parsear
+ *  (faltaba total, sabor ambiguo, etc.). La próxima respuesta se reinterpreta
+ *  como venta/compra forzando este `tipo`. */
+export type VapeClarifyPending = {
+  kind: "vape_clarify";
+  tipo: "venta" | "compra";
+};
+
+export type VapePending = VapeBuyerPending | VapeClarifyPending;
 
 export async function saveVapePending(userId: string, pending: VapePending): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,7 +59,7 @@ export async function getVapePending(userId: string): Promise<VapePending | null
   }
 
   const data = record.data as unknown as { kind?: string };
-  if (data?.kind !== "vape_buyer") return null; // es un pending de finanzas, no nuestro
+  if (data?.kind !== "vape_buyer" && data?.kind !== "vape_clarify") return null; // pending de finanzas, no nuestro
   return record.data as unknown as VapePending;
 }
 

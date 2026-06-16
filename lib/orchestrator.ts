@@ -28,7 +28,7 @@ import { scoringAgent } from "@/agents/scoring";
 import { calendarAgent } from "@/agents/calendar";
 import { financesAgent } from "@/agents/finances";
 import { synthesisAgent } from "@/agents/synthesis";
-import { vapesAgent, looksLikeVapeMessage, handleBuyerReply } from "@/agents/vapes";
+import { vapesAgent, looksLikeVapeMessage, handleBuyerReply, handleClarify } from "@/agents/vapes";
 import { getVapePending } from "@/lib/pending-vape";
 import { getGoals } from "@/lib/goals";
 import { buildOrchestratorPrompt } from "@/agents/prompts";
@@ -223,8 +223,11 @@ export async function orchestrate(userId: string, text: string): Promise<string>
   //     Si hay uno activo, este mensaje es el nombre del comprador.
   const vapePending = await getVapePending(userId).catch(() => null);
   if (vapePending) {
-    console.log(`[orchestrator] Vape pending (buyer) — desviando a handleBuyerReply`);
-    const response = await handleBuyerReply(userId, text, vapePending);
+    console.log(`[orchestrator] Vape pending (${vapePending.kind}) — desviando al agente de vapes`);
+    const response =
+      vapePending.kind === "vape_clarify"
+        ? await handleClarify(userId, text, vapePending)
+        : await handleBuyerReply(userId, text, vapePending);
     await Promise.all([
       addTurn(userId, "user", text).catch((err) =>
         console.error("[orchestrator] Error guardando turno user (vape-pending):", err)

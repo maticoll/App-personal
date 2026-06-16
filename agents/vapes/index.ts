@@ -34,7 +34,8 @@ import {
 import {
   saveVapePending,
   clearVapePending,
-  type VapePending,
+  type VapeBuyerPending,
+  type VapeClarifyPending,
   type VapePendingLinea,
 } from "@/lib/pending-vape";
 
@@ -53,23 +54,21 @@ function toNum(s: string): number {
   return parseFloat(String(s).replace(/\./g, "").replace(",", "."));
 }
 
-// Sinónimos español → fragmento del alias en inglés.
-// Solo se usan como fallback cuando el texto literal no matchea nada.
+// Sinónimos español → token en inglés (NO a un producto puntual). Se aplican como
+// último recurso: el token se busca en el catálogo, así si hay varias variantes
+// (ej: 3 "mint") queda ambiguo y el agente pregunta cuál.
 const SINONIMOS: Record<string, string> = {
-  menta: "ice mint",
-  mint: "ice mint",
-  manzana: "sour apple",
-  apple: "sour apple",
-  uva: "sour grape",
-  grape: "sour grape",
-  durazno: "peach plus",
-  peach: "peach plus",
-  kiwi: "strawberry kiwi",
-  cereza: "cherry strazz",
-  cherry: "cherry strazz",
-  frutilla: "strawberry",
+  menta: "mint",
   sandia: "watermelon",
-  watermelon: "watermelon",
+  manzana: "apple",
+  uva: "grape",
+  durazno: "peach",
+  frutilla: "strawberry",
+  cereza: "cherry",
+  arandano: "blueberry",
+  mora: "blackberry",
+  pina: "pineapple",
+  naranja: "orange",
   azul: "blue razz",
 };
 
@@ -202,7 +201,26 @@ function matchProductos(flavor: string, productos: VapeProducto[]): VapeProducto
   // 1ra pasada: texto literal (preciso)
   let matches = test([q]);
 
-  // 2da pasada: sinónimos (solo si lo literal no dio nada)
+  // 2da pasada: fuzzy (tolera espacios faltantes y typos chicos).
+  // Ej: "blackmint"→"black mint", "blackberry bluberry"→"blackberry blueberry".
+  // Va ANTES de los sinónimos para que un typo no se desvíe a otro producto.
+  if (matches.length === 0) {
+    const qns = q.replace(/\s+/g, "");
+    const scored = productos.map((p) => {
+      const a = normalize(p.alias);
+      const ans = a.replace(/\s+/g, "");
+      const d = Math.min(levenshtein(q, a), levenshtein(qns, ans));
+      const thr = Math.max(1, Math.floor(Math.max(a.length, q.length) * 0.25));
+      return { p, d, ok: d <= thr };
+    });
+    const near = scored.filter((s) => s.ok).sort((x, y) => x.d - y.d);
+    if (near.length > 0) {
+      const best = near[0].d;
+      matches = near.filter((s) => s.d === best).map((s) => s.p);
+    }
+  }
+
+  // 3ra pasada: sinónimos español→token (puede dar varias → ambiguo, correcto)
   if (matches.length === 0) {
     const syn = Object.entries(SINONIMOS)
       .filter(([k]) => q.includes(k))
@@ -213,6 +231,23 @@ function matchProductos(flavor: string, productos: VapeProducto[]): VapeProducto
   // dedupe por alias
   const seen = new Set<string>();
   return matches.filter((p) => (seen.has(p.alias) ? false : (seen.add(p.alias), true)));
+}
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    const curr = [i];
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+    }
+    prev = curr;
+  }
+  return prev[n];
 }
 
 // ─── Pata de finanzas ─────────────────────────────────────────────────────────
@@ -293,6 +328,14 @@ async function handleStockQuery(text: string): Promise<VapeResult> {
   return { message: (wantsLow ? "Por agotarse:\n" : "Stock actual:\n") + lines.join("\n") };
 }
 
+// ─── Repregunta con estado (la próxima respuesta continúa la venta) ────────────
+// Guarda un pendiente "vape_clarify": cuando el usuario responda (aunque sea sin
+// el verbo "vendí"), el orquestrador lo reenvía al agente y se reinterpreta.
+async function clarify(userId: string, tipo: "venta" | "compra", message: string): Promise<VapeResult> {
+  await saveVapePending(userId, { kind: "vape_clarify", tipo });
+  return { message };
+}
+
 // ─── Venta de promo (pack de varios sabores, con repetición) ──────────────────
 
 function isPromoSale(text: string): boolean {
@@ -324,7 +367,7 @@ async function handlePromoSale(
 
   const ejemplo = `Ej: "vendí promo ${units || 3}x${total || 3900} menta, sandía, uva".`;
   if (!units || !total) {
-    return { message: `Para registrar una promo decime cantidad, total y los sabores. ${ejemplo}` };
+    return clarify(userId, "venta", `Para registrar una promo decime cantidad, total y los sabores. ${ejemplo}`);
   }
 
   // Región de sabores: sacar verbo, promo/pack, "NxTotal", "de N", "a Total"
@@ -338,7 +381,7 @@ async function handlePromoSale(
 
   const pieces = region.split(/,|\by\b|\+|\//).map((s) => s.trim()).filter(Boolean);
   if (pieces.length === 0) {
-    return { message: `¿Qué sabores entran en la promo? ${ejemplo}` };
+    return clarify(userId, "venta", `¿Qué sabores entran en la promo? ${ejemplo}`);
   }
 
   type Linea = { producto: VapeProducto; count: number; explicit: boolean };
@@ -357,10 +400,10 @@ async function handlePromoSale(
   }
 
   if (noMatch.length > 0) {
-    return { message: `No reconocí: ${noMatch.join(", ")}. Nombralos como en el catálogo. ${ejemplo}` };
+    return clarify(userId, "venta", `No reconocí: ${noMatch.join(", ")}. Nombralos como en el catálogo. ${ejemplo}`);
   }
   if (ambiguas.length > 0) {
-    return { message: `Hay varias opciones para: ${ambiguas.join(", ")}. Sé más específico (ej: "watermelon ice elf").` };
+    return clarify(userId, "venta", `Hay varias opciones para: ${ambiguas.join(", ")}. Sé más específico (ej: "watermelon ice elf").`);
   }
 
   // Promo de un solo sabor sin cantidad explícita → N de ese sabor
@@ -378,9 +421,7 @@ async function handlePromoSale(
 
   const sum = [...grupos.values()].reduce((a, g) => a + g.count, 0);
   if (sum !== units) {
-    return {
-      message: `La promo es de ${units} pero me diste ${sum} unidad(es). Revisá los sabores. ${ejemplo}`,
-    };
+    return clarify(userId, "venta", `La promo es de ${units} pero me diste ${sum} unidad(es). Revisá los sabores. ${ejemplo}`);
   }
 
   const unit = Math.round(total / units);
@@ -444,7 +485,7 @@ async function handleItemsSale(
       .slice(0, 8)
       .map((p) => `- ${p.nombre}`)
       .join("\n");
-    return { message: `Hay varias opciones para: ${ambiguas.join(", ")}. ¿Cuál?\n${opciones}` };
+    return clarify(userId, tipo, `Hay varias opciones para: ${ambiguas.join(", ")}. ¿Cuál?\n${opciones}`);
   }
 
   // Nada reconocido como producto
@@ -456,17 +497,17 @@ async function handleItemsSale(
     }
     // "vendí ..." finanzas no lo maneja, así que asumimos venta de vape
     if (noMatch.length > 0) {
-      return { message: `No reconocí: ${noMatch.join(", ")}. Nombralo como en el catálogo. Ej: "${ej}".` };
+      return clarify(userId, tipo, `No reconocí: ${noMatch.join(", ")}. Nombralo como en el catálogo. Ej: "${ej}".`);
     }
-    return { message: `¿Qué sabor? Decímelo con el nombre, ej: "${ej}".` };
+    return clarify(userId, tipo, `¿Qué sabor? Decímelo con el nombre, ej: "${ej}".`);
   }
 
   // Algún sabor no matcheó pero otros sí → es de vapes, avisar
   if (noMatch.length > 0) {
-    return { message: `No reconocí: ${noMatch.join(", ")}. Nombralos como en el catálogo.` };
+    return clarify(userId, tipo, `No reconocí: ${noMatch.join(", ")}. Nombralos como en el catálogo.`);
   }
   if (needCost) {
-    return { message: `¿A qué costo unitario? Decímelo con "a", ej: "compré 10 mountain berry a 900".` };
+    return clarify(userId, tipo, `¿A qué costo unitario? Decímelo con "a", ej: "compré 10 mountain berry a 900".`);
   }
 
   const lineas: VapePendingLinea[] = items.map((it) => ({
@@ -582,7 +623,7 @@ function parseBuyer(text: string): { comprador: string; estado: "pago" | "debe" 
 export async function handleBuyerReply(
   userId: string,
   text: string,
-  pending: VapePending
+  pending: VapeBuyerPending
 ): Promise<string> {
   const step = pending.step ?? "buyer";
 
@@ -626,14 +667,23 @@ async function handleMarkPaid(text: string): Promise<VapeResult> {
   return { message: `✅ Marqué como pago ${r.actualizados} venta(s) de ${name}.` };
 }
 
-async function processVapesMessage(userId: string, text: string): Promise<VapeResult> {
-  const tipo = detectTipo(text);
+async function processVapesMessage(
+  userId: string,
+  text: string,
+  forcedTipo?: "venta" | "compra"
+): Promise<VapeResult> {
+  const detected = detectTipo(text);
 
-  // Sin verbo de registro → marcar pago / consulta de stock
-  if (!tipo) {
+  // Sin verbo de registro: marcar pago / consulta de stock tienen prioridad.
+  // forcedTipo (viene de una repregunta) sólo se usa si no es ninguna de esas.
+  let tipo: "venta" | "compra";
+  if (!detected) {
     if (isMarkPaid(text)) return handleMarkPaid(text);
     if (isStockQuery(text)) return handleStockQuery(text);
-    return { message: "", notVapes: true };
+    if (!forcedTipo) return { message: "", notVapes: true };
+    tipo = forcedTipo;
+  } else {
+    tipo = detected;
   }
 
   const productos = await getProductos();
@@ -647,6 +697,21 @@ async function processVapesMessage(userId: string, text: string): Promise<VapeRe
   }
 
   return handleItemsSale(userId, text, productos, tipo);
+}
+
+// ─── Respuesta a una repregunta de venta (continúa el flujo) ───────────────────
+
+export async function handleClarify(
+  userId: string,
+  text: string,
+  pending: VapeClarifyPending
+): Promise<string> {
+  await clearVapePending(userId); // se vuelve a guardar si sigue incompleta
+  const { message, notVapes } = await processVapesMessage(userId, text, pending.tipo);
+  if (notVapes) {
+    return 'No entendí. Repetí la venta completa, ej: "vendí 2 black mint a 1500".';
+  }
+  return message;
 }
 
 // ─── Agente ───────────────────────────────────────────────────────────────────
