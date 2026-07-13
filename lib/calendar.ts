@@ -5,6 +5,13 @@
 // ============================================================
 
 import { db } from "@/lib/db";
+import {
+  startOfDayUY,
+  endOfDayUY,
+  addDays,
+  atHourUY,
+  UY_OFFSET,
+} from "@/lib/dates";
 
 // ─── Tipos públicos ────────────────────────────────────────────────────────────
 
@@ -80,7 +87,7 @@ async function getGoogleTokens(userId: string): Promise<{
  */
 async function refreshGoogleToken(
   userId: string,
-  refreshToken: string
+  refreshToken: string,
 ): Promise<string | null> {
   const clientId = process.env.AUTH_GOOGLE_ID;
   const clientSecret = process.env.AUTH_GOOGLE_SECRET;
@@ -99,7 +106,11 @@ async function refreshGoogleToken(
     });
 
     if (!res.ok) {
-      console.error("[calendar] Error refresh token:", res.status, await res.text());
+      console.error(
+        "[calendar] Error refresh token:",
+        res.status,
+        await res.text(),
+      );
       return null;
     }
 
@@ -133,7 +144,9 @@ async function getValidAccessToken(userId: string): Promise<string | null> {
 
   if (isExpired) {
     if (!tokens.refreshToken) {
-      console.warn("[calendar] Token expirado y sin refresh_token para userId=" + userId);
+      console.warn(
+        "[calendar] Token expirado y sin refresh_token para userId=" + userId,
+      );
       return null;
     }
     return refreshGoogleToken(userId, tokens.refreshToken);
@@ -176,15 +189,16 @@ export async function revokeGoogleAccess(userId: string): Promise<void> {
 /**
  * Retorna si el usuario tiene Google Calendar conectado y con los scopes necesarios.
  */
-export async function getCalendarStatus(userId: string): Promise<CalendarStatus> {
+export async function getCalendarStatus(
+  userId: string,
+): Promise<CalendarStatus> {
   const tokens = await getGoogleTokens(userId);
 
   if (!tokens) {
     return { connected: false, hasCalendarScope: false };
   }
 
-  const hasCalendarScope =
-    tokens.scope?.includes("calendar") ?? false;
+  const hasCalendarScope = tokens.scope?.includes("calendar") ?? false;
 
   return { connected: true, hasCalendarScope };
 }
@@ -199,12 +213,28 @@ export async function getTodayEvents(userId: string): Promise<CalendarEvent[]> {
   if (!accessToken) return [];
 
   const calendarId = process.env.GOOGLE_CALENDAR_ID ?? "primary";
-  const now = new Date();
 
-  const timeMin = new Date(now);
-  timeMin.setHours(0, 0, 0, 0);
-  const timeMax = new Date(now);
-  timeMax.setHours(23, 59, 59, 999);
+  // Límites del día en hora Uruguay — con setHours() el "día" era el del
+  // servidor (UTC en Vercel) y después de las 21:00 UY la agenda se corría
+  // al día siguiente.
+  const timeMin = startOfDayUY();
+  const timeMax = endOfDayUY();
+
+  return fetchEvents(accessToken, calendarId, timeMin, timeMax, 20);
+}
+
+/**
+ * Retorna los eventos de mañana (día calendario de Uruguay).
+ */
+export async function getTomorrowEvents(
+  userId: string,
+): Promise<CalendarEvent[]> {
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) return [];
+
+  const calendarId = process.env.GOOGLE_CALENDAR_ID ?? "primary";
+  const timeMin = addDays(startOfDayUY(), 1);
+  const timeMax = endOfDayUY(timeMin);
 
   return fetchEvents(accessToken, calendarId, timeMin, timeMax, 20);
 }
@@ -217,10 +247,8 @@ export async function getWeekEvents(userId: string): Promise<CalendarEvent[]> {
   if (!accessToken) return [];
 
   const calendarId = process.env.GOOGLE_CALENDAR_ID ?? "primary";
-  const timeMin = new Date();
-  timeMin.setHours(0, 0, 0, 0);
-  const timeMax = new Date(timeMin);
-  timeMax.setDate(timeMax.getDate() + 7);
+  const timeMin = startOfDayUY();
+  const timeMax = addDays(timeMin, 7);
 
   return fetchEvents(accessToken, calendarId, timeMin, timeMax, 50);
 }
@@ -233,7 +261,7 @@ async function fetchEvents(
   calendarId: string,
   timeMin: Date,
   timeMax: Date,
-  maxResults: number
+  maxResults: number,
 ): Promise<CalendarEvent[]> {
   try {
     const params = new URLSearchParams({
@@ -246,11 +274,15 @@ async function fetchEvents(
 
     const res = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
+      { headers: { Authorization: `Bearer ${accessToken}` } },
     );
 
     if (!res.ok) {
-      console.error("[calendar] fetchEvents error:", res.status, await res.text());
+      console.error(
+        "[calendar] fetchEvents error:",
+        res.status,
+        await res.text(),
+      );
       return [];
     }
 
@@ -277,7 +309,7 @@ export async function createEvent(
   start: Date,
   end: Date,
   description?: string,
-  recurrence?: string[]
+  recurrence?: string[],
 ): Promise<string | null> {
   const accessToken = await getValidAccessToken(userId);
   if (!accessToken) return null;
@@ -306,11 +338,15 @@ export async function createEvent(
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
-      }
+      },
     );
 
     if (!res.ok) {
-      console.error("[calendar] createEvent error:", res.status, await res.text());
+      console.error(
+        "[calendar] createEvent error:",
+        res.status,
+        await res.text(),
+      );
       return null;
     }
 
@@ -330,7 +366,7 @@ export async function updateEvent(
   userId: string,
   eventId: string,
   start: Date,
-  end: Date
+  end: Date,
 ): Promise<boolean> {
   const accessToken = await getValidAccessToken(userId);
   if (!accessToken) return false;
@@ -347,14 +383,21 @@ export async function updateEvent(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          start: { dateTime: start.toISOString(), timeZone: "America/Montevideo" },
+          start: {
+            dateTime: start.toISOString(),
+            timeZone: "America/Montevideo",
+          },
           end: { dateTime: end.toISOString(), timeZone: "America/Montevideo" },
         }),
-      }
+      },
     );
 
     if (!res.ok) {
-      console.error("[calendar] updateEvent error:", res.status, await res.text());
+      console.error(
+        "[calendar] updateEvent error:",
+        res.status,
+        await res.text(),
+      );
       return false;
     }
 
@@ -372,21 +415,24 @@ export async function updateEvent(
 export async function findEventByTitle(
   userId: string,
   searchTitle: string,
-  windowDays = 14
+  windowDays = 14,
 ): Promise<CalendarEvent | null> {
   const accessToken = await getValidAccessToken(userId);
   if (!accessToken) return null;
 
   const calendarId = process.env.GOOGLE_CALENDAR_ID ?? "primary";
 
-  // Incluir desde ayer para atrapar eventos recién creados en el día
-  const timeMin = new Date();
-  timeMin.setDate(timeMin.getDate() - 1);
-  timeMin.setHours(0, 0, 0, 0);
-  const timeMax = new Date(timeMin);
-  timeMax.setDate(timeMax.getDate() + windowDays);
+  // Incluir desde ayer (hora UY) para atrapar eventos recién creados en el día
+  const timeMin = addDays(startOfDayUY(), -1);
+  const timeMax = addDays(timeMin, windowDays);
 
-  const events = await fetchEvents(accessToken, calendarId, timeMin, timeMax, 50);
+  const events = await fetchEvents(
+    accessToken,
+    calendarId,
+    timeMin,
+    timeMax,
+    50,
+  );
 
   const q = searchTitle.toLowerCase().trim();
   // Primero buscar coincidencia exacta, luego parcial
@@ -407,17 +453,15 @@ export async function findEventByTitle(
 export async function findFreeSlots(
   userId: string,
   date: Date,
-  durationMinutes: number
+  durationMinutes: number,
 ): Promise<Array<{ start: Date; end: Date }>> {
   const accessToken = await getValidAccessToken(userId);
   if (!accessToken) return [];
 
   const calendarId = process.env.GOOGLE_CALENDAR_ID ?? "primary";
 
-  const dayStart = new Date(date);
-  dayStart.setHours(6, 0, 0, 0);
-  const dayEnd = new Date(date);
-  dayEnd.setHours(22, 0, 0, 0);
+  const dayStart = atHourUY(date, 6);
+  const dayEnd = atHourUY(date, 22);
 
   try {
     const params = new URLSearchParams({
@@ -430,7 +474,7 @@ export async function findFreeSlots(
 
     const res = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
+      { headers: { Authorization: `Bearer ${accessToken}` } },
     );
 
     if (!res.ok) return [];
@@ -489,7 +533,9 @@ export async function findFreeSlots(
  * Devuelve la agenda de hoy como string para incluir en el Morning Summary.
  * Retorna null si no hay eventos o el calendario no está conectado.
  */
-export async function getTodayEventsText(userId: string): Promise<string | null> {
+export async function getTodayEventsText(
+  userId: string,
+): Promise<string | null> {
   try {
     const events = await getTodayEvents(userId);
     if (events.length === 0) return null;
@@ -511,12 +557,25 @@ export async function getTodayEventsText(userId: string): Promise<string | null>
 
 function mapGoogleEvent(item: GoogleEventItem): CalendarEvent {
   const isAllDay = !item.start.dateTime;
+
+  // All-day: Google manda solo "YYYY-MM-DD". Parsearlo sin offset lo anclaba a
+  // medianoche del SERVIDOR (UTC en Vercel) = 21:00 UY del día anterior, y el
+  // evento aparecía corrido un día. El offset -03:00 lo ancla al día correcto.
   const start = isAllDay
-    ? new Date(item.start.date + "T00:00:00")
+    ? new Date(`${item.start.date}T00:00:00${UY_OFFSET}`)
     : new Date(item.start.dateTime!);
-  const end = isAllDay
-    ? new Date((item.end.date ?? item.start.date) + "T23:59:59")
-    : new Date(item.end.dateTime!);
+
+  let end: Date;
+  if (isAllDay) {
+    // end.date de Google es EXCLUSIVO (el día siguiente al último día del
+    // evento): restamos 1s para que el evento no "derrame" al día siguiente.
+    const endExclusive = item.end.date
+      ? new Date(`${item.end.date}T00:00:00${UY_OFFSET}`)
+      : addDays(start, 1);
+    end = new Date(endExclusive.getTime() - 1000);
+  } else {
+    end = new Date(item.end.dateTime!);
+  }
 
   return {
     id: item.id,

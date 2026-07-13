@@ -1,7 +1,7 @@
 // ============================================================
 // agents/calendar/index.ts — Agente de Google Calendar
 // Responsabilidades:
-//   - Responder consultas de agenda (hoy / semana)
+//   - Responder consultas de agenda (hoy / mañana / semana)
 //   - Crear eventos en Google Calendar
 //   - Mover / actualizar eventos existentes
 //   - Proveer contexto de agenda al orquestrador y al Morning Summary
@@ -11,6 +11,7 @@
 import type { AgentInput, AgentOutput } from "@/lib/types";
 import {
   getTodayEvents,
+  getTomorrowEvents,
   getWeekEvents,
   createEvent,
   updateEvent,
@@ -27,16 +28,18 @@ import {
 } from "@/lib/reminders";
 import { detectIntentAI } from "@/lib/nlp";
 import { callClaude } from "@/lib/claude";
+import { uyDateKey } from "@/lib/dates";
 
 // ─── Tipos de intención ───────────────────────────────────────────────────────
 
 type CalendarIntent =
-  | "query_today"    // consultar agenda de hoy
-  | "query_week"     // consultar agenda de la semana
-  | "create_event"   // crear un evento en el calendario
-  | "update_event"   // mover / cambiar hora de un evento existente
-  | "remind_me"      // crear recordatorio personal ("recordame en X que...")
-  | "status"         // verificar estado de conexión
+  | "query_today" // consultar agenda de hoy
+  | "query_tomorrow" // consultar agenda de mañana
+  | "query_week" // consultar agenda de la semana
+  | "create_event" // crear un evento en el calendario
+  | "update_event" // mover / cambiar hora de un evento existente
+  | "remind_me" // crear recordatorio personal ("recordame en X que...")
+  | "status" // verificar estado de conexión
   | "unknown";
 
 // ─── Detección de intención con LLM ──────────────────────────────────────────
@@ -45,15 +48,22 @@ async function detectIntent(text: string): Promise<CalendarIntent> {
   const intent = await detectIntentAI(
     "Eres el agente de Google Calendar de una app personal.",
     {
-      query_today:  "El usuario quiere saber qué tiene hoy en su agenda o calendario",
-      query_week:   "El usuario quiere saber qué tiene esta semana o los próximos días",
-      create_event: "El usuario quiere crear, agendar o agregar un evento nuevo al calendario",
-      update_event: "El usuario quiere mover, cambiar la hora, reagendar o modificar un evento ya existente (palabras clave: movelo, cambialo, reagendalo, cambiale la hora, pasalo, re-agendar)",
-      remind_me:    "El usuario quiere que se le recuerde algo en X tiempo o en determinado momento (palabras clave: recordame, avisame, acordame, remindme, recordatorio)",
-      status:       "El usuario pregunta si el calendario está conectado o vinculado",
-      unknown:      "Otro mensaje no relacionado al calendario",
+      query_today:
+        "El usuario quiere saber qué tiene HOY en su agenda o calendario",
+      query_tomorrow:
+        "El usuario quiere saber qué tiene MAÑANA en su agenda o calendario",
+      query_week:
+        "El usuario quiere saber qué tiene esta semana o los próximos días (más allá de mañana)",
+      create_event:
+        "El usuario quiere crear, agendar o agregar un evento nuevo al calendario",
+      update_event:
+        "El usuario quiere mover, cambiar la hora, reagendar o modificar un evento ya existente (palabras clave: movelo, cambialo, reagendalo, cambiale la hora, pasalo, re-agendar)",
+      remind_me:
+        "El usuario quiere que se le recuerde algo en X tiempo o en determinado momento (palabras clave: recordame, avisame, acordame, remindme, recordatorio)",
+      status: "El usuario pregunta si el calendario está conectado o vinculado",
+      unknown: "Otro mensaje no relacionado al calendario",
     },
-    text
+    text,
   );
   return intent as CalendarIntent;
 }
@@ -68,7 +78,7 @@ async function detectIntent(text: string): Promise<CalendarIntent> {
 async function parseEventFromText(
   text: string,
   referenceDate: Date,
-  context?: string
+  context?: string,
 ): Promise<{
   title: string;
   start: Date;
@@ -96,23 +106,23 @@ async function parseEventFromText(
           role: "user",
           content:
             `Hoy es ${dateStr}.${contextSection}\n` +
-              `Extrae del siguiente texto: título del evento, fecha y hora de inicio (la PRIMERA ocurrencia), fecha y hora de fin de esa primera ocurrencia, y si es un evento recurrente. ` +
-              `Si no se menciona duración, asumir 1 hora. ` +
-              `Si el texto hace referencia a un evento mencionado antes en el contexto, usá esa información para completar los datos faltantes.\n\n` +
-              `RECURRENCIA: si el usuario pide que el evento se repita (ej: "todos los días", "cada lunes", "de lunes a viernes", "todas las semanas", "cada día por un mes"), ` +
-              `generá una regla RRULE estándar de iCalendar en el campo "recurrence". Reglas:\n` +
-              `- "todos los días" → "RRULE:FREQ=DAILY"\n` +
-              `- "de lunes a viernes" / "días de semana" → "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"\n` +
-              `- "cada lunes" / "todos los lunes" → "RRULE:FREQ=WEEKLY;BYDAY=MO"\n` +
-              `- "todas las semanas" → "RRULE:FREQ=WEEKLY"\n` +
-              `- Si dice una cantidad explícita (ej: "por un mes", "durante un mes"), agregá un límite con UNTIL en formato UTC: "...;UNTIL=YYYYMMDDT235959Z" calculado a un mes desde la primera ocurrencia.\n` +
-              `- Si dice "X veces", usá COUNT (ej: ";COUNT=10").\n` +
-              `- Si NO menciona un final y es recurrente "todos los días" sin límite, agregá UNTIL a un mes desde la primera ocurrencia para no agendar indefinidamente.\n` +
-              `- Si el evento NO es recurrente, devolvé "recurrence": null.\n\n` +
-              `IMPORTANTE: Devuelve las horas en formato de Uruguay (UTC-3), usando el offset -03:00. ` +
-              `Responde SOLO con JSON con este formato exacto: ` +
-              `{"title":"...","start":"YYYY-MM-DDTHH:MM:SS-03:00","end":"YYYY-MM-DDTHH:MM:SS-03:00","recurrence":"RRULE:..." o null} ` +
-              `Texto: "${text}"`,
+            `Extrae del siguiente texto: título del evento, fecha y hora de inicio (la PRIMERA ocurrencia), fecha y hora de fin de esa primera ocurrencia, y si es un evento recurrente. ` +
+            `Si no se menciona duración, asumir 1 hora. ` +
+            `Si el texto hace referencia a un evento mencionado antes en el contexto, usá esa información para completar los datos faltantes.\n\n` +
+            `RECURRENCIA: si el usuario pide que el evento se repita (ej: "todos los días", "cada lunes", "de lunes a viernes", "todas las semanas", "cada día por un mes"), ` +
+            `generá una regla RRULE estándar de iCalendar en el campo "recurrence". Reglas:\n` +
+            `- "todos los días" → "RRULE:FREQ=DAILY"\n` +
+            `- "de lunes a viernes" / "días de semana" → "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"\n` +
+            `- "cada lunes" / "todos los lunes" → "RRULE:FREQ=WEEKLY;BYDAY=MO"\n` +
+            `- "todas las semanas" → "RRULE:FREQ=WEEKLY"\n` +
+            `- Si dice una cantidad explícita (ej: "por un mes", "durante un mes"), agregá un límite con UNTIL en formato UTC: "...;UNTIL=YYYYMMDDT235959Z" calculado a un mes desde la primera ocurrencia.\n` +
+            `- Si dice "X veces", usá COUNT (ej: ";COUNT=10").\n` +
+            `- Si NO menciona un final y es recurrente "todos los días" sin límite, agregá UNTIL a un mes desde la primera ocurrencia para no agendar indefinidamente.\n` +
+            `- Si el evento NO es recurrente, devolvé "recurrence": null.\n\n` +
+            `IMPORTANTE: Devuelve las horas en formato de Uruguay (UTC-3), usando el offset -03:00. ` +
+            `Responde SOLO con JSON con este formato exacto: ` +
+            `{"title":"...","start":"YYYY-MM-DDTHH:MM:SS-03:00","end":"YYYY-MM-DDTHH:MM:SS-03:00","recurrence":"RRULE:..." o null} ` +
+            `Texto: "${text}"`,
         },
       ],
     });
@@ -169,10 +179,18 @@ function describeRecurrence(rule: string): string {
       base = "de lunes a viernes";
     } else if (byday) {
       const dayNames: Record<string, string> = {
-        MO: "lunes", TU: "martes", WE: "miércoles", TH: "jueves",
-        FR: "viernes", SA: "sábados", SU: "domingos",
+        MO: "lunes",
+        TU: "martes",
+        WE: "miércoles",
+        TH: "jueves",
+        FR: "viernes",
+        SA: "sábados",
+        SU: "domingos",
       };
-      const days = byday.split(",").map((d) => dayNames[d] ?? d).join(", ");
+      const days = byday
+        .split(",")
+        .map((d) => dayNames[d] ?? d)
+        .join(", ");
       base = `cada ${days}`;
     } else {
       base = "todas las semanas";
@@ -209,7 +227,7 @@ function describeRecurrence(rule: string): string {
 async function parseEventUpdateFromText(
   text: string,
   referenceDate: Date,
-  context?: string
+  context?: string,
 ): Promise<{
   searchTitle: string;
   newStart: Date;
@@ -348,6 +366,14 @@ export const calendarAgent = {
         };
       }
 
+      case "query_tomorrow": {
+        const events = await getTomorrowEvents(userId);
+        return {
+          success: true,
+          message: formatEventList(events, "de mañana"),
+        };
+      }
+
       case "query_week": {
         const events = await getWeekEvents(userId);
         if (events.length === 0) {
@@ -357,10 +383,12 @@ export const calendarAgent = {
           };
         }
 
-        // Agrupar por día
+        // Agrupar por día calendario de Uruguay — toDateString() usaba el día
+        // del servidor (UTC) y los eventos de después de las 21:00 UY caían
+        // agrupados en el día siguiente.
         const byDay = new Map<string, CalendarEvent[]>();
         for (const e of events) {
-          const key = e.start.toDateString();
+          const key = uyDateKey(e.start);
           if (!byDay.has(key)) byDay.set(key, []);
           byDay.get(key)!.push(e);
         }
@@ -373,7 +401,9 @@ export const calendarAgent = {
             if (e.isAllDay) {
               lines.push(`  • ${e.title} (todo el día)`);
             } else {
-              lines.push(`  • ${formatTime(e.start)}-${formatTime(e.end)} ${e.title}`);
+              lines.push(
+                `  • ${formatTime(e.start)}-${formatTime(e.end)} ${e.title}`,
+              );
             }
           }
         }
@@ -398,7 +428,7 @@ export const calendarAgent = {
           parsed.start,
           parsed.end,
           undefined,
-          parsed.recurrence ?? undefined
+          parsed.recurrence ?? undefined,
         );
 
         if (!eventId) {
@@ -433,7 +463,11 @@ export const calendarAgent = {
       }
 
       case "update_event": {
-        const parsed = await parseEventUpdateFromText(message, new Date(), context);
+        const parsed = await parseEventUpdateFromText(
+          message,
+          new Date(),
+          context,
+        );
         if (!parsed) {
           return {
             success: false,
@@ -454,7 +488,12 @@ export const calendarAgent = {
           };
         }
 
-        const ok = await updateEvent(userId, event.id, parsed.newStart, parsed.newEnd);
+        const ok = await updateEvent(
+          userId,
+          event.id,
+          parsed.newStart,
+          parsed.newEnd,
+        );
         if (!ok) {
           return {
             success: false,
@@ -504,7 +543,7 @@ export const calendarAgent = {
         return {
           success: false,
           message:
-            "¿Qué querés saber de tu agenda? Puedo decirte qué tenés hoy, esta semana, crear un evento, mover uno o configurar un recordatorio.",
+            "¿Qué querés saber de tu agenda? Puedo decirte qué tenés hoy, mañana, esta semana, crear un evento, mover uno o configurar un recordatorio.",
         };
     }
   },
@@ -524,7 +563,7 @@ export const calendarAgent = {
   async findFreeSlots(
     userId: string,
     date: Date,
-    durationMinutes: number
+    durationMinutes: number,
   ): Promise<Array<{ start: Date; end: Date }>> {
     return findFreeSlots(userId, date, durationMinutes);
   },
@@ -538,7 +577,7 @@ export const calendarAgent = {
     start: Date,
     end: Date,
     description?: string,
-    recurrence?: string[]
+    recurrence?: string[],
   ): Promise<string | null> {
     return createEvent(userId, title, start, end, description, recurrence);
   },

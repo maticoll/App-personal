@@ -49,6 +49,7 @@ Next.js (App Router) + TypeScript · Tailwind (dark + light, mobile-first) · Su
 - **Modelos de IA hardcodeados:** clasificación/NLP con `claude-haiku-4-5-20251001`, respuesta final con `claude-sonnet-4-6`.
 - **Respuestas verbatim:** un agente puede devolver `data: { verbatim: true }` para que su `message` se envíe sin que Sonnet lo reescriba (ej: "tráeme push A", que necesita formato exacto).
 - **Fechas de sueño:** `SleepLog.date` = día de despertar.
+- **Timezone: el servidor (Vercel) corre en UTC pero el usuario vive en UY (UTC-3).** Todo cálculo de "día" (hoy/mañana/límites de día) debe usar los helpers de `lib/dates.ts` (`startOfDayUY`, `endOfDayUY`, `uyDateKey`, `atHourUY`) — nunca `setHours(0,0,0,0)`, `toDateString()` ni `toISOString().split("T")[0]` sobre hora del servidor: después de las 21:00 UY el día se corre. Los all-day events de Google traen solo `YYYY-MM-DD` y hay que parsearlos con offset `-03:00`.
 - **Acceso restringido:** Google OAuth filtrado por `ALLOWED_EMAILS` en `auth.config.ts`.
 
 ---
@@ -58,18 +59,20 @@ Next.js (App Router) + TypeScript · Tailwind (dark + light, mobile-first) · Su
 **1. Capa de datos.** Todo pasa por el singleton `db` en `lib/db.ts`. Schema en `prisma/schema.prisma`, organizado por módulo, cada modelo con `@@map` a snake_case. Relación 1-1 con `User` para config/estado (`UserSettings`, `UserGoals`, `ConversationMemory`, `PendingTransaction`). Pasos diarios de Garmin en `DailySteps` (único por `userId+date`).
 
 **2. Separación lib / agents / app.**
+
 - `lib/` — lógica de negocio por módulo (`sleep`, `fitness`, `nutrition`, `projects`, `ideas`, `finances`, `calendar`, `scoring`) + integraciones (`garmin`, `notion`, `whatsapp`, `reminders`) + infra (`db`, `nlp`, `conversation`, `goals`, `cron`, `logger`, `pending-transaction`).
 - `agents/` — capa conversacional WhatsApp. Un directorio por módulo, exportados desde `agents/index.ts`. Cada agente expone `process(input: AgentInput): Promise<AgentOutput>` (tipos en `lib/types.ts`); llaman a `lib/` y devuelven **datos crudos**. `agents/prompts/` arma system prompts según objetivos del usuario.
 - `app/` — App Router. Páginas en `app/(app)/<modulo>/page.tsx` (Server Components con carga paralela `Promise.all` → `*ModuleClient.tsx`). API en `app/api/<modulo>/...`. Crons en `app/api/cron/...`.
 
-**3. Orquestrador WhatsApp (HERMES) — `lib/orchestrator.ts`.** Flujo de `orchestrate(userId, text)`:
-   0. **Bypass de pending:** si hay `PendingTransaction` activa → directo a `financesAgent.handleConfirmation` (sin clasificar).
-   1. Carga contexto (`lib/conversation.ts`: rolling window K=8 + summary) + objetivos en paralelo.
-   2. **Clasificación con Haiku** → módulo (`MODULE_DESCRIPTIONS`).
-   3. El **agente especialista** ejecuta y retorna datos crudos.
-   4. **Respuesta final con Sonnet** (voz rioplatense, sin markdown). **Excepción:** si el agente marcó `verbatim`, se envía tal cual (`callSpecialistAgent` devuelve `{text, verbatim}`).
-   5. Guarda turnos en `ConversationMemory`.
-   - Webhook único: `app/api/whatsapp/webhook/route.ts` (transcribe audios con Whisper antes de orquestar).
+**3. Orquestrador WhatsApp (HERMES) — `lib/orchestrator.ts`.** Flujo de `orchestrate(userId, text)`: 0. **Bypass de pending:** si hay `PendingTransaction` activa → directo a `financesAgent.handleConfirmation` (sin clasificar).
+
+1.  Carga contexto (`lib/conversation.ts`: rolling window K=8 + summary) + objetivos en paralelo.
+2.  **Clasificación con Haiku** → módulo (`MODULE_DESCRIPTIONS`).
+3.  El **agente especialista** ejecuta y retorna datos crudos.
+4.  **Respuesta final con Sonnet** (voz rioplatense, sin markdown). **Excepción:** si el agente marcó `verbatim`, se envía tal cual (`callSpecialistAgent` devuelve `{text, verbatim}`).
+5.  Guarda turnos en `ConversationMemory`.
+
+- Webhook único: `app/api/whatsapp/webhook/route.ts` (transcribe audios con Whisper antes de orquestar).
 
 **4. Scoring — `lib/scoring.ts`.** Cada módulo expone `calc<Modulo>ScoreForDate()`; `calculateFullScore()` combina con pesos de `UserGoals` (normalizados). `null` = sin datos (no promedia) vs `0` = había datos sin cumplir. Ideas NO entra al global. **Fitness:** base 40 + gym 20 + duración 20 + cardio/movimiento 20; el bloque de cardio se cumple con actividad cardio **o** alcanzando la meta de pasos (`UserGoals.fitnessDailyStepsGoal`, default 8000) — los pasos de Garmin cuentan como cardio. Gym solo, sin cardio ni pasos, topa en 80.
 
@@ -81,16 +84,16 @@ Next.js (App Router) + TypeScript · Tailwind (dark + light, mobile-first) · Su
 
 ## Módulos
 
-| Módulo | Ruta | Estado |
-|--------|------|--------|
-| Dashboard + Scoring | `/` | ✅ |
-| Sueño | `/sleep` | ✅ |
-| Fitness (+ workout activo `/fitness/session`) | `/fitness` | ✅ |
-| Nutrición | `/nutrition` | ✅ |
-| Proyectos | `/projects` | ✅ |
-| Ideas | `/ideas` | ✅ |
-| Finanzas | `/finances` | ✅ (API externa) |
-| Configuración | `/settings` | ✅ |
+| Módulo                                        | Ruta         | Estado           |
+| --------------------------------------------- | ------------ | ---------------- |
+| Dashboard + Scoring                           | `/`          | ✅               |
+| Sueño                                         | `/sleep`     | ✅               |
+| Fitness (+ workout activo `/fitness/session`) | `/fitness`   | ✅               |
+| Nutrición                                     | `/nutrition` | ✅               |
+| Proyectos                                     | `/projects`  | ✅               |
+| Ideas                                         | `/ideas`     | ✅               |
+| Finanzas                                      | `/finances`  | ✅ (API externa) |
+| Configuración                                 | `/settings`  | ✅               |
 
 ---
 
@@ -109,15 +112,15 @@ WhatsApp Business API · Garmin Connect (sueño, actividad, pasos) · Google Cal
 
 **Crons activos:**
 
-| Job | Plataforma | Horario (UTC) | Ruta |
-|-----|-----------|------|------|
-| sleep-sync | Vercel | 8 AM | `/api/cron/sleep-sync` |
-| sleep-notifications | Vercel + cron-job.org (c/30min 20-23h) | 10 PM | `/api/cron/sleep-notifications` |
-| fitness-sync | Vercel | 6 AM | `/api/cron/fitness-sync` |
-| fitness-habits | Vercel | 7:10 AM | `/api/cron/fitness-habits` |
-| water-reminder | cron-job.org | 12 PM y 5 PM | `/api/cron/water-reminder` |
-| reminders | cron-job.org | c/15min | `/api/cron/reminders` |
-| morning-summary | Vercel | 10:30 AM (7:30 UY) | `/api/cron/morning-summary` |
+| Job                 | Plataforma                             | Horario (UTC)      | Ruta                            |
+| ------------------- | -------------------------------------- | ------------------ | ------------------------------- |
+| sleep-sync          | Vercel                                 | 8 AM               | `/api/cron/sleep-sync`          |
+| sleep-notifications | Vercel + cron-job.org (c/30min 20-23h) | 10 PM              | `/api/cron/sleep-notifications` |
+| fitness-sync        | Vercel                                 | 6 AM               | `/api/cron/fitness-sync`        |
+| fitness-habits      | Vercel                                 | 7:10 AM            | `/api/cron/fitness-habits`      |
+| water-reminder      | cron-job.org                           | 12 PM y 5 PM       | `/api/cron/water-reminder`      |
+| reminders           | cron-job.org                           | c/15min            | `/api/cron/reminders`           |
+| morning-summary     | Vercel                                 | 10:30 AM (7:30 UY) | `/api/cron/morning-summary`     |
 
 ---
 
