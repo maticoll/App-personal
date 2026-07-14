@@ -1,7 +1,7 @@
 # BACKLOG — qué falta hacer (listo para ejecutar)
 
-> Actualizado: 2026-07-13 (noche). Origen: `AUDIT-2026-07-13-timezone-y-mejoras.md` + `AUDIT-app-personal.md` (2026-07-07).
-> Para arrancar la próxima sesión: **"ejecutá la Fase 4 del @docs/audits/BACKLOG.md"** (o la fase que toque).
+> Actualizado: 2026-07-14. Origen: `AUDIT-2026-07-13-timezone-y-mejoras.md` + `AUDIT-app-personal.md` (2026-07-07).
+> Para arrancar la próxima sesión: **"ejecutá la Fase 5 del @docs/audits/BACKLOG.md"** (o la fase que toque).
 > Verificación estándar: `npx tsc --noEmit` (0 errores) + `npm run build`. Commits atómicos por ítem o grupo.
 
 ## ✅ Ya hecho (no tocar)
@@ -11,16 +11,14 @@
 - Score de hoy sin congelar + `financesScore` en `getStoredScore` — commit `01550a2`
 - Quick wins: sync global, fast-paths sin IA, tareas por WhatsApp, morning summary con tareas, tira de vapes — commit `ac2d38d`
 - Fase 3 completa (robustez, 6 ítems): claim atómico de pendings (`claimPending`/`claimVapePending` antes de efectos externos), error visible + INBOUND `FAILED` cuando el webhook explota, reminders de Calendar send-then-mark, flush de Axiom vía `after()` (y desinstalados `@axiomhq/logging`/`@axiomhq/nextjs`), `addTurns` para no perder turnos de memoria, y pendings que distinguen DB caída de "no hay pending" — commits `a942113`, `65df600`, `959990f`, `2792096`, `8158446`, `5248fcf`
+- Fase 4 (seguridad/deps) 4.1–4.4: Next 15.5.20 + next-auth beta.31 vía `npm audit fix` (GHSA-26hh-7cqf-hhc6), webhook WhatsApp fail-closed en producción sin `WHATSAPP_APP_SECRET`, `CRON_SECRET` con `timingSafeEqual` (y `?secret=` deprecado con warn), historial de conversación movido del system prompt a `<historial>` en rol user — commits `15d29e0`, `f9323cd`, `0f4fe28`, `0a035e9`
 
 ---
 
-## 🟠 Fase 4 — Seguridad/deps (heredado de la auditoría 2026-07-07, sigue pendiente)
+## 🟠 Fase 4 — pendientes residuales
 
-- **4.1** `npm audit fix` → Next.js 15.5.20 (middleware bypass GHSA-26hh-7cqf-hhc6, el auth de páginas depende del middleware).
-- **4.2** Webhook WhatsApp fail-closed: si falta `WHATSAPP_APP_SECRET` en producción, rechazar (`lib/whatsapp.ts:19-23` devuelve `true` hoy).
-- **4.3** `CRON_SECRET`: mover cron-job.org al header `x-cron-secret` (ya soportado en `lib/cron.ts:14`), comparación con `crypto.timingSafeEqual`, rotar el secret después.
-- **4.4** Prompt injection: mover el historial de conversación del rol **system** al rol **user** con delimitadores `<historial>...</historial>` (`lib/orchestrator.ts` `generateFinalResponse`, `agents/prompts.ts:257`).
-- **4.5** (Grande, planificar aparte) Migrar `next-pwa` → `@serwist/next`.
+- **4.3 (acción manual del usuario):** en cron-job.org, cambiar los jobs de `?secret=` al header `x-cron-secret` y DESPUÉS rotar `CRON_SECRET` en Vercel (el viejo quedó en logs de acceso). El código ya soporta ambos y loguea warn cuando entra por query.
+- **4.5** (Grande, planificar aparte con /spec) Migrar `next-pwa` → `@serwist/next`. Es lo único que destraba las 8 vulnerabilidades restantes de `npm audit` (cadena serialize-javascript → workbox → next-pwa).
 
 ---
 
