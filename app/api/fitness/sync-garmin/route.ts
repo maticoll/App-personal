@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { fetchGarminActivities, fetchGarminDailySteps } from "@/lib/garmin";
 import { upsertWorkoutFromGarmin, upsertDailySteps } from "@/lib/fitness";
+import { uyDateKey, addDays } from "@/lib/dates";
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,9 +24,9 @@ export async function POST(req: NextRequest) {
     let skipped = 0;
 
     for (let i = daysBack - 1; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split("T")[0];
+      // Día calendario UY — con toISOString() (UTC), de noche se le pedía a
+      // Garmin un día futuro ("no hay actividades nuevas")
+      const dateStr = uyDateKey(addDays(new Date(), -i));
 
       try {
         const activities = await fetchGarminActivities(userId, dateStr);

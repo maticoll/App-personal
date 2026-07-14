@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
+import { uyDayDate, startOfDayUY, endOfDayUY } from "@/lib/dates";
 
 export async function DELETE(req: NextRequest) {
   const session = await auth();
@@ -29,20 +30,20 @@ export async function DELETE(req: NextRequest) {
         error: "Se requiere confirmación explícita: { confirm: true }",
         hint: "Esta acción borrará todos los datos del día de hoy de forma permanente.",
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   const userId = session.user.id;
 
-  // Calcular inicio y fin de hoy (UTC — ajustar si Supabase usa zona horaria diferente)
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
+  // "Hoy" = día calendario URUGUAY — con setHours() del server (UTC), borrar
+  // de noche eliminaba las keys del día siguiente (acción destructiva sobre
+  // el día equivocado).
+  const todayStart = startOfDayUY();
+  const todayEnd = endOfDayUY();
 
-  // Fecha de hoy como Date solo para @db.Date (sin tiempo)
-  const todayDate = new Date(todayStart);
+  // Fecha de hoy como key para columnas @db.Date
+  const todayDate = uyDayDate();
 
   let deleted = {
     sleep: 0,
@@ -112,7 +113,7 @@ export async function DELETE(req: NextRequest) {
     console.error("[settings/day-data] Error borrando datos:", err);
     return NextResponse.json(
       { error: "Error interno borrando los datos del día" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

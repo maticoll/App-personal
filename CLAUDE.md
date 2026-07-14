@@ -114,7 +114,7 @@ WhatsApp Business API · Garmin Connect (sueño, actividad, pasos) · Google Cal
 
 | Job                 | Plataforma                             | Horario (UTC)      | Ruta                            |
 | ------------------- | -------------------------------------- | ------------------ | ------------------------------- |
-| sleep-sync          | Vercel                                 | 8 AM               | `/api/cron/sleep-sync`          |
+| sleep-sync          | Vercel                                 | 11 AM (8 AM UY)    | `/api/cron/sleep-sync`          |
 | sleep-notifications | Vercel + cron-job.org (c/30min 20-23h) | 10 PM              | `/api/cron/sleep-notifications` |
 | fitness-sync        | Vercel                                 | 6 AM               | `/api/cron/fitness-sync`        |
 | fitness-habits      | Vercel                                 | 7:10 AM            | `/api/cron/fitness-habits`      |

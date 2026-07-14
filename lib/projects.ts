@@ -4,6 +4,7 @@
 // ============================================================
 
 import { db } from "@/lib/db";
+import { startOfDayUY, endOfDayUY } from "@/lib/dates";
 import type { ProjectStatus } from "@prisma/client";
 
 // -------------------------------------------------------
@@ -46,16 +47,14 @@ export type WeeklyProjectStats = {
 // Helpers
 // -------------------------------------------------------
 
+// Límites de día en hora UY — con setHours() del server (UTC) las tareas
+// completadas de noche contaban para el día siguiente.
 function startOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
+  return startOfDayUY(date);
 }
 
 function endOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(23, 59, 59, 999);
-  return d;
+  return endOfDayUY(date);
 }
 
 const taskSelect = {
@@ -80,7 +79,9 @@ const projectWithTasksInclude = {
 // Lectura
 // -------------------------------------------------------
 
-export async function getAllProjects(userId: string): Promise<ProjectWithTasks[]> {
+export async function getAllProjects(
+  userId: string,
+): Promise<ProjectWithTasks[]> {
   return db.project.findMany({
     where: { userId },
     include: projectWithTasksInclude,
@@ -90,7 +91,7 @@ export async function getAllProjects(userId: string): Promise<ProjectWithTasks[]
 
 export async function getProjectsByStatus(
   userId: string,
-  status: ProjectStatus
+  status: ProjectStatus,
 ): Promise<ProjectWithTasks[]> {
   return db.project.findMany({
     where: { userId, status },
@@ -101,7 +102,7 @@ export async function getProjectsByStatus(
 
 export async function getProject(
   userId: string,
-  projectId: string
+  projectId: string,
 ): Promise<ProjectWithTasks | null> {
   return db.project.findFirst({
     where: { id: projectId, userId },
@@ -138,7 +139,7 @@ export async function createProject(
     description?: string;
     deadline?: Date;
     color?: string;
-  }
+  },
 ): Promise<ProjectWithTasks> {
   const maxOrder = await db.project.aggregate({
     where: { userId },
@@ -173,7 +174,7 @@ export async function updateProject(
     deadline?: Date | null;
     color?: string;
     order?: number;
-  }
+  },
 ): Promise<ProjectWithTasks> {
   const project = await db.project.findFirst({
     where: { id: projectId, userId },
@@ -200,7 +201,7 @@ export async function updateProject(
 
 export async function deleteProject(
   userId: string,
-  projectId: string
+  projectId: string,
 ): Promise<void> {
   const project = await db.project.findFirst({
     where: { id: projectId, userId },
@@ -216,7 +217,7 @@ export async function deleteProject(
 
 export async function reorderProjects(
   userId: string,
-  projectIds: string[]
+  projectIds: string[],
 ): Promise<void> {
   const projects = await db.project.findMany({
     where: { userId, id: { in: projectIds } },
@@ -232,8 +233,8 @@ export async function reorderProjects(
       db.project.update({
         where: { id },
         data: { order: index },
-      })
-    )
+      }),
+    ),
   );
 }
 
@@ -244,7 +245,7 @@ export async function reorderProjects(
 export async function createTask(
   projectId: string,
   userId: string,
-  title: string
+  title: string,
 ): Promise<ProjectTaskData> {
   const project = await db.project.findFirst({
     where: { id: projectId, userId },
@@ -269,7 +270,7 @@ export async function createTask(
 export async function updateTask(
   userId: string,
   taskId: string,
-  data: { done?: boolean; title?: string; order?: number }
+  data: { done?: boolean; title?: string; order?: number },
 ): Promise<ProjectTaskData> {
   const task = await db.projectTask.findFirst({
     where: { id: taskId, project: { userId } },
@@ -287,7 +288,10 @@ export async function updateTask(
   });
 }
 
-export async function deleteTask(userId: string, taskId: string): Promise<void> {
+export async function deleteTask(
+  userId: string,
+  taskId: string,
+): Promise<void> {
   const task = await db.projectTask.findFirst({
     where: { id: taskId, project: { userId } },
   });
@@ -300,7 +304,9 @@ export async function deleteTask(userId: string, taskId: string): Promise<void> 
 // Stats semanales
 // -------------------------------------------------------
 
-export async function getWeeklyStats(userId: string): Promise<WeeklyProjectStats> {
+export async function getWeeklyStats(
+  userId: string,
+): Promise<WeeklyProjectStats> {
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
 

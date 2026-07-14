@@ -27,6 +27,7 @@ import {
   type RoutineSessionComparison,
 } from "@/lib/fitness";
 import { checkGarminStatus, fetchGarminActivities } from "@/lib/garmin";
+import { uyDateKey } from "@/lib/dates";
 import { calcFitnessScoreForDate } from "@/lib/scoring";
 import { detectIntentAI } from "@/lib/nlp";
 import { getGoals } from "@/lib/goals";
@@ -62,14 +63,15 @@ function parseCardioFromText(text: string): {
 // ─── Textos de respuesta ─────────────────────────────────────────────────────
 
 function gymStartedText(routineName?: string): string {
-  if (routineName) return `✅ Sesión de gym iniciada: *${routineName}*. ¡A darle!`;
+  if (routineName)
+    return `✅ Sesión de gym iniciada: *${routineName}*. ¡A darle!`;
   return `✅ Sesión de gym registrada. ¡A darle!`;
 }
 
 function cardioLoggedText(
   type: string,
   durationMinutes?: number,
-  distanceKm?: number
+  distanceKm?: number,
 ): string {
   const labels: Record<string, string> = {
     RUNNING: "Carrera",
@@ -95,11 +97,14 @@ export async function getFitnessSummaryText(userId: string): Promise<string> {
 
   const parts: string[] = [];
   if (summary.didGym) parts.push("sesión de gym");
-  const cardio = summary.workouts.filter(w => w.type !== "GYM");
+  const cardio = summary.workouts.filter((w) => w.type !== "GYM");
   if (cardio.length > 0) parts.push(`${cardio.length} sesión cardio`);
-  if (summary.totalActivityMinutes > 0) parts.push(`${summary.totalActivityMinutes} min totales`);
+  if (summary.totalActivityMinutes > 0)
+    parts.push(`${summary.totalActivityMinutes} min totales`);
   if (summary.steps != null) {
-    parts.push(`${summary.steps.toLocaleString("es-UY")} pasos${summary.stepsGoal ? ` (meta ${summary.stepsGoal.toLocaleString("es-UY")})` : ""}`);
+    parts.push(
+      `${summary.steps.toLocaleString("es-UY")} pasos${summary.stepsGoal ? ` (meta ${summary.stepsGoal.toLocaleString("es-UY")})` : ""}`,
+    );
   }
 
   if (parts.length === 0) return "Sin actividad registrada hoy.";
@@ -127,7 +132,7 @@ function hasExerciseData(text: string): boolean {
 /** ¿El usuario pide que le traigan/preparen una rutina? */
 function wantsBringRoutine(text: string): boolean {
   return /(tra[eé]me|tr[aá]eme|dame|pas[aá]me|mostr|prepar|carg[aá]|quiero (hacer|ver|empezar)|qu[eé] toca|toca hoy)/i.test(
-    text
+    text,
   );
 }
 
@@ -173,9 +178,13 @@ function formatRoutineComparison(cmp: RoutineSessionComparison): string {
   const lines: string[] = [];
 
   if (cmp.prevDate) {
-    lines.push(`💪 ${title} registrada. Progreso vs ${fmtDateShort(cmp.prevDate)}:`);
+    lines.push(
+      `💪 ${title} registrada. Progreso vs ${fmtDateShort(cmp.prevDate)}:`,
+    );
   } else {
-    lines.push(`💪 ${title} registrada. Es tu primera sesión de esta rutina (queda de referencia).`);
+    lines.push(
+      `💪 ${title} registrada. Es tu primera sesión de esta rutina (queda de referencia).`,
+    );
   }
 
   for (const ex of cmp.exercises) {
@@ -227,27 +236,58 @@ export const fitnessAgent = {
 
       if (matchedRoutine && hasExerciseData(text)) {
         // El usuario mandó la rutina hecha → registrar + comparar con la última
-        const cmp = await logRoutineSession(userId, matchedRoutine.name, message);
-        const scoreResult = await calcFitnessScoreForDate(userId, new Date()).catch(() => null);
-        const scoreMsg = scoreResult?.score != null ? `\n\n💪 Fitness hoy: ${scoreResult.score}/100` : "";
-        return { success: true, message: formatRoutineComparison(cmp) + scoreMsg };
+        const cmp = await logRoutineSession(
+          userId,
+          matchedRoutine.name,
+          message,
+        );
+        const scoreResult = await calcFitnessScoreForDate(
+          userId,
+          new Date(),
+        ).catch(() => null);
+        const scoreMsg =
+          scoreResult?.score != null
+            ? `\n\n💪 Fitness hoy: ${scoreResult.score}/100`
+            : "";
+        return {
+          success: true,
+          message: formatRoutineComparison(cmp) + scoreMsg,
+        };
       }
 
-      if (matchedRoutine && (wantsBringRoutine(text) || !hasExerciseData(text))) {
+      if (
+        matchedRoutine &&
+        (wantsBringRoutine(text) || !hasExerciseData(text))
+      ) {
         // "tráeme push A" → traer la rutina con los últimos pesos (formato exacto)
-        const perf = await getRoutineWithLastPerformance(userId, matchedRoutine.name);
+        const perf = await getRoutineWithLastPerformance(
+          userId,
+          matchedRoutine.name,
+        );
         if (perf) {
-          return { success: true, message: formatRoutinePerf(perf), data: { verbatim: true } };
+          return {
+            success: true,
+            message: formatRoutinePerf(perf),
+            data: { verbatim: true },
+          };
         }
       }
 
       // "tráeme la rutina de hoy" (sin nombrarla explícitamente)
-      if (!matchedRoutine && wantsBringRoutine(text) && /rutina|entren|toca/i.test(text)) {
+      if (
+        !matchedRoutine &&
+        wantsBringRoutine(text) &&
+        /rutina|entren|toca/i.test(text)
+      ) {
         const today = await getTodayGymRoutine(userId);
         if (today) {
           const perf = await getRoutineWithLastPerformance(userId, today.name);
           if (perf) {
-            return { success: true, message: formatRoutinePerf(perf), data: { verbatim: true } };
+            return {
+              success: true,
+              message: formatRoutinePerf(perf),
+              data: { verbatim: true },
+            };
           }
         }
       }
@@ -255,57 +295,108 @@ export const fitnessAgent = {
       // Sync Garmin
       if (/sync|sincronizar|garmin/i.test(text)) {
         const status = await checkGarminStatus(userId);
-        if (!status.connected) return { success: true, message: "Garmin no está conectado. Configurá las credenciales en Ajustes." };
-        const activities = await fetchGarminActivities(userId, new Date().toISOString().split('T')[0]);
+        if (!status.connected)
+          return {
+            success: true,
+            message:
+              "Garmin no está conectado. Configurá las credenciales en Ajustes.",
+          };
+        const activities = await fetchGarminActivities(userId, uyDateKey());
         const synced = activities.length;
-        return { success: true, message: synced > 0 ? `✅ ${synced} actividad${synced > 1 ? "es" : ""} importada${synced > 1 ? "s" : ""} de Garmin.` : "No hay actividades nuevas en Garmin para hoy." };
+        return {
+          success: true,
+          message:
+            synced > 0
+              ? `✅ ${synced} actividad${synced > 1 ? "es" : ""} importada${synced > 1 ? "s" : ""} de Garmin.`
+              : "No hay actividades nuevas en Garmin para hoy.",
+        };
       }
 
       // Gym start
-      if (/empecé gym|fui al gym|gym hoy|empiezo gym|arrancé gym|entren[éo] en el gym/i.test(text)) {
+      if (
+        /empecé gym|fui al gym|gym hoy|empiezo gym|arrancé gym|entren[éo] en el gym/i.test(
+          text,
+        )
+      ) {
         await startGymWorkout(userId);
         return { success: true, message: gymStartedText() };
       }
 
       // Cardio log
       if (/corr[íi]|nadar|nadé|bici|caminé|caminata|run|cardio/i.test(text)) {
-        const { type, durationMinutes, distanceKm } = parseCardioFromText(message);
-        await logActivity(userId, { type, durationMinutes, distanceKm, date: new Date() });
-        return { success: true, message: cardioLoggedText(type, durationMinutes, distanceKm) };
+        const { type, durationMinutes, distanceKm } =
+          parseCardioFromText(message);
+        await logActivity(userId, {
+          type,
+          durationMinutes,
+          distanceKm,
+          date: new Date(),
+        });
+        return {
+          success: true,
+          message: cardioLoggedText(type, durationMinutes, distanceKm),
+        };
       }
 
       // Exercise NLP (series, pesos)
-      if (/series|reps|repeticiones|kg|press|sentadilla|curl|peso/i.test(text)) {
+      if (
+        /series|reps|repeticiones|kg|press|sentadilla|curl|peso/i.test(text)
+      ) {
         const result = await parseAndLogExerciseNLP(userId, message);
-        const scoreResult = await calcFitnessScoreForDate(userId, new Date()).catch(() => null);
-        const scoreMsg = scoreResult?.score != null ? ` Fitness hoy: ${scoreResult.score}/100` : "";
+        const scoreResult = await calcFitnessScoreForDate(
+          userId,
+          new Date(),
+        ).catch(() => null);
+        const scoreMsg =
+          scoreResult?.score != null
+            ? ` Fitness hoy: ${scoreResult.score}/100`
+            : "";
         return { success: true, message: result.message + scoreMsg };
       }
 
       // Query
       const summary = await getTodayFitnessSummary(userId);
       if (!summary) {
-        return { success: true, message: "No hay actividad registrada hoy. ¿Fuiste al gym o hiciste cardio?" };
+        return {
+          success: true,
+          message:
+            "No hay actividad registrada hoy. ¿Fuiste al gym o hiciste cardio?",
+        };
       }
       const parts: string[] = [];
       if (summary.didGym) parts.push("sesión de gym");
       const cardio = summary.workouts.filter((w: any) => w.type !== "GYM");
-      if (cardio.length > 0) parts.push(`${cardio.length} actividad${cardio.length > 1 ? "es" : ""} cardio`);
-      if (summary.totalActivityMinutes > 0) parts.push(`${summary.totalActivityMinutes} min totales`);
+      if (cardio.length > 0)
+        parts.push(
+          `${cardio.length} actividad${cardio.length > 1 ? "es" : ""} cardio`,
+        );
+      if (summary.totalActivityMinutes > 0)
+        parts.push(`${summary.totalActivityMinutes} min totales`);
       if (summary.steps != null) {
-        parts.push(`${summary.steps.toLocaleString("es-UY")} pasos${summary.stepsGoal ? ` (meta ${summary.stepsGoal.toLocaleString("es-UY")})` : ""}`);
+        parts.push(
+          `${summary.steps.toLocaleString("es-UY")} pasos${summary.stepsGoal ? ` (meta ${summary.stepsGoal.toLocaleString("es-UY")})` : ""}`,
+        );
       }
       if (parts.length === 0) {
-        return { success: true, message: "No hay actividad registrada hoy. ¿Fuiste al gym o hiciste cardio?" };
+        return {
+          success: true,
+          message:
+            "No hay actividad registrada hoy. ¿Fuiste al gym o hiciste cardio?",
+        };
       }
       return { success: true, message: `Hoy: ${parts.join(", ")}.` };
-
     } catch {
-      return { success: false, message: "Error procesando tu mensaje de fitness." };
+      return {
+        success: false,
+        message: "Error procesando tu mensaje de fitness.",
+      };
     }
   },
 
-  async onGoalsUpdate(_userId: string, _goals: import("@prisma/client").UserGoals): Promise<{ ok: boolean }> {
+  async onGoalsUpdate(
+    _userId: string,
+    _goals: import("@prisma/client").UserGoals,
+  ): Promise<{ ok: boolean }> {
     return { ok: true };
   },
 };

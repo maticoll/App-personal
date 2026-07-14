@@ -4,6 +4,13 @@
 
 import { db } from "@/lib/db";
 import { callClaude } from "@/lib/claude";
+import {
+  startOfDayUY,
+  endOfDayUY,
+  uyDateKey,
+  addDays,
+  UY_OFFSET,
+} from "@/lib/dates";
 
 // -------------------------------------------------------
 // Tipos
@@ -13,10 +20,10 @@ export type IdeaPriority = "baja" | "media" | "alta" | "urgente";
 export type IdeaStatus = "idea" | "progreso" | "hecha";
 
 export type IdeaBreakdown = {
-  steps: string[];                                   // pasos ordenados, concretos
-  research: { question: string; where: string }[];   // qué investigar y dónde
+  steps: string[]; // pasos ordenados, concretos
+  research: { question: string; where: string }[]; // qué investigar y dónde
   evaluation: { effort: string; risks: string[]; verdict: string };
-  firstStep: string;                                 // una acción chica para hoy
+  firstStep: string; // una acción chica para hoy
 };
 
 export type IdeaWithMeta = {
@@ -37,8 +44,8 @@ export type IdeaWithMeta = {
 
 export type IdeasStats = {
   total: number;
-  active: number;    // idea + progreso
-  done: number;      // hecha
+  active: number; // idea + progreso
+  done: number; // hecha
   thisWeek: number;
   thisMonth: number;
   topTags: string[];
@@ -80,7 +87,9 @@ export function parseBreakdown(raw: unknown): IdeaBreakdown | null {
 
   const research = Array.isArray(obj.research)
     ? obj.research
-        .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
+        .filter(
+          (r): r is Record<string, unknown> => !!r && typeof r === "object",
+        )
         .map((r) => ({
           question: String(r.question ?? "").trim(),
           where: String(r.where ?? "").trim(),
@@ -89,7 +98,9 @@ export function parseBreakdown(raw: unknown): IdeaBreakdown | null {
     : [];
 
   const evalRaw =
-    obj.evaluation && typeof obj.evaluation === "object" && !Array.isArray(obj.evaluation)
+    obj.evaluation &&
+    typeof obj.evaluation === "object" &&
+    !Array.isArray(obj.evaluation)
       ? (obj.evaluation as Record<string, unknown>)
       : {};
   const evaluation = {
@@ -140,7 +151,7 @@ function toIdeaWithMeta(idea: {
 
 export async function getAllIdeas(
   userId: string,
-  options?: { tag?: string; search?: string; status?: IdeaStatus }
+  options?: { tag?: string; search?: string; status?: IdeaStatus },
 ): Promise<IdeaWithMeta[]> {
   const ideas = await db.idea.findMany({
     where: {
@@ -151,7 +162,9 @@ export async function getAllIdeas(
         ? {
             OR: [
               { title: { contains: options.search, mode: "insensitive" } },
-              { cleanedText: { contains: options.search, mode: "insensitive" } },
+              {
+                cleanedText: { contains: options.search, mode: "insensitive" },
+              },
               { rawText: { contains: options.search, mode: "insensitive" } },
             ],
           }
@@ -172,7 +185,7 @@ export async function getAllIdeas(
 
 export async function getRecentIdeas(
   userId: string,
-  limit: number = 5
+  limit: number = 5,
 ): Promise<IdeaWithMeta[]> {
   const ideas = await db.idea.findMany({
     where: { userId },
@@ -188,7 +201,7 @@ export async function getRecentIdeas(
 
 export async function getIdea(
   userId: string,
-  ideaId: string
+  ideaId: string,
 ): Promise<IdeaWithMeta | null> {
   const idea = await db.idea.findUnique({ where: { id: ideaId } });
   if (!idea || idea.userId !== userId) return null;
@@ -250,7 +263,7 @@ Sé breve y accionable, en español rioplatense.`;
 export async function captureIdeaNLP(
   userId: string,
   rawText: string,
-  options?: { priority?: IdeaPriority }
+  options?: { priority?: IdeaPriority },
 ): Promise<IdeaWithMeta> {
   let structured: CapturedIdea = {
     title: rawText.slice(0, 80),
@@ -287,7 +300,9 @@ export async function captureIdeaNLP(
 // Desglose bajo demanda — para ideas viejas o regeneración
 // -------------------------------------------------------
 
-async function callClaudeForBreakdown(text: string): Promise<IdeaBreakdown | null> {
+async function callClaudeForBreakdown(
+  text: string,
+): Promise<IdeaBreakdown | null> {
   const prompt = `El usuario quiere desglosar esta idea para llevarla a la acción:
 "${text}"
 
@@ -318,14 +333,16 @@ Sé breve y accionable, en español rioplatense.`;
 
 export async function generateIdeaBreakdown(
   userId: string,
-  ideaId: string
+  ideaId: string,
 ): Promise<IdeaWithMeta> {
   const idea = await db.idea.findUnique({ where: { id: ideaId } });
   if (!idea || idea.userId !== userId) {
     throw new Error("Idea no encontrada o sin permiso");
   }
 
-  const breakdown = await callClaudeForBreakdown(idea.cleanedText ?? idea.rawText);
+  const breakdown = await callClaudeForBreakdown(
+    idea.cleanedText ?? idea.rawText,
+  );
   if (!breakdown) {
     // No tocar el desglose anterior si la generación falló
     throw new Error("No se pudo generar el desglose. Intentá de nuevo.");
@@ -352,7 +369,7 @@ export async function updateIdea(
     tags?: string[];
     priority?: IdeaPriority;
     status?: IdeaStatus;
-  }
+  },
 ): Promise<IdeaWithMeta> {
   const idea = await db.idea.findUnique({ where: { id: ideaId } });
   if (!idea || idea.userId !== userId) {
@@ -379,7 +396,7 @@ export async function updateIdea(
 
 export async function cycleIdeaStatus(
   userId: string,
-  ideaId: string
+  ideaId: string,
 ): Promise<IdeaWithMeta> {
   const idea = await db.idea.findUnique({ where: { id: ideaId } });
   if (!idea || idea.userId !== userId) {
@@ -401,7 +418,10 @@ export async function cycleIdeaStatus(
 // Eliminar idea
 // -------------------------------------------------------
 
-export async function deleteIdea(userId: string, ideaId: string): Promise<void> {
+export async function deleteIdea(
+  userId: string,
+  ideaId: string,
+): Promise<void> {
   const idea = await db.idea.findUnique({ where: { id: ideaId } });
   if (!idea || idea.userId !== userId) {
     throw new Error("Idea no encontrada o sin permiso");
@@ -415,10 +435,11 @@ export async function deleteIdea(userId: string, ideaId: string): Promise<void> 
 
 export async function getIdeasStats(userId: string): Promise<IdeasStats> {
   const now = new Date();
-  const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - now.getDay());
-  startOfWeek.setHours(0, 0, 0, 0);
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  // Semana/mes en calendario UY (getDay()/getMonth() usaban el del server)
+  const dayIdx = new Date(`${uyDateKey(now)}T12:00:00Z`).getUTCDay();
+  const startOfWeek = addDays(startOfDayUY(now), -dayIdx);
+  const [uyY, uyM] = uyDateKey(now).split("-");
+  const startOfMonth = new Date(`${uyY}-${uyM}-01T00:00:00${UY_OFFSET}`);
 
   const [total, done, thisWeek, thisMonth, allIdeas] = await Promise.all([
     db.idea.count({ where: { userId } }),
@@ -455,14 +476,12 @@ export async function getIdeasStats(userId: string): Promise<IdeasStats> {
 
 export async function getIdeasActivityForDate(
   userId: string,
-  date: Date
+  date: Date,
 ): Promise<number> {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  const end = new Date(d);
-  end.setHours(23, 59, 59, 999);
-
   return db.idea.count({
-    where: { userId, createdAt: { gte: d, lte: end } },
+    where: {
+      userId,
+      createdAt: { gte: startOfDayUY(date), lte: endOfDayUY(date) },
+    },
   });
 }

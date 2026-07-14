@@ -17,6 +17,19 @@ import { getGoals } from "@/lib/goals";
 import { buildSynthesisPrompt } from "@/agents/prompts";
 import { getStoredScore } from "@/lib/scoring";
 import { callClaude } from "@/lib/claude";
+import { uyDayDate, uyDateKey, addDays, UY_TIMEZONE } from "@/lib/dates";
+
+// Etiquetas de fecha para el resumen que ve Claude:
+// - Keys @db.Date (sleepLog, meal, score) viven a medianoche UTC → formatear
+//   en UTC (formatearlas en UY las mostraría un día antes).
+// - Instantes reales (workout.date) → formatear en hora UY (formatearlos en
+//   el tz del server corría los workouts nocturnos al día siguiente).
+function dayKeyLabel(d: Date): string {
+  return d.toLocaleDateString("es-UY", { timeZone: "UTC" });
+}
+function instantLabel(d: Date): string {
+  return d.toLocaleDateString("es-UY", { timeZone: UY_TIMEZONE });
+}
 
 // ── Tipos ──────────────────────────────────────────────────
 
@@ -26,15 +39,15 @@ export type SynthesisInput = {
 };
 
 export type CrossModuleInsight = {
-  pattern: string;          // Descripción del patrón detectado
-  modules: string[];        // Módulos involucrados
-  recommendation: string;   // Acción concreta recomendada
+  pattern: string; // Descripción del patrón detectado
+  modules: string[]; // Módulos involucrados
+  recommendation: string; // Acción concreta recomendada
   confidence: "high" | "medium" | "low";
 };
 
 export type SynthesisOutput = {
   insights: CrossModuleInsight[];
-  summary: string;          // Texto listo para WhatsApp/dashboard
+  summary: string; // Texto listo para WhatsApp/dashboard
   dataWindow: {
     from: Date;
     to: Date;
@@ -46,46 +59,45 @@ export type SynthesisOutput = {
 
 async function loadMultiModuleData(userId: string, windowDays: number) {
   const today = new Date();
-  const from = new Date(today);
-  from.setDate(from.getDate() - windowDays);
-  from.setHours(0, 0, 0, 0);
+  const from = uyDayDate(addDays(today, -windowDays));
 
   // Cargar datos de todos los módulos en paralelo
-  const [sleepLogs, workouts, meals, waterLogs, scores, projects] = await Promise.allSettled([
-    db.sleepLog.findMany({
-      where: { userId, date: { gte: from, lte: today } },
-      orderBy: { date: "asc" },
-    }),
-    db.workout.findMany({
-      where: { userId, date: { gte: from, lte: today } },
-      orderBy: { date: "asc" },
-    }),
-    db.meal.findMany({
-      where: { userId, date: { gte: from, lte: today } },
-      orderBy: { date: "asc" },
-    }),
-    db.waterLog.findMany({
-      where: { userId, date: { gte: from, lte: today } },
-    }),
-    db.dailyScore.findMany({
-      where: { userId, date: { gte: from, lte: today } },
-      orderBy: { date: "asc" },
-    }),
-    db.project.findMany({
-      where: { userId },
-      include: {
-        tasks: { where: { updatedAt: { gte: from } } },
-      },
-    }),
-  ]);
+  const [sleepLogs, workouts, meals, waterLogs, scores, projects] =
+    await Promise.allSettled([
+      db.sleepLog.findMany({
+        where: { userId, date: { gte: from, lte: today } },
+        orderBy: { date: "asc" },
+      }),
+      db.workout.findMany({
+        where: { userId, date: { gte: from, lte: today } },
+        orderBy: { date: "asc" },
+      }),
+      db.meal.findMany({
+        where: { userId, date: { gte: from, lte: today } },
+        orderBy: { date: "asc" },
+      }),
+      db.waterLog.findMany({
+        where: { userId, date: { gte: from, lte: today } },
+      }),
+      db.dailyScore.findMany({
+        where: { userId, date: { gte: from, lte: today } },
+        orderBy: { date: "asc" },
+      }),
+      db.project.findMany({
+        where: { userId },
+        include: {
+          tasks: { where: { updatedAt: { gte: from } } },
+        },
+      }),
+    ]);
 
   return {
     sleepLogs: sleepLogs.status === "fulfilled" ? sleepLogs.value : [],
-    workouts:  workouts.status === "fulfilled" ? workouts.value : [],
-    meals:     meals.status === "fulfilled" ? meals.value : [],
+    workouts: workouts.status === "fulfilled" ? workouts.value : [],
+    meals: meals.status === "fulfilled" ? meals.value : [],
     waterLogs: waterLogs.status === "fulfilled" ? waterLogs.value : [],
-    scores:    scores.status === "fulfilled" ? scores.value : [],
-    projects:  projects.status === "fulfilled" ? projects.value : [],
+    scores: scores.status === "fulfilled" ? scores.value : [],
+    projects: projects.status === "fulfilled" ? projects.value : [],
     from,
     to: today,
   };
@@ -93,18 +105,24 @@ async function loadMultiModuleData(userId: string, windowDays: number) {
 
 // ── Construcción del contexto para Claude ──────────────────
 
-function buildDataSummary(data: Awaited<ReturnType<typeof loadMultiModuleData>>): string {
+function buildDataSummary(
+  data: Awaited<ReturnType<typeof loadMultiModuleData>>,
+): string {
   const lines: string[] = [];
 
-  lines.push(`PERÍODO ANALIZADO: ${data.from.toLocaleDateString("es-UY")} → ${data.to.toLocaleDateString("es-UY")}`);
+  lines.push(
+    `PERÍODO ANALIZADO: ${dayKeyLabel(data.from)} → ${instantLabel(data.to)}`,
+  );
   lines.push("");
 
   // Sueño
   if (data.sleepLogs.length > 0) {
     lines.push("SUEÑO:");
     for (const log of data.sleepLogs) {
-      const dateStr = log.date.toLocaleDateString("es-UY");
-      const dur = log.durationMinutes ? `${(log.durationMinutes / 60).toFixed(1)}h` : "sin datos";
+      const dateStr = dayKeyLabel(log.date);
+      const dur = log.durationMinutes
+        ? `${(log.durationMinutes / 60).toFixed(1)}h`
+        : "sin datos";
       const score = log.garminScore ? ` (calidad: ${log.garminScore}/100)` : "";
       lines.push(`  ${dateStr}: ${dur}${score}`);
     }
@@ -117,13 +135,16 @@ function buildDataSummary(data: Awaited<ReturnType<typeof loadMultiModuleData>>)
     // Agrupar por fecha
     const byDate: Record<string, typeof data.workouts> = {};
     for (const w of data.workouts) {
-      const key = w.date.toLocaleDateString("es-UY");
+      const key = instantLabel(w.date);
       if (!byDate[key]) byDate[key] = [];
       byDate[key].push(w);
     }
     for (const [date, ws] of Object.entries(byDate)) {
       const types = ws.map((w: any) => w.type).join(", ");
-      const totalMin = ws.reduce((acc: any, w: any) => acc + (w.durationMinutes ?? 0), 0);
+      const totalMin = ws.reduce(
+        (acc: any, w: any) => acc + (w.durationMinutes ?? 0),
+        0,
+      );
       lines.push(`  ${date}: ${types} (${totalMin}min total)`);
     }
     lines.push("");
@@ -134,12 +155,15 @@ function buildDataSummary(data: Awaited<ReturnType<typeof loadMultiModuleData>>)
     lines.push("NUTRICIÓN:");
     const byDate: Record<string, typeof data.meals> = {};
     for (const m of data.meals) {
-      const key = m.date.toLocaleDateString("es-UY");
+      const key = dayKeyLabel(m.date);
       if (!byDate[key]) byDate[key] = [];
       byDate[key].push(m);
     }
     for (const [date, ms] of Object.entries(byDate)) {
-      const totalCal = ms.reduce((acc: any, m: any) => acc + (m.calories ?? 0), 0);
+      const totalCal = ms.reduce(
+        (acc: any, m: any) => acc + (m.calories ?? 0),
+        0,
+      );
       const calStr = totalCal > 0 ? ` (~${totalCal}kcal)` : "";
       lines.push(`  ${date}: ${ms.length} comidas${calStr}`);
     }
@@ -150,14 +174,16 @@ function buildDataSummary(data: Awaited<ReturnType<typeof loadMultiModuleData>>)
   if (data.scores.length > 0) {
     lines.push("SCORES DIARIOS:");
     for (const s of data.scores) {
-      const dateStr = s.date.toLocaleDateString("es-UY");
+      const dateStr = dayKeyLabel(s.date);
       const parts = [
         `global: ${s.globalScore}`,
         s.sleepScore !== null ? `sueño: ${s.sleepScore}` : null,
         s.fitnessScore !== null ? `fitness: ${s.fitnessScore}` : null,
         s.nutritionScore !== null ? `nutrición: ${s.nutritionScore}` : null,
         s.projectsScore !== null ? `proyectos: ${s.projectsScore}` : null,
-      ].filter(Boolean).join(", ");
+      ]
+        .filter(Boolean)
+        .join(", ");
       lines.push(`  ${dateStr}: ${parts}`);
     }
     lines.push("");
@@ -165,7 +191,9 @@ function buildDataSummary(data: Awaited<ReturnType<typeof loadMultiModuleData>>)
 
   // Proyectos
   if (data.projects.length > 0) {
-    const inProgress = data.projects.filter((p: any) => p.status === "IN_PROGRESS");
+    const inProgress = data.projects.filter(
+      (p: any) => p.status === "IN_PROGRESS",
+    );
     const recentTasks = data.projects.flatMap((p: any) => p.tasks).length;
     lines.push("PROYECTOS:");
     lines.push(`  En progreso: ${inProgress.length}`);
@@ -180,7 +208,7 @@ function buildDataSummary(data: Awaited<ReturnType<typeof loadMultiModuleData>>)
 
 async function callSynthesisAI(
   systemPrompt: string,
-  dataSummary: string
+  dataSummary: string,
 ): Promise<string> {
   const userContent =
     `Estos son los datos de Corea de los últimos días:\n\n${dataSummary}\n\n` +
@@ -224,9 +252,10 @@ export const synthesisAgent = {
 
     const dataSummary = buildDataSummary(data);
     const daysWithData = new Set([
-      ...data.sleepLogs.map((l: any) => l.date.toDateString()),
-      ...data.workouts.map((w: any) => w.date.toDateString()),
-      ...data.scores.map((s: any) => s.date.toDateString()),
+      // Keys @db.Date → día UTC; instantes (workouts) → día UY
+      ...data.sleepLogs.map((l: any) => l.date.toISOString().split("T")[0]),
+      ...data.workouts.map((w: any) => uyDateKey(w.date)),
+      ...data.scores.map((s: any) => s.date.toISOString().split("T")[0]),
     ]).size;
 
     // Si hay menos de 3 días de datos, el análisis no tiene sentido

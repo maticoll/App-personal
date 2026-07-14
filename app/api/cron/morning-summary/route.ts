@@ -23,6 +23,7 @@ import { synthesisAgent } from "@/agents/synthesis";
 import { getNutritionSummaryText } from "@/lib/nutrition";
 import { getTodayEventsText } from "@/lib/calendar";
 import { callClaude } from "@/lib/claude";
+import { addDays } from "@/lib/dates";
 import { logger } from "@/lib/logger";
 
 // -------------------------------------------------------
@@ -41,11 +42,14 @@ type BibleApiResponse = {
 // Devuelve null si falla para omitir la seccion silenciosamente
 // -------------------------------------------------------
 
-async function fetchVerse(): Promise<{ reference: string; text: string } | null> {
+async function fetchVerse(): Promise<{
+  reference: string;
+  text: string;
+} | null> {
   try {
     const res = await fetch(
       "https://bible-api.com/?random=verse&translation=rv1960",
-      { next: { revalidate: 0 } }
+      { next: { revalidate: 0 } },
     );
     if (!res.ok) return null;
     const data = (await res.json()) as BibleApiResponse;
@@ -129,12 +133,18 @@ function buildMessage(parts: MessageParts): string {
   }
 
   // 4. Sueno de anoche (omitir si no hay datos)
-  if (parts.sleepText && !parts.sleepText.toLowerCase().startsWith("sin datos")) {
+  if (
+    parts.sleepText &&
+    !parts.sleepText.toLowerCase().startsWith("sin datos")
+  ) {
     lines.push("🌙 Sueno: " + parts.sleepText);
   }
 
   // 5. Nutricion / hidratacion de ayer (omitir si todo está en cero)
-  if (parts.nutritionText && !parts.nutritionText.includes("Sin comidas registradas")) {
+  if (
+    parts.nutritionText &&
+    !parts.nutritionText.includes("Sin comidas registradas")
+  ) {
     lines.push(parts.nutritionText);
   }
 
@@ -151,7 +161,12 @@ function buildMessage(parts: MessageParts): string {
   }
 
   // Separador antes del cierre si hay contenido antes
-  if (parts.sleepText || parts.nutritionText || parts.agendaText || parts.insightText) {
+  if (
+    parts.sleepText ||
+    parts.nutritionText ||
+    parts.agendaText ||
+    parts.insightText
+  ) {
     lines.push("");
   }
 
@@ -168,7 +183,10 @@ function buildMessage(parts: MessageParts): string {
 export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!verifyCronSecret(req)) {
     logger.warn("cron/morning-summary", { event: "unauthorized" });
-    return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
+    return NextResponse.json(
+      { ok: false, error: "No autorizado" },
+      { status: 401 },
+    );
   }
 
   const start = Date.now();
@@ -186,16 +204,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     if (activeSettings.length === 0) {
       logger.info("cron/morning-summary", { event: "no_recipients" });
-      return NextResponse.json({ ok: true, message: "No hay usuarios con WhatsApp activo" });
+      return NextResponse.json({
+        ok: true,
+        message: "No hay usuarios con WhatsApp activo",
+      });
     }
 
-    // --- 2. Fecha de ayer (calculada una sola vez) ---
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    yesterday.setHours(0, 0, 0, 0);
+    // --- 2. Fecha de ayer (instante 24h atrás; las libs derivan el día
+    // calendario UY internamente) ---
+    const yesterday = addDays(new Date(), -1);
 
     // --- 3. Enviar a cada usuario ---
-    const results: Array<{ userId: string; to: string; ok: boolean; error?: string }> = [];
+    const results: Array<{
+      userId: string;
+      to: string;
+      ok: boolean;
+      error?: string;
+    }> = [];
 
     for (const s of activeSettings) {
       const toNumber = s.whatsappNumber!;
@@ -209,22 +234,33 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         const userName = userRecord?.name?.split(" ")[0] ?? "vos";
 
         // Recopilar secciones en paralelo para este usuario
-        const [verse, scoreText, sleepText, nutritionText, agendaText, insightText] =
-          await Promise.allSettled([
-            fetchVerse(),
-            scoringAgent.getSummaryText(s.userId, yesterday),
-            sleepAgent.getSleepSummaryText(s.userId),
-            getNutritionSummaryText(s.userId, yesterday),
-            getTodayEventsText(s.userId),
-            synthesisAgent.getDailyInsight(s.userId),
-          ]);
+        const [
+          verse,
+          scoreText,
+          sleepText,
+          nutritionText,
+          agendaText,
+          insightText,
+        ] = await Promise.allSettled([
+          fetchVerse(),
+          scoringAgent.getSummaryText(s.userId, yesterday),
+          sleepAgent.getSleepSummaryText(s.userId),
+          getNutritionSummaryText(s.userId, yesterday),
+          getTodayEventsText(s.userId),
+          synthesisAgent.getDailyInsight(s.userId),
+        ]);
 
-        const verseValue     = verse.status       === "fulfilled" ? verse.value       : null;
-        const scoreValue     = scoreText.status   === "fulfilled" ? scoreText.value   : null;
-        const sleepValue     = sleepText.status   === "fulfilled" ? sleepText.value   : null;
-        const nutritionValue = nutritionText.status === "fulfilled" ? nutritionText.value : null;
-        const agendaValue    = agendaText.status  === "fulfilled" ? agendaText.value  : null;
-        const insightValue   = insightText.status === "fulfilled" ? insightText.value : null;
+        const verseValue = verse.status === "fulfilled" ? verse.value : null;
+        const scoreValue =
+          scoreText.status === "fulfilled" ? scoreText.value : null;
+        const sleepValue =
+          sleepText.status === "fulfilled" ? sleepText.value : null;
+        const nutritionValue =
+          nutritionText.status === "fulfilled" ? nutritionText.value : null;
+        const agendaValue =
+          agendaText.status === "fulfilled" ? agendaText.value : null;
+        const insightValue =
+          insightText.status === "fulfilled" ? insightText.value : null;
 
         let globalScore: number | null = null;
         if (scoreValue) {
@@ -252,7 +288,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           await sendTextMessage(toNumber, message);
         } catch (sendErr) {
           const errStr = String(sendErr);
-          if (errStr.includes("131026") || errStr.includes("outside the allowed window")) {
+          if (
+            errStr.includes("131026") ||
+            errStr.includes("outside the allowed window")
+          ) {
             logger.warn("cron/morning-summary", {
               event: "window_expired_fallback",
               to: toNumber,
@@ -289,7 +328,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           to: toNumber,
           error: String(userError),
         });
-        results.push({ userId: s.userId, to: toNumber, ok: false, error: String(userError) });
+        results.push({
+          userId: s.userId,
+          to: toNumber,
+          ok: false,
+          error: String(userError),
+        });
       }
     }
 
@@ -307,10 +351,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       results,
     });
   } catch (error) {
-    logger.error("cron/morning-summary", { event: "error", error: String(error), durationMs: Date.now() - start });
+    logger.error("cron/morning-summary", {
+      event: "error",
+      error: String(error),
+      durationMs: Date.now() - start,
+    });
     return NextResponse.json(
       { ok: false, error: "Error enviando morning summary" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

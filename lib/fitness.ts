@@ -6,6 +6,13 @@
 
 import { db } from "@/lib/db";
 import { callClaude } from "@/lib/claude";
+import {
+  startOfDayUY,
+  endOfDayUY,
+  uyDateKey,
+  atHourUY,
+  UY_TIMEZONE,
+} from "@/lib/dates";
 import type { FitnessSummary, WorkoutSummary } from "@/lib/types";
 
 // -------------------------------------------------------
@@ -119,29 +126,22 @@ export type SmartHabitStatus = {
 // Helpers internos
 // -------------------------------------------------------
 
+// Límites de día en hora UY — Workout.date es un instante real; con
+// setHours() del server (UTC) un workout de las 21:30 UY caía en el día
+// siguiente para stats, score y dashboard.
 function startOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
+  return startOfDayUY(date);
 }
 
 function endOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(23, 59, 59, 999);
-  return d;
+  return endOfDayUY(date);
 }
 
 function getDayOfWeek(date: Date): string {
-  const days = [
-    "SUNDAY",
-    "MONDAY",
-    "TUESDAY",
-    "WEDNESDAY",
-    "THURSDAY",
-    "FRIDAY",
-    "SATURDAY",
-  ];
-  return days[date.getDay()];
+  // Día de semana del calendario UY, no del server (UTC)
+  return date
+    .toLocaleDateString("en-US", { weekday: "long", timeZone: UY_TIMEZONE })
+    .toUpperCase();
 }
 
 function subDays(date: Date, n: number): Date {
@@ -196,7 +196,7 @@ function mapExercise(e: any): ExerciseWithSets {
         reps: s.reps ?? null,
         weightKg: s.weightKg ?? null,
         notes: s.notes ?? null,
-      })
+      }),
     ),
   };
 }
@@ -217,7 +217,7 @@ function mapRoutine(r: any): GymRoutineWithExercises {
         sets: e.sets,
         repsRange: e.repsRange ?? null,
         notes: e.notes ?? null,
-      })
+      }),
     ),
   };
 }
@@ -228,7 +228,7 @@ function mapRoutine(r: any): GymRoutineWithExercises {
 
 /** Workouts de hoy con ejercicios y series */
 export async function getTodayWorkouts(
-  userId: string
+  userId: string,
 ): Promise<WorkoutWithExercises[]> {
   const now = new Date();
   const workouts = await db.workout.findMany({
@@ -250,7 +250,7 @@ export async function getTodayWorkouts(
 /** Historial de workouts (últimos N días, default 14) */
 export async function getWorkoutHistory(
   userId: string,
-  days = 14
+  days = 14,
 ): Promise<WorkoutWithExercises[]> {
   const from = subDays(new Date(), days);
   const workouts = await db.workout.findMany({
@@ -270,13 +270,15 @@ export async function getWorkoutHistory(
 }
 
 /** Estadísticas por día — últimos 7 días (para gráficos) */
-export async function getWeeklyStats(userId: string): Promise<WeeklyStatEntry[]> {
+export async function getWeeklyStats(
+  userId: string,
+): Promise<WeeklyStatEntry[]> {
   const today = new Date();
   const stats: WeeklyStatEntry[] = [];
 
   for (let i = 6; i >= 0; i--) {
     const date = subDays(today, i);
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = uyDateKey(date);
 
     const workouts = await db.workout.findMany({
       where: { userId, date: { gte: startOfDay(date), lte: endOfDay(date) } },
@@ -284,14 +286,14 @@ export async function getWeeklyStats(userId: string): Promise<WeeklyStatEntry[]>
 
     const totalMinutes = workouts.reduce(
       (sum: any, w: any) => sum + (w.durationMinutes ?? 0),
-      0
+      0,
     );
     const gymMinutes = workouts
       .filter((w: any) => w.type === "GYM")
       .reduce((sum: any, w: any) => sum + (w.durationMinutes ?? 0), 0);
     const cardioMinutes = workouts
       .filter((w: any) =>
-        ["RUNNING", "SWIMMING", "CYCLING", "WALKING"].includes(w.type)
+        ["RUNNING", "SWIMMING", "CYCLING", "WALKING"].includes(w.type),
       )
       .reduce((sum: any, w: any) => sum + (w.durationMinutes ?? 0), 0);
 
@@ -310,7 +312,7 @@ export async function getWeeklyStats(userId: string): Promise<WeeklyStatEntry[]>
 
 /** Rutina asignada a hoy (por día de la semana) */
 export async function getTodayGymRoutine(
-  userId: string
+  userId: string,
 ): Promise<GymRoutineWithExercises | null> {
   const dayName = getDayOfWeek(new Date());
   const routine = await db.gymRoutine.findFirst({
@@ -322,7 +324,7 @@ export async function getTodayGymRoutine(
 
 /** Todas las rutinas del usuario */
 export async function getRoutines(
-  userId: string
+  userId: string,
 ): Promise<GymRoutineWithExercises[]> {
   const routines = await db.gymRoutine.findMany({
     where: { userId },
@@ -334,7 +336,7 @@ export async function getRoutines(
 
 /** Resumen del día para el dashboard y el agente */
 export async function getTodayFitnessSummary(
-  userId: string
+  userId: string,
 ): Promise<FitnessSummary | null> {
   const [workouts, stepsInfo] = await Promise.all([
     getTodayWorkouts(userId),
@@ -346,18 +348,16 @@ export async function getTodayFitnessSummary(
 
   return {
     date: new Date(),
-    workouts: workouts.map(
-      (w): WorkoutSummary => ({
-        id: w.id,
-        type: w.type,
-        durationMinutes: w.durationMinutes,
-        notes: w.notes,
-      })
-    ),
+    workouts: workouts.map((w): WorkoutSummary => ({
+      id: w.id,
+      type: w.type,
+      durationMinutes: w.durationMinutes,
+      notes: w.notes,
+    })),
     didGym: workouts.some((w) => w.type === "GYM"),
     totalActivityMinutes: workouts.reduce(
       (sum, w) => sum + (w.durationMinutes ?? 0),
-      0
+      0,
     ),
     steps: stepsInfo?.steps ?? null,
     stepsGoal: stepsInfo?.goal ?? null,
@@ -378,9 +378,11 @@ function stepsKeyFromStr(dateStr: string): Date {
   return new Date(dateStr + "T00:00:00.000Z");
 }
 
-/** Date → clave de fecha calendario UTC para DailySteps */
+/** Date → clave de fecha calendario UY para DailySteps */
 function stepsKeyFromDate(date: Date): Date {
-  return stepsKeyFromStr(date.toISOString().split("T")[0]);
+  // Día calendario UY — con toISOString() (UTC), de noche se leían/escribían
+  // los pasos del día siguiente.
+  return stepsKeyFromStr(uyDateKey(date));
 }
 
 /** Guarda (upsert) el total de pasos de un día. dateStr en formato "YYYY-MM-DD". */
@@ -388,7 +390,7 @@ export async function upsertDailySteps(
   userId: string,
   dateStr: string,
   steps: number,
-  source: "GARMIN" | "MANUAL" = "GARMIN"
+  source: "GARMIN" | "MANUAL" = "GARMIN",
 ): Promise<void> {
   const date = stepsKeyFromStr(dateStr);
   await db.dailySteps.upsert({
@@ -401,7 +403,7 @@ export async function upsertDailySteps(
 /** Total de pasos de una fecha dada (o null si no hay registro). */
 export async function getStepsForDate(
   userId: string,
-  date: Date
+  date: Date,
 ): Promise<number | null> {
   const row = await db.dailySteps.findUnique({
     where: { userId_date: { userId, date: stepsKeyFromDate(date) } },
@@ -411,7 +413,7 @@ export async function getStepsForDate(
 
 /** Pasos de hoy + meta diaria del usuario (null si no hay pasos registrados). */
 export async function getTodaySteps(
-  userId: string
+  userId: string,
 ): Promise<{ steps: number; goal: number } | null> {
   const [row, goals] = await Promise.all([
     db.dailySteps.findUnique({
@@ -435,7 +437,7 @@ export async function getTodaySteps(
  * + no hay ningún workout registrado.
  */
 export async function checkSmartHabitDeviation(
-  userId: string
+  userId: string,
 ): Promise<SmartHabitStatus> {
   const settings = await db.userSettings.findUnique({ where: { userId } });
 
@@ -450,12 +452,12 @@ export async function checkSmartHabitDeviation(
     return { shouldNotify: false, message: null };
   }
 
-  // Parsear hora esperada de gym (ej: "06:00")
+  // Parsear hora esperada de gym (ej: "06:00") — es hora URUGUAY: con
+  // setHours() del server (UTC) la alerta podía dispararse a las 4 AM UY.
   const [expHour, expMin] = settings.expectedGymTime
     .split(":")
     .map((s: any) => parseInt(s, 10));
-  const gymTime = new Date(now);
-  gymTime.setHours(expHour, expMin ?? 0, 0, 0);
+  const gymTime = atHourUY(now, expHour, expMin ?? 0);
 
   // Periodo de gracia: 1 hora después de la hora esperada
   if (now.getTime() < gymTime.getTime() + 60 * 60 * 1000) {
@@ -489,7 +491,7 @@ export async function checkSmartHabitDeviation(
 /** Registrar cualquier actividad física */
 export async function logActivity(
   userId: string,
-  data: LogActivityInput
+  data: LogActivityInput,
 ): Promise<WorkoutWithExercises> {
   const date = data.date ?? new Date();
   const workout = await db.workout.create({
@@ -503,7 +505,7 @@ export async function logActivity(
       notes: data.notes ?? null,
       // Campos nuevos Sesión 4 (disponibles después de `npm run db:push`)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ...(({ title: data.title ?? null, source: "MANUAL" }) as any),
+      ...({ title: data.title ?? null, source: "MANUAL" } as any),
     } as Parameters<typeof db.workout.create>[0]["data"],
     include: { exercises: { include: { sets: true } } },
   });
@@ -519,7 +521,7 @@ export async function logActivity(
  */
 export async function startGymWorkout(
   userId: string,
-  title?: string
+  title?: string,
 ): Promise<WorkoutWithExercises> {
   const existing = await db.workout.findFirst({
     where: {
@@ -571,7 +573,7 @@ export async function startGymWorkout(
 export async function addExerciseSets(
   workoutId: string,
   exerciseName: string,
-  sets: { reps: number | null; weightKg: number | null }[]
+  sets: { reps: number | null; weightKg: number | null }[],
 ): Promise<ExerciseWithSets> {
   const existingCount = await db.workoutExercise.count({
     where: { workoutId },
@@ -590,8 +592,8 @@ export async function addExerciseSets(
           reps: s.reps ?? undefined,
           weightKg: s.weightKg ?? undefined,
         },
-      })
-    )
+      }),
+    ),
   );
 
   return {
@@ -617,7 +619,7 @@ export async function addExerciseSets(
  */
 export async function parseAndLogExerciseNLP(
   userId: string,
-  text: string
+  text: string,
 ): Promise<{
   workout: WorkoutWithExercises;
   parsedExercises: ParsedExercise[];
@@ -627,7 +629,7 @@ export async function parseAndLogExerciseNLP(
 
   if (parsed.length === 0) {
     throw new Error(
-      "No se pudo interpretar el ejercicio. Intentá con: 'press plano 100kg 4 reps 3 series'"
+      "No se pudo interpretar el ejercicio. Intentá con: 'press plano 100kg 4 reps 3 series'",
     );
   }
 
@@ -682,15 +684,17 @@ Ejemplos de entrada → salida:
 "press plano 100kg 4 reps 3 series" → {"exercises":[{"name":"Press Plano","sets":[{"setNumber":1,"reps":4,"weightKg":100},{"setNumber":2,"reps":4,"weightKg":100},{"setNumber":3,"reps":4,"weightKg":100}]}]}
 "sentadillas 80kg 3x12" → {"exercises":[{"name":"Sentadilla","sets":[{"setNumber":1,"reps":12,"weightKg":80},{"setNumber":2,"reps":12,"weightKg":80},{"setNumber":3,"reps":12,"weightKg":80}]}]}`;
 
-  const raw = (await callClaude({
-    model: "claude-haiku-4-5-20251001",
-    maxTokens: 1024,
-    system,
-    messages: [{ role: "user", content: text }],
-  })) ?? "{}";
+  const raw =
+    (await callClaude({
+      model: "claude-haiku-4-5-20251001",
+      maxTokens: 1024,
+      system,
+      messages: [{ role: "user", content: text }],
+    })) ?? "{}";
 
   // Extraer JSON aunque venga envuelto en ```json ... ```
-  const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/) ?? raw.match(/(\{[\s\S]*\})/);
+  const jsonMatch =
+    raw.match(/```(?:json)?\s*([\s\S]*?)```/) ?? raw.match(/(\{[\s\S]*\})/);
   const jsonStr = jsonMatch ? jsonMatch[1].trim() : raw.trim();
 
   try {
@@ -709,11 +713,7 @@ Ejemplos de entrada → salida:
 
 /** Normaliza texto para comparar nombres (sin acentos, minúsculas) */
 function normalizeName(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .trim();
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
 
 function round1(n: number): number {
@@ -722,7 +722,7 @@ function round1(n: number): number {
 
 /** Mejor serie de un ejercicio: mayor peso (desempate por reps). */
 function exerciseTopSet(
-  sets: { weightKg: number | null; reps: number | null }[]
+  sets: { weightKg: number | null; reps: number | null }[],
 ): { weightKg: number | null; reps: number | null } | null {
   let best: { weightKg: number | null; reps: number | null } | null = null;
   for (const s of sets) {
@@ -735,12 +735,14 @@ function exerciseTopSet(
     const sw = s.weightKg ?? -1;
     if (sw > bw || (sw === bw && (s.reps ?? 0) > (best.reps ?? 0))) best = s;
   }
-  return best ? { weightKg: best.weightKg ?? null, reps: best.reps ?? null } : null;
+  return best
+    ? { weightKg: best.weightKg ?? null, reps: best.reps ?? null }
+    : null;
 }
 
 /** Volumen total de un ejercicio (suma de peso × reps de cada serie). */
 function exerciseVolume(
-  sets: { weightKg: number | null; reps: number | null }[]
+  sets: { weightKg: number | null; reps: number | null }[],
 ): number {
   return sets.reduce((sum, s) => sum + (s.weightKg ?? 0) * (s.reps ?? 0), 0);
 }
@@ -751,7 +753,7 @@ function exerciseVolume(
  */
 export function matchRoutineByName(
   routines: GymRoutineWithExercises[],
-  query: string
+  query: string,
 ): GymRoutineWithExercises | null {
   const q = normalizeName(query);
   if (!q) return null;
@@ -779,7 +781,7 @@ export function matchRoutineByName(
 export async function findLastRoutineSession(
   userId: string,
   routineName: string,
-  beforeDate?: Date
+  beforeDate?: Date,
 ): Promise<WorkoutWithExercises | null> {
   const w = await db.workout.findFirst({
     where: {
@@ -819,15 +821,19 @@ export type RoutineLastPerformance = {
 /** Construye el detalle de performance por ejercicio de una rutina vs su última sesión. */
 function buildExercisePerformance(
   routine: GymRoutineWithExercises,
-  last: WorkoutWithExercises | null
+  last: WorkoutWithExercises | null,
 ): ExerciseLastPerformance[] {
   const lastMap = new Map<string, ExerciseWithSets>();
-  if (last) for (const ex of last.exercises) lastMap.set(normalizeName(ex.name), ex);
+  if (last)
+    for (const ex of last.exercises) lastMap.set(normalizeName(ex.name), ex);
 
   return routine.exercises.map((re) => {
     const match = lastMap.get(normalizeName(re.name));
     const lastSets = match
-      ? match.sets.map((s) => ({ weightKg: s.weightKg ?? null, reps: s.reps ?? null }))
+      ? match.sets.map((s) => ({
+          weightKg: s.weightKg ?? null,
+          reps: s.reps ?? null,
+        }))
       : [];
     return {
       name: re.name,
@@ -866,7 +872,10 @@ export type SessionPrep = {
 export type WorkoutSessionPayload = {
   routineName: string | null;
   durationSeconds: number;
-  exercises: { name: string; sets: { weightKg: number | null; reps: number | null }[] }[];
+  exercises: {
+    name: string;
+    sets: { weightKg: number | null; reps: number | null }[];
+  }[];
 };
 
 export type WorkoutSessionPR = {
@@ -891,7 +900,7 @@ export function weightKey(weightKg: number | null): string {
 export async function getExerciseBests(
   userId: string,
   names: string[],
-  beforeDate?: Date
+  beforeDate?: Date,
 ): Promise<Record<string, ExerciseBests>> {
   const wanted = new Set(names.map(normalizeName));
   const workouts = await db.workout.findMany({
@@ -905,7 +914,11 @@ export async function getExerciseBests(
 
   const out: Record<string, ExerciseBests> = {};
   for (const n of names) {
-    out[normalizeName(n)] = { maxWeightKg: null, maxSessionVolume: null, repsAtWeight: {} };
+    out[normalizeName(n)] = {
+      maxWeightKg: null,
+      maxSessionVolume: null,
+      repsAtWeight: {},
+    };
   }
 
   for (const w of workouts) {
@@ -917,14 +930,19 @@ export async function getExerciseBests(
       for (const s of ex.sets) {
         const wk = s.weightKg ?? null;
         const reps = s.reps ?? null;
-        if (wk != null && (b.maxWeightKg == null || wk > b.maxWeightKg)) b.maxWeightKg = wk;
+        if (wk != null && (b.maxWeightKg == null || wk > b.maxWeightKg))
+          b.maxWeightKg = wk;
         if (wk != null && reps != null) {
           sessionVol += wk * reps;
           const k = weightKey(wk);
-          if (b.repsAtWeight[k] == null || reps > b.repsAtWeight[k]) b.repsAtWeight[k] = reps;
+          if (b.repsAtWeight[k] == null || reps > b.repsAtWeight[k])
+            b.repsAtWeight[k] = reps;
         }
       }
-      if (sessionVol > 0 && (b.maxSessionVolume == null || sessionVol > b.maxSessionVolume)) {
+      if (
+        sessionVol > 0 &&
+        (b.maxSessionVolume == null || sessionVol > b.maxSessionVolume)
+      ) {
         b.maxSessionVolume = sessionVol;
       }
     }
@@ -934,7 +952,7 @@ export async function getExerciseBests(
 
 export async function getSessionPrep(
   userId: string,
-  routineId: string | null
+  routineId: string | null,
 ): Promise<SessionPrep> {
   if (!routineId) return { routineId: null, routineName: null, exercises: [] };
 
@@ -944,7 +962,10 @@ export async function getSessionPrep(
 
   const last = await findLastRoutineSession(userId, routine.name);
   const perf = buildExercisePerformance(routine, last); // {name, plannedSets, repsRange, lastSets, top}
-  const bests = await getExerciseBests(userId, routine.exercises.map((e) => e.name));
+  const bests = await getExerciseBests(
+    userId,
+    routine.exercises.map((e) => e.name),
+  );
 
   return {
     routineId: routine.id,
@@ -954,14 +975,18 @@ export async function getSessionPrep(
       plannedSets: p.plannedSets,
       repsRange: p.repsRange,
       lastSets: p.lastSets,
-      bests: bests[normalizeName(p.name)] ?? { maxWeightKg: null, maxSessionVolume: null, repsAtWeight: {} },
+      bests: bests[normalizeName(p.name)] ?? {
+        maxWeightKg: null,
+        maxSessionVolume: null,
+        repsAtWeight: {},
+      },
     })),
   };
 }
 
 export async function saveWorkoutSession(
   userId: string,
-  payload: WorkoutSessionPayload
+  payload: WorkoutSessionPayload,
 ): Promise<WorkoutSessionSummary> {
   // 1. Filtrar series vacías
   const exercises = payload.exercises
@@ -976,19 +1001,29 @@ export async function saveWorkoutSession(
   }
 
   // 2. Bests históricos ANTES de insertar (no contar la sesión de hoy)
-  const bests = await getExerciseBests(userId, exercises.map((e) => e.name), startOfDay(new Date()));
+  const bests = await getExerciseBests(
+    userId,
+    exercises.map((e) => e.name),
+    startOfDay(new Date()),
+  );
 
   // 3. Crear/reutilizar sesión GYM de hoy etiquetada con la rutina
-  const workout = await startGymWorkout(userId, payload.routineName ?? undefined);
+  const workout = await startGymWorkout(
+    userId,
+    payload.routineName ?? undefined,
+  );
 
   // 4. Insertar ejercicios + series. Si el workout de hoy ya tenía un ejercicio
   //    con el mismo nombre (ej: una sesión previa o el Quick Log NLP), se
   //    agregan las series a ese ejercicio en vez de duplicar la tarjeta.
   const existingByName = new Map(
-    workout.exercises.map((e) => [normalizeName(e.name), e])
+    workout.exercises.map((e) => [normalizeName(e.name), e]),
   );
   for (const ex of exercises) {
-    const sets = ex.sets.map((s) => ({ reps: s.reps ?? null, weightKg: s.weightKg ?? null }));
+    const sets = ex.sets.map((s) => ({
+      reps: s.reps ?? null,
+      weightKg: s.weightKg ?? null,
+    }));
     const existing = existingByName.get(normalizeName(ex.name));
     if (existing) {
       const startNumber = existing.sets.length;
@@ -1001,8 +1036,8 @@ export async function saveWorkoutSession(
               reps: s.reps ?? undefined,
               weightKg: s.weightKg ?? undefined,
             },
-          })
-        )
+          }),
+        ),
       );
     } else {
       await addExerciseSets(workout.id, ex.name, sets);
@@ -1011,30 +1046,52 @@ export async function saveWorkoutSession(
 
   // 5. Duración
   const durationMinutes = Math.max(1, Math.round(payload.durationSeconds / 60));
-  await db.workout.update({ where: { id: workout.id }, data: { durationMinutes: Math.min(durationMinutes, 300) } });
+  await db.workout.update({
+    where: { id: workout.id },
+    data: { durationMinutes: Math.min(durationMinutes, 300) },
+  });
 
   // 6. PRs y totales
   const prs: WorkoutSessionPR[] = [];
   let totalSets = 0;
   let totalVolume = 0;
   for (const ex of exercises) {
-    const b = bests[normalizeName(ex.name)] ?? { maxWeightKg: null, maxSessionVolume: null, repsAtWeight: {} };
+    const b = bests[normalizeName(ex.name)] ?? {
+      maxWeightKg: null,
+      maxSessionVolume: null,
+      repsAtWeight: {},
+    };
     const top = exerciseTopSet(ex.sets);
     const vol = exerciseVolume(ex.sets);
     totalSets += ex.sets.length;
     totalVolume += vol;
 
-    if (top?.weightKg != null && (b.maxWeightKg == null || top.weightKg > b.maxWeightKg)) {
-      prs.push({ exercise: ex.name, kind: "weight", detail: `${top.weightKg}kg` });
+    if (
+      top?.weightKg != null &&
+      (b.maxWeightKg == null || top.weightKg > b.maxWeightKg)
+    ) {
+      prs.push({
+        exercise: ex.name,
+        kind: "weight",
+        detail: `${top.weightKg}kg`,
+      });
     }
     if (vol > 0 && (b.maxSessionVolume == null || vol > b.maxSessionVolume)) {
-      prs.push({ exercise: ex.name, kind: "volume", detail: `${Math.round(vol)} vol` });
+      prs.push({
+        exercise: ex.name,
+        kind: "volume",
+        detail: `${Math.round(vol)} vol`,
+      });
     }
     for (const s of ex.sets) {
       if (s.weightKg != null && s.reps != null) {
         const prev = b.repsAtWeight[weightKey(s.weightKg)];
         if (prev == null || s.reps > prev) {
-          prs.push({ exercise: ex.name, kind: "reps", detail: `${s.reps} reps @ ${s.weightKg}kg` });
+          prs.push({
+            exercise: ex.name,
+            kind: "reps",
+            detail: `${s.reps} reps @ ${s.weightKg}kg`,
+          });
           break; // un PR de reps por ejercicio alcanza
         }
       }
@@ -1056,7 +1113,7 @@ export async function saveWorkoutSession(
  */
 export async function getRoutineWithLastPerformance(
   userId: string,
-  query: string
+  query: string,
 ): Promise<RoutineLastPerformance | null> {
   const routines = await getRoutines(userId);
   const routine = matchRoutineByName(routines, query);
@@ -1070,11 +1127,15 @@ export async function getRoutineWithLastPerformance(
   };
 }
 
-export type RoutineExerciseWithLast = GymRoutineWithExercises["exercises"][number] & {
-  last: { weightKg: number | null; reps: number | null } | null;
-};
+export type RoutineExerciseWithLast =
+  GymRoutineWithExercises["exercises"][number] & {
+    last: { weightKg: number | null; reps: number | null } | null;
+  };
 
-export type RoutineWithLastPerformance = Omit<GymRoutineWithExercises, "exercises"> & {
+export type RoutineWithLastPerformance = Omit<
+  GymRoutineWithExercises,
+  "exercises"
+> & {
   lastDate: Date | null;
   exercises: RoutineExerciseWithLast[];
 };
@@ -1082,11 +1143,12 @@ export type RoutineWithLastPerformance = Omit<GymRoutineWithExercises, "exercise
 /** Enriquece una rutina con el último peso/reps (mejor serie) por ejercicio. */
 export async function enrichRoutineWithLastPerformance(
   userId: string,
-  routine: GymRoutineWithExercises
+  routine: GymRoutineWithExercises,
 ): Promise<RoutineWithLastPerformance> {
   const last = await findLastRoutineSession(userId, routine.name);
   const lastMap = new Map<string, ExerciseWithSets>();
-  if (last) for (const ex of last.exercises) lastMap.set(normalizeName(ex.name), ex);
+  if (last)
+    for (const ex of last.exercises) lastMap.set(normalizeName(ex.name), ex);
 
   return {
     ...routine,
@@ -1103,15 +1165,17 @@ export async function enrichRoutineWithLastPerformance(
  * ejercicio según la última sesión de esa rutina. Para mostrar en la web.
  */
 export async function getRoutinesWithLastPerformance(
-  userId: string
+  userId: string,
 ): Promise<RoutineWithLastPerformance[]> {
   const routines = await getRoutines(userId);
-  return Promise.all(routines.map((r) => enrichRoutineWithLastPerformance(userId, r)));
+  return Promise.all(
+    routines.map((r) => enrichRoutineWithLastPerformance(userId, r)),
+  );
 }
 
 /** Rutina del día con el último peso/reps por ejercicio (o null si no hay rutina hoy). */
 export async function getTodayGymRoutineWithLastPerformance(
-  userId: string
+  userId: string,
 ): Promise<RoutineWithLastPerformance | null> {
   const routine = await getTodayGymRoutine(userId);
   if (!routine) return null;
@@ -1124,7 +1188,11 @@ export type RoutineSessionComparison = {
   exercises: {
     name: string;
     today: { weightKg: number | null; reps: number | null; volume: number };
-    prev: { weightKg: number | null; reps: number | null; volume: number } | null;
+    prev: {
+      weightKg: number | null;
+      reps: number | null;
+      volume: number;
+    } | null;
     deltaWeight: number | null;
     deltaVolume: number | null;
   }[];
@@ -1137,12 +1205,12 @@ export type RoutineSessionComparison = {
 export async function logRoutineSession(
   userId: string,
   routineName: string | null,
-  text: string
+  text: string,
 ): Promise<RoutineSessionComparison> {
   const parsed = await parseExercisesFromText(text);
   if (parsed.length === 0) {
     throw new Error(
-      "No pude interpretar los ejercicios. Probá: 'Push A: press plano 100kg 3x8, sentadilla 80kg 3x10'"
+      "No pude interpretar los ejercicios. Probá: 'Push A: press plano 100kg 3x8, sentadilla 80kg 3x10'",
     );
   }
 
@@ -1151,7 +1219,8 @@ export async function logRoutineSession(
     ? await findLastRoutineSession(userId, routineName, startOfDay(new Date()))
     : null;
   const prevMap = new Map<string, ExerciseWithSets>();
-  if (prev) for (const ex of prev.exercises) prevMap.set(normalizeName(ex.name), ex);
+  if (prev)
+    for (const ex of prev.exercises) prevMap.set(normalizeName(ex.name), ex);
 
   // Crear/etiquetar la sesión de hoy y registrar ejercicios
   const workout = await startGymWorkout(userId, routineName ?? undefined);
@@ -1215,7 +1284,7 @@ export async function logRoutineSession(
 
 export async function createRoutine(
   userId: string,
-  data: CreateRoutineInput
+  data: CreateRoutineInput,
 ): Promise<GymRoutineWithExercises> {
   const routine = await db.gymRoutine.create({
     data: {
@@ -1239,7 +1308,7 @@ export async function createRoutine(
 
 export async function updateRoutine(
   id: string,
-  data: Partial<CreateRoutineInput>
+  data: Partial<CreateRoutineInput>,
 ): Promise<GymRoutineWithExercises> {
   if (data.exercises !== undefined) {
     await db.gymRoutineExercise.deleteMany({ where: { routineId: id } });
@@ -1274,7 +1343,12 @@ export async function deleteRoutine(id: string): Promise<void> {
 
 export async function updateWorkout(
   id: string,
-  data: Partial<Pick<LogActivityInput, "durationMinutes" | "distanceKm" | "notes" | "calories">>
+  data: Partial<
+    Pick<
+      LogActivityInput,
+      "durationMinutes" | "distanceKm" | "notes" | "calories"
+    >
+  >,
 ): Promise<WorkoutWithExercises> {
   const workout = await db.workout.update({
     where: { id },
@@ -1307,10 +1381,12 @@ export async function deleteWorkout(id: string): Promise<void> {
 /** Upsert de workout desde una actividad de Garmin */
 export async function upsertWorkoutFromGarmin(
   userId: string,
-  activity: import("@/lib/garmin").GarminActivityData
+  activity: import("@/lib/garmin").GarminActivityData,
 ): Promise<void> {
   const durationMinutes = Math.round(activity.durationSeconds / 60);
-  const distanceKm = activity.distanceMeters ? activity.distanceMeters / 1000 : null;
+  const distanceKm = activity.distanceMeters
+    ? activity.distanceMeters / 1000
+    : null;
 
   // Métricas hardware: Garmin es fuente de verdad → se escriben siempre.
   const garminFields = {
@@ -1366,15 +1442,15 @@ export type ActivityTypeSummary = {
 
 const startOfWeek = (d: Date): Date => {
   const x = startOfDay(d);
-  const day = (x.getDay() + 6) % 7; // lunes=0
-  x.setDate(x.getDate() - day);
-  return x;
+  // Día de semana del calendario UY (lunes=0) — getDay() usaba el del server
+  const day = (new Date(`${uyDateKey(d)}T12:00:00Z`).getUTCDay() + 6) % 7;
+  return new Date(x.getTime() - day * 24 * 60 * 60 * 1000);
 };
 
 /** Resumen de la semana actual para un tipo de actividad. */
 export async function getActivityWeekSummary(
   userId: string,
-  type: LogActivityInput["type"]
+  type: LogActivityInput["type"],
 ): Promise<ActivityTypeSummary> {
   const from = startOfWeek(new Date());
   const rows = await db.workout.findMany({
@@ -1390,12 +1466,14 @@ export async function getActivityWeekSummary(
 /** Última actividad registrada de un tipo (con exercises para gym). */
 export async function getLastActivityOfType(
   userId: string,
-  type: LogActivityInput["type"]
+  type: LogActivityInput["type"],
 ): Promise<WorkoutWithExercises | null> {
   const w = await db.workout.findFirst({
     where: { userId, type },
     orderBy: { date: "desc" },
-    include: { exercises: { include: { sets: true }, orderBy: { order: "asc" } } },
+    include: {
+      exercises: { include: { sets: true }, orderBy: { order: "asc" } },
+    },
   });
   return (w as unknown as WorkoutWithExercises) ?? null;
 }
@@ -1404,21 +1482,23 @@ export async function getLastActivityOfType(
 export async function getActivityHistory(
   userId: string,
   type: LogActivityInput["type"],
-  limit = 20
+  limit = 20,
 ): Promise<WorkoutWithExercises[]> {
   const rows = await db.workout.findMany({
     where: { userId, type },
     orderBy: { date: "desc" },
     take: limit,
-    include: { exercises: { include: { sets: true }, orderBy: { order: "asc" } } },
+    include: {
+      exercises: { include: { sets: true }, orderBy: { order: "asc" } },
+    },
   });
   return rows as unknown as WorkoutWithExercises[];
 }
 
 export type GymStats = {
   weekSessions: number;
-  totalVolumeKg: number;   // volumen de la última sesión
-  weekVolumeKg: number;    // volumen acumulado de la semana
+  totalVolumeKg: number; // volumen de la última sesión
+  weekVolumeKg: number; // volumen acumulado de la semana
 };
 
 /** Stats de gym recreadas para la página de Gym. PRs se difieren (YAGNI). */
@@ -1431,8 +1511,13 @@ export async function getGymStats(userId: string): Promise<GymStats> {
   });
   const volOf = (w: (typeof sessions)[number]) =>
     w.exercises.reduce(
-      (s, e) => s + e.sets.reduce((ss, set) => ss + (set.weightKg ?? 0) * (set.reps ?? 0), 0),
-      0
+      (s, e) =>
+        s +
+        e.sets.reduce(
+          (ss, set) => ss + (set.weightKg ?? 0) * (set.reps ?? 0),
+          0,
+        ),
+      0,
     );
   return {
     weekSessions: sessions.length,

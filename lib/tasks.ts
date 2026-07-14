@@ -5,6 +5,7 @@
 // ============================================================
 
 import { db } from "@/lib/db";
+import { startOfDayUY, uyDateKey, addDays, UY_OFFSET } from "@/lib/dates";
 
 // -------------------------------------------------------
 // Tipos
@@ -38,32 +39,25 @@ export type TasksStats = {
 // Helpers de fecha
 // -------------------------------------------------------
 
+// Límites de día/semana/mes en calendario UY — con setHours()/getDay() del
+// server (UTC), "completadas hoy" y la semana se corrían de noche.
 function startOfDay(d = new Date()): Date {
-  const r = new Date(d);
-  r.setHours(0, 0, 0, 0);
-  return r;
+  return startOfDayUY(d);
 }
 
 function startOfWeek(d = new Date()): Date {
-  const r = new Date(d);
-  const day = r.getDay();
-  const diff = day === 0 ? -6 : 1 - day; // lunes como inicio
-  r.setDate(r.getDate() + diff);
-  r.setHours(0, 0, 0, 0);
-  return r;
+  // lunes=0 en calendario UY
+  const day = (new Date(`${uyDateKey(d)}T12:00:00Z`).getUTCDay() + 6) % 7;
+  return addDays(startOfDayUY(d), -day);
 }
 
 function startOfLastWeek(d = new Date()): Date {
-  const r = startOfWeek(d);
-  r.setDate(r.getDate() - 7);
-  return r;
+  return addDays(startOfWeek(d), -7);
 }
 
 function startOfMonth(d = new Date()): Date {
-  const r = new Date(d);
-  r.setDate(1);
-  r.setHours(0, 0, 0, 0);
-  return r;
+  const [y, m] = uyDateKey(d).split("-");
+  return new Date(`${y}-${m}-01T00:00:00${UY_OFFSET}`);
 }
 
 // -------------------------------------------------------
@@ -134,7 +128,7 @@ export async function getThisWeekTasks(userId: string): Promise<TaskItem[]> {
 
 export async function getCompletedTasks(
   userId: string,
-  period: TaskPeriod
+  period: TaskPeriod,
 ): Promise<TaskItem[]> {
   const now = new Date();
 
@@ -188,7 +182,7 @@ export async function getTasksStats(userId: string): Promise<TasksStats> {
 export async function toggleTask(
   taskId: string,
   userId: string,
-  done: boolean
+  done: boolean,
 ): Promise<void> {
   const task = await db.projectTask.findFirst({
     where: { id: taskId, project: { userId } },

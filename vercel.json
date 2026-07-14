@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/sleep-sync",
-      "schedule": "0 8 * * *"
+      "schedule": "0 11 * * *"
     },
     {
       "path": "/api/cron/sleep-notifications",

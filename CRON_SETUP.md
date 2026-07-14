@@ -12,12 +12,12 @@ Los crons que necesitan correr más de una vez por día se configuran externamen
 
 Estos corren solos — no requieren configuración extra:
 
-| Job | Schedule | Qué hace |
-|-----|----------|----------|
-| `/api/cron/sleep-sync` | `0 8 * * *` (8:00 hs) | Sincroniza sueño de Garmin de los últimos 2 días |
-| `/api/cron/sleep-notifications` | `0 22 * * *` (22:00 hs) | Recordatorio de hora de dormir y despertar no registrado |
-| `/api/cron/fitness-sync` | `0 6 * * *` (6:00 hs) | Sincroniza actividades de Garmin de los últimos 2 días |
-| `/api/cron/fitness-habits` | `10 7 * * *` (7:10 hs) | Detecta desvíos de smart habits (día de gym sin workout) |
+| Job                             | Schedule                           | Qué hace                                                                                              |
+| ------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `/api/cron/sleep-sync`          | `0 11 * * *` (11:00 UTC = 8:00 UY) | Sincroniza sueño de Garmin de los últimos 2 días (a las 8 UTC = 5 AM UY Garmin aún no cerró la noche) |
+| `/api/cron/sleep-notifications` | `0 22 * * *` (22:00 hs)            | Recordatorio de hora de dormir y despertar no registrado                                              |
+| `/api/cron/fitness-sync`        | `0 6 * * *` (6:00 hs)              | Sincroniza actividades de Garmin de los últimos 2 días                                                |
+| `/api/cron/fitness-habits`      | `10 7 * * *` (7:10 hs)             | Detecta desvíos de smart habits (día de gym sin workout)                                              |
 
 ---
 
@@ -25,11 +25,11 @@ Estos corren solos — no requieren configuración extra:
 
 Estos no están en `vercel.json` porque necesitan correr más de una vez por día:
 
-| Job | URL | Schedule | Header requerido | Qué hace |
-|-----|-----|----------|-----------------|----------|
-| Water Reminder — mediodía | `https://[TU-APP].vercel.app/api/cron/water-reminder` | `0 12 * * *` | `x-cron-secret: [TU_CRON_SECRET]` | Recordatorio de hidratación al mediodía |
-| Water Reminder — tarde | `https://[TU-APP].vercel.app/api/cron/water-reminder` | `0 17 * * *` | `x-cron-secret: [TU_CRON_SECRET]` | Recordatorio de hidratación a las 17 hs |
-| **Reminders** | `https://[TU-APP].vercel.app/api/cron/reminders` | `*/15 * * * *` (cada 15 min) | `x-cron-secret: [TU_CRON_SECRET]` | Dispara recordatorios manuales del usuario + alertas de Google Calendar (2 hs antes). **Sin este cron, los "recordame que..." nunca se envían.** |
+| Job                       | URL                                                   | Schedule                     | Header requerido                  | Qué hace                                                                                                                                         |
+| ------------------------- | ----------------------------------------------------- | ---------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Water Reminder — mediodía | `https://[TU-APP].vercel.app/api/cron/water-reminder` | `0 12 * * *`                 | `x-cron-secret: [TU_CRON_SECRET]` | Recordatorio de hidratación al mediodía                                                                                                          |
+| Water Reminder — tarde    | `https://[TU-APP].vercel.app/api/cron/water-reminder` | `0 17 * * *`                 | `x-cron-secret: [TU_CRON_SECRET]` | Recordatorio de hidratación a las 17 hs                                                                                                          |
+| **Reminders**             | `https://[TU-APP].vercel.app/api/cron/reminders`      | `*/15 * * * *` (cada 15 min) | `x-cron-secret: [TU_CRON_SECRET]` | Dispara recordatorios manuales del usuario + alertas de Google Calendar (2 hs antes). **Sin este cron, los "recordame que..." nunca se envían.** |
 
 > **Reemplazá** `[TU-APP]` con el dominio real de tu app en Vercel (ej: `app-personal-maticoll.vercel.app`) y `[TU_CRON_SECRET]` con el valor de tu variable `CRON_SECRET`.
 >

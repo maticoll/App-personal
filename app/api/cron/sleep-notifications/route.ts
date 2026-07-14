@@ -10,12 +10,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyCronSecret } from "@/lib/cron";
 import { sendTemplateMessage } from "@/lib/whatsapp";
+import { atHourUY } from "@/lib/dates";
 import { logger } from "@/lib/logger";
 
 export async function GET(req: NextRequest) {
   if (!verifyCronSecret(req)) {
     logger.warn("cron/sleep-notifications", { event: "unauthorized" });
-    return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
+    return NextResponse.json(
+      { ok: false, error: "No autorizado" },
+      { status: 401 },
+    );
   }
 
   logger.info("cron/sleep-notifications", { event: "start" });
@@ -46,15 +50,19 @@ export async function GET(req: NextRequest) {
       if (user.expectedSleepTime) {
         const [hours, minutes] = user.expectedSleepTime.split(":").map(Number);
 
-        // Comparar en hora de Uruguay (UTC-3) para que "23:00" sea 23:00 UY
-        const nowUY = new Date(now.toLocaleString("en-US", { timeZone: "America/Montevideo" }));
-        const expectedTime = new Date(nowUY);
-        expectedTime.setHours(hours, minutes, 0, 0);
+        // "23:00" es hora URUGUAY — atHourUY ancla la hora esperada al día
+        // UY actual (reemplaza el hack frágil de parsear toLocaleString)
+        const expectedTime = atHourUY(now, hours, minutes);
 
-        const diffMs = expectedTime.getTime() - nowUY.getTime();
+        const diffMs = expectedTime.getTime() - now.getTime();
         const diffMin = Math.round(diffMs / (1000 * 60));
 
-        userDebug.nowUY = nowUY.toTimeString().slice(0, 5);
+        userDebug.nowUY = now.toLocaleTimeString("es-UY", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+          timeZone: "America/Montevideo",
+        });
         userDebug.expectedSleepTime = user.expectedSleepTime;
         userDebug.diffMin = diffMin;
         userDebug.inWindow = diffMin >= 0 && diffMin <= 15;
@@ -77,26 +85,39 @@ export async function GET(req: NextRequest) {
 
       debug.push(userDebug);
 
-
       // --- Enviar notificaciones por WhatsApp usando templates aprobados ---
       for (const notification of notifications) {
         try {
           if (notification.type === "bedtime_reminder") {
             await sendTemplateMessage(user.whatsappNumber, "bedtime", [
-              { type: "text", text: user.expectedSleepTime ?? "tu hora configurada" },
+              {
+                type: "text",
+                text: user.expectedSleepTime ?? "tu hora configurada",
+              },
             ]);
             sent.push(`${user.userId}:bedtime_reminder`);
-            console.log(`[sleep-notifications] Enviado bedtime_reminder a userId=${user.userId}`);
+            console.log(
+              `[sleep-notifications] Enviado bedtime_reminder a userId=${user.userId}`,
+            );
           }
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
           errors.push(`${user.userId}:${notification.type} → ${errMsg}`);
-          logger.error("cron/sleep-notifications", { event: "send_error", userId: user.userId, type: notification.type, error: errMsg });
+          logger.error("cron/sleep-notifications", {
+            event: "send_error",
+            userId: user.userId,
+            type: notification.type,
+            error: errMsg,
+          });
         }
       }
     }
 
-    logger.info("cron/sleep-notifications", { event: "complete", sent: sent.length, errors: errors.length });
+    logger.info("cron/sleep-notifications", {
+      event: "complete",
+      sent: sent.length,
+      errors: errors.length,
+    });
 
     return NextResponse.json({
       ok: true,
@@ -106,10 +127,13 @@ export async function GET(req: NextRequest) {
       debug,
     });
   } catch (error) {
-    logger.error("cron/sleep-notifications", { event: "error", error: String(error) });
+    logger.error("cron/sleep-notifications", {
+      event: "error",
+      error: String(error),
+    });
     return NextResponse.json(
       { ok: false, error: "Error en cron de notificaciones" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
