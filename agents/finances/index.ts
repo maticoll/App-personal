@@ -35,6 +35,7 @@ import {
 } from "@/lib/finances";
 import {
   savePending,
+  claimPending,
   clearPending,
   type PendingRecord,
   type PendingTransactionData,
@@ -379,19 +380,29 @@ export async function handleConfirmation(
       return "Hubo un problema con la tarjeta. Intenta registrarlo de nuevo.";
     }
 
-    const result = await createTransaction(userId, {
-      cardId: data.cardId,
-      amount: data.amount,
-      type: data.type,
-      description: data.description,
-      date: data.date,
-      categoryId: data.categoryId,
-    });
+    // Claim atómico ANTES del efecto externo: si dos lambdas procesan el
+    // mismo "sí" (doble tap, retry de Meta), solo una crea la transacción.
+    const claimed = await claimPending(userId);
+    if (!claimed) return "Ya lo estoy procesando 👍";
 
-    await clearPending(userId);
+    let result: Awaited<ReturnType<typeof createTransaction>>;
+    try {
+      result = await createTransaction(userId, {
+        cardId: data.cardId,
+        amount: data.amount,
+        type: data.type,
+        description: data.description,
+        date: data.date,
+        categoryId: data.categoryId,
+      });
+    } catch {
+      result = null;
+    }
 
     if (!result) {
-      return "No pude registrar la transaccion. Verifica tu conexion con la app de finanzas.";
+      // El claim ya borró el pending; recrearlo para que otro "sí" reintente.
+      await savePending(userId, data, "confirm").catch(() => {});
+      return 'No pude registrar la transaccion. Verifica tu conexion con la app de finanzas y responde "si" para reintentar.';
     }
 
     const sign = data.type === "gasto" ? "-" : "+";

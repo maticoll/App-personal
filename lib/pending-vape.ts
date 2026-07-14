@@ -39,7 +39,10 @@ export type VapeClarifyPending = {
 
 export type VapePending = VapeBuyerPending | VapeClarifyPending;
 
-export async function saveVapePending(userId: string, pending: VapePending): Promise<void> {
+export async function saveVapePending(
+  userId: string,
+  pending: VapePending,
+): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data = pending as unknown as import("@prisma/client").Prisma.JsonObject;
   await db.pendingTransaction.upsert({
@@ -49,12 +52,18 @@ export async function saveVapePending(userId: string, pending: VapePending): Pro
   });
 }
 
-export async function getVapePending(userId: string): Promise<VapePending | null> {
-  const record = await db.pendingTransaction.findUnique({ where: { userId } }).catch(() => null);
+export async function getVapePending(
+  userId: string,
+): Promise<VapePending | null> {
+  const record = await db.pendingTransaction
+    .findUnique({ where: { userId } })
+    .catch(() => null);
   if (!record) return null;
 
   if (Date.now() - record.createdAt.getTime() > PENDING_TTL_MS) {
-    await db.pendingTransaction.deleteMany({ where: { userId } }).catch(() => null);
+    await db.pendingTransaction
+      .deleteMany({ where: { userId } })
+      .catch(() => null);
     return null;
   }
 
@@ -63,6 +72,20 @@ export async function getVapePending(userId: string): Promise<VapePending | null
   return record.data as unknown as VapePending;
 }
 
+/**
+ * Borra el pending de forma atómica y devuelve si esta invocación lo "ganó".
+ * Llamar ANTES de ejecutar efectos externos (Nubez / finanzas): dos mensajes
+ * casi simultáneos no deben descontar stock ni registrar el ingreso dos veces.
+ */
+export async function claimVapePending(userId: string): Promise<boolean> {
+  const { count } = await db.pendingTransaction.deleteMany({
+    where: { userId },
+  });
+  return count > 0;
+}
+
 export async function clearVapePending(userId: string): Promise<void> {
-  await db.pendingTransaction.deleteMany({ where: { userId } }).catch(() => null);
+  await db.pendingTransaction
+    .deleteMany({ where: { userId } })
+    .catch(() => null);
 }

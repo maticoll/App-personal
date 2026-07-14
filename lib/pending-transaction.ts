@@ -33,8 +33,8 @@ export type PendingTransactionData = {
   type: "gasto" | "ingreso";
   currency: "UYU" | "USD";
   description: string;
-  date: string;           // YYYY-MM-DD
-  cardId: string;         // vacío ("") cuando step = "select_card"
+  date: string; // YYYY-MM-DD
+  cardId: string; // vacío ("") cuando step = "select_card"
   cardName?: string;
   categoryId?: string;
   categoryName?: string;
@@ -43,7 +43,7 @@ export type PendingTransactionData = {
 export type PendingRecord = {
   data: PendingTransactionData;
   step: PendingStep;
-  cards?: FinancesCard[];  // sólo cuando step = "select_card"
+  cards?: FinancesCard[]; // sólo cuando step = "select_card"
 };
 
 // ─── Funciones ────────────────────────────────────────────────────────────────
@@ -55,7 +55,7 @@ export async function savePending(
   userId: string,
   data: PendingTransactionData,
   step: PendingStep,
-  cards?: FinancesCard[]
+  cards?: FinancesCard[],
 ): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const payload: any = {
@@ -77,7 +77,9 @@ export async function savePending(
  * Recupera la transacción pendiente del usuario.
  * Devuelve null si no hay ninguna.
  */
-export async function getPending(userId: string): Promise<PendingRecord | null> {
+export async function getPending(
+  userId: string,
+): Promise<PendingRecord | null> {
   const record = await db.pendingTransaction
     .findUnique({ where: { userId } })
     .catch(() => null);
@@ -100,6 +102,20 @@ export async function getPending(userId: string): Promise<PendingRecord | null> 
       ? (record.cards as unknown as FinancesCard[])
       : undefined,
   };
+}
+
+/**
+ * Borra el pending de forma atómica y devuelve si esta invocación lo "ganó".
+ * Llamar ANTES de ejecutar efectos externos (crear la transacción en la API
+ * de finanzas): si dos mensajes casi simultáneos (doble "sí", retry de Meta)
+ * leen el mismo pending, solo la lambda cuyo deleteMany borró el registro
+ * ejecuta el efecto — la otra recibe count 0 y no duplica.
+ */
+export async function claimPending(userId: string): Promise<boolean> {
+  const { count } = await db.pendingTransaction.deleteMany({
+    where: { userId },
+  });
+  return count > 0;
 }
 
 /**
