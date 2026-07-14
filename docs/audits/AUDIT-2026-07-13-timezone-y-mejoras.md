@@ -129,8 +129,10 @@ El barrido encontró **~30 puntos más** con el mismo patrón: "día = medianoch
 
 ## 5. Plan de acción sugerido (orden)
 
-1. ✅ Fix calendario (este commit).
-2. **Fase timezone** (sección 2, pasos 1-5) — es un solo root cause, `lib/dates.ts` ya existe; una sesión enfocada lo cierra casi entero.
-3. Robustez alta/media: claim atómico de pendings (#1), error visible al usuario (#7), reminders send-then-mark (#6), Axiom flush (#5).
-4. Quick wins de producto (score congelado primero — se solapa con la fase timezone).
-5. Costos de IA: fusión módulo+intent + verbatim en confirmaciones.
+> ⚡ **Estado vivo del plan: ver `docs/audits/BACKLOG.md`** (qué está hecho y qué falta, listo para ejecutar).
+
+1. ✅ Fix calendario (commit `0da8bfe`).
+2. ✅ **Fase timezone** completa (commits `af0a8da`, `01550a2`, `61e41b0`) — sección 2 cerrada, incluido el score congelado.
+3. ⬜ Robustez alta/media: claim atómico de pendings (#1), error visible al usuario (#7), reminders send-then-mark (#6), Axiom flush (#5). → BACKLOG Fase 3.
+4. ✅ Quick wins de producto (commit `ac2d38d`): sync global, fast-paths, tareas por WhatsApp, morning summary con tareas, tira de vapes.
+5. ⬜ Costos de IA: fusión módulo+intent + verbatim en confirmaciones. → BACKLOG Fase 5.

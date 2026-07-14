@@ -142,6 +142,7 @@ WhatsApp Business API · Garmin Connect (sueño, actividad, pasos) · Google Cal
 
 ## Documentos de referencia
 
+- `docs/audits/BACKLOG.md` — **qué falta hacer**, por fases y listo para ejecutar (robustez → seguridad → costos de IA → features).
 - `BLUEPRINT.md` — visión y flujos completos del producto.
 - `docs/session-history.md` — historial detallado de construcción (sesiones 1–11, SQL de cada cambio de schema, decisiones).
 - `docs/superpowers/specs/` y `docs/superpowers/plans/` — specs y planes de features (ej. workout activo).
