@@ -52,12 +52,15 @@ export async function saveVapePending(
   });
 }
 
+/**
+ * Devuelve null si no hay pending de vapes. Si la DB falla, LANZA: el caller
+ * debe distinguir "no hay pending" de "no sé si hay pending" para no desviar
+ * la respuesta del usuario al clasificador de módulos.
+ */
 export async function getVapePending(
   userId: string,
 ): Promise<VapePending | null> {
-  const record = await db.pendingTransaction
-    .findUnique({ where: { userId } })
-    .catch(() => null);
+  const record = await db.pendingTransaction.findUnique({ where: { userId } });
   if (!record) return null;
 
   if (Date.now() - record.createdAt.getTime() > PENDING_TTL_MS) {

@@ -386,7 +386,18 @@ export async function orchestrate(
 
   // 0.0 Pendiente de vapes (esperando el nombre del comprador) — antes que finanzas.
   //     Si hay uno activo, este mensaje es el nombre del comprador.
-  const vapePending = await getVapePending(userId).catch(() => null);
+  //     Si la DB falla acá NO se sigue al clasificador: este mensaje puede ser
+  //     un "sí" de confirmación y clasificarlo registraría cualquier cosa.
+  let vapePending: Awaited<ReturnType<typeof getVapePending>>;
+  let pending: Awaited<ReturnType<typeof getPending>>;
+  try {
+    vapePending = await getVapePending(userId);
+    pending = vapePending ? null : await getPending(userId);
+  } catch (err) {
+    console.error("[orchestrator] Error leyendo pendings:", err);
+    return "Uy, tuve un problema leyendo la conversación. Dame un segundo y repetímelo.";
+  }
+
   if (vapePending) {
     console.log(
       `[orchestrator] Vape pending (${vapePending.kind}) — desviando al agente de vapes`,
@@ -411,7 +422,6 @@ export async function orchestrate(
   //    Si hay un pending activo, el mensaje es una respuesta al flujo de
   //    confirmación de finanzas (selección de tarjeta o sí/no).
   //    Se bypasea Haiku + Sonnet y se responde directo.
-  const pending = await getPending(userId).catch(() => null);
   if (pending) {
     console.log(
       `[orchestrator] Pending transaction encontrada (step: ${pending.step}) — desviando a financesAgent.handleConfirmation`,

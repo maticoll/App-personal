@@ -75,14 +75,15 @@ export async function savePending(
 
 /**
  * Recupera la transacción pendiente del usuario.
- * Devuelve null si no hay ninguna.
+ * Devuelve null si no hay ninguna. Si la DB falla, LANZA (no devuelve null):
+ * el caller debe distinguir "no hay pending" de "no sé si hay pending" —
+ * tratar el error como null haría que un "sí" de confirmación termine en el
+ * clasificador de módulos.
  */
 export async function getPending(
   userId: string,
 ): Promise<PendingRecord | null> {
-  const record = await db.pendingTransaction
-    .findUnique({ where: { userId } })
-    .catch(() => null);
+  const record = await db.pendingTransaction.findUnique({ where: { userId } });
 
   if (!record) return null;
 
