@@ -45,7 +45,10 @@ function fmtTime(date: Date): string {
 export async function GET(req: NextRequest) {
   if (!verifyCronSecret(req)) {
     logger.warn("cron/reminders", { event: "unauthorized" });
-    return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
+    return NextResponse.json(
+      { ok: false, error: "No autorizado" },
+      { status: 401 },
+    );
   }
 
   logger.info("cron/reminders", { event: "start" });
@@ -87,7 +90,10 @@ export async function GET(req: NextRequest) {
       }
     }
   } catch (err) {
-    logger.error("cron/reminders", { event: "error_part1", error: String(err) });
+    logger.error("cron/reminders", {
+      event: "error_part1",
+      error: String(err),
+    });
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -121,7 +127,7 @@ export async function GET(req: NextRequest) {
 
         // Deduplicar por id
         const uniqueEvents = Array.from(
-          new Map(allEvents.map((e) => [e.id, e])).values()
+          new Map(allEvents.map((e) => [e.id, e])).values(),
         );
 
         for (const event of uniqueEvents) {
@@ -133,24 +139,46 @@ export async function GET(req: NextRequest) {
           // Generar externalId para deduplicar — incluye hora de inicio del evento
           const externalId = `cal:${event.id}_${event.start.toISOString()}`;
 
-          const alreadySent = await calendarReminderExists(user.userId, externalId);
+          const alreadySent = await calendarReminderExists(
+            user.userId,
+            externalId,
+          );
           if (alreadySent) continue;
 
-          // Registrar en DB (dedup) — crear ya como sent=true para no reenviar
-          await db.reminder.create({
+          // Registrar en DB (dedup) con sent=false — se marca sent DESPUÉS
+          // de enviar; si se marcara antes y Meta fallara, el aviso se
+          // perdería para siempre (mismo patrón send-then-mark de la Parte 1).
+          const reminder = await db.reminder.create({
             data: {
               userId: user.userId,
               message: event.title,
               fireAt: event.start,
               externalId,
-              sent: true,
+              sent: false,
             },
           });
 
-          const timeLabel = formatTimeLabel(event.start);
-          await sendReminderTemplate(user.whatsappNumber, timeLabel, event.title);
+          try {
+            const timeLabel = formatTimeLabel(event.start);
+            await sendReminderTemplate(
+              user.whatsappNumber,
+              timeLabel,
+              event.title,
+            );
+          } catch (sendErr) {
+            // Si el envío falla, borrar el registro de dedup para que el
+            // próximo run (15 min) lo reintente.
+            await db.reminder
+              .delete({ where: { id: reminder.id } })
+              .catch(() => {});
+            throw sendErr;
+          }
 
-          sent.push(`calendar:${user.userId}:${event.title}@${fmtTime(event.start)}`);
+          await markReminderSent(reminder.id);
+
+          sent.push(
+            `calendar:${user.userId}:${event.title}@${fmtTime(event.start)}`,
+          );
           logger.info("cron/reminders", {
             event: "sent_calendar",
             userId: user.userId,
@@ -169,10 +197,17 @@ export async function GET(req: NextRequest) {
       }
     }
   } catch (err) {
-    logger.error("cron/reminders", { event: "error_part2", error: String(err) });
+    logger.error("cron/reminders", {
+      event: "error_part2",
+      error: String(err),
+    });
   }
 
-  logger.info("cron/reminders", { event: "complete", sent: sent.length, errors: errors.length });
+  logger.info("cron/reminders", {
+    event: "complete",
+    sent: sent.length,
+    errors: errors.length,
+  });
 
   return NextResponse.json({
     ok: true,
