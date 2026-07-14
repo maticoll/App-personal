@@ -33,7 +33,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return new NextResponse(challenge, { status: 200 });
   }
 
-  logger.warn("whatsapp/webhook", { event: "verification_failed", mode, token });
+  logger.warn("whatsapp/webhook", {
+    event: "verification_failed",
+    mode,
+    token,
+  });
   return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 }
 
@@ -75,13 +79,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function processIncomingMessage(body: any): Promise<void> {
+  // Fuera del try para poder avisar al usuario y marcar FAILED en el catch
+  let from: string | null = null;
+  let inboundMsgId: string | null = null;
+
   try {
     // 1. Parsear payload de Meta
     const parsed = parseIncomingWebhook(body);
     if (!parsed) return;
 
-    const { from, messageId, type, text, audioId, timestamp, forwarded } = parsed;
-    logger.info("whatsapp/webhook", { event: "message_received", type, timestamp, forwarded });
+    const { messageId, type, text, audioId, timestamp, forwarded } = parsed;
+    from = parsed.from;
+    logger.info("whatsapp/webhook", {
+      event: "message_received",
+      type,
+      timestamp,
+      forwarded,
+    });
 
     // 2. Marcar como leido + mostrar "escribiendo…" (best-effort).
     //    El indicador se borra solo al enviar la respuesta o tras 25s.
@@ -90,14 +104,28 @@ async function processIncomingMessage(body: any): Promise<void> {
     // 2b. Audio reenviado: transcribir y devolver texto directamente
     if (forwarded && type === "audio" && audioId) {
       try {
-        logger.info("whatsapp/webhook", { event: "forwarded_audio_transcription_start", audioId });
+        logger.info("whatsapp/webhook", {
+          event: "forwarded_audio_transcription_start",
+          audioId,
+        });
         const audioBuffer = await downloadAudio(audioId);
         const transcription = await transcribeAudio(audioBuffer);
-        logger.info("whatsapp/webhook", { event: "forwarded_audio_transcription_ok" });
-        await sendTextMessage(from, transcription || "No pude transcribir el audio.");
+        logger.info("whatsapp/webhook", {
+          event: "forwarded_audio_transcription_ok",
+        });
+        await sendTextMessage(
+          from,
+          transcription || "No pude transcribir el audio.",
+        );
       } catch (err) {
-        logger.error("whatsapp/webhook", { event: "forwarded_audio_transcription_error", error: String(err) });
-        await sendTextMessage(from, "No pude transcribir el audio reenviado. Intenta de nuevo.");
+        logger.error("whatsapp/webhook", {
+          event: "forwarded_audio_transcription_error",
+          error: String(err),
+        });
+        await sendTextMessage(
+          from,
+          "No pude transcribir el audio reenviado. Intenta de nuevo.",
+        );
       }
       return;
     }
@@ -107,7 +135,7 @@ async function processIncomingMessage(body: any): Promise<void> {
     let userId: string | null = null;
 
     const fromNormalized = from.replace(/^\+/, "");
-    const fromWithPlus   = "+" + fromNormalized;
+    const fromWithPlus = "+" + fromNormalized;
 
     const settings = await db.userSettings.findFirst({
       where: { whatsappNumber: { in: [fromNormalized, fromWithPlus] } },
@@ -120,7 +148,10 @@ async function processIncomingMessage(body: any): Promise<void> {
 
     if (!userId) {
       logger.warn("whatsapp/webhook", { event: "user_not_found", from });
-      await sendTextMessage(from, "Lo siento, tu numero no esta vinculado a ninguna cuenta.");
+      await sendTextMessage(
+        from,
+        "Lo siento, tu numero no esta vinculado a ninguna cuenta.",
+      );
       return;
     }
 
@@ -130,19 +161,34 @@ async function processIncomingMessage(body: any): Promise<void> {
 
     if (isAudio && audioId) {
       try {
-        logger.info("whatsapp/webhook", { event: "audio_transcription_start", audioId });
+        logger.info("whatsapp/webhook", {
+          event: "audio_transcription_start",
+          audioId,
+        });
         const audioBuffer = await downloadAudio(audioId);
         messageText = await transcribeAudio(audioBuffer);
-        logger.info("whatsapp/webhook", { event: "audio_transcription_ok", userMessage: messageText });
+        logger.info("whatsapp/webhook", {
+          event: "audio_transcription_ok",
+          userMessage: messageText,
+        });
       } catch (err) {
-        logger.error("whatsapp/webhook", { event: "audio_transcription_error", error: String(err) });
-        await sendTextMessage(from, "No pude procesar el audio. Podes escribirlo?");
+        logger.error("whatsapp/webhook", {
+          event: "audio_transcription_error",
+          error: String(err),
+        });
+        await sendTextMessage(
+          from,
+          "No pude procesar el audio. Podes escribirlo?",
+        );
         return;
       }
     }
 
     if (!messageText) {
-      await sendTextMessage(from, "Recibi tu mensaje pero no pude leerlo. Podes enviarlo como texto?");
+      await sendTextMessage(
+        from,
+        "Recibi tu mensaje pero no pude leerlo. Podes enviarlo como texto?",
+      );
       return;
     }
 
@@ -156,6 +202,7 @@ async function processIncomingMessage(body: any): Promise<void> {
         waMessageId: messageId,
       },
     });
+    inboundMsgId = waMsg.id;
 
     // 6. Orquestar: detectar modulo y derivar al agente
     const orchestrateStart = Date.now();
@@ -190,8 +237,39 @@ async function processIncomingMessage(body: any): Promise<void> {
       },
     });
 
-    logger.info("whatsapp/webhook", { event: "message_processed_ok", msgId: waMsg.id });
+    logger.info("whatsapp/webhook", {
+      event: "message_processed_ok",
+      msgId: waMsg.id,
+    });
   } catch (err) {
-    logger.error("whatsapp/webhook", { event: "message_processing_error", error: String(err) });
+    logger.error("whatsapp/webhook", {
+      event: "message_processing_error",
+      error: String(err),
+    });
+
+    // Avisar al usuario (best-effort) — si no, queda mirando "escribiendo…"
+    if (from) {
+      try {
+        await sendTextMessage(
+          from,
+          "Uy, algo se rompió procesando eso. Probá de nuevo.",
+        );
+      } catch (sendErr) {
+        logger.error("whatsapp/webhook", {
+          event: "error_notice_failed",
+          error: String(sendErr),
+        });
+      }
+    }
+
+    // Marcar el INBOUND como FAILED para que no quede PENDING para siempre
+    if (inboundMsgId) {
+      await db.whatsAppMessage
+        .update({
+          where: { id: inboundMsgId },
+          data: { status: "FAILED", processedAt: new Date() },
+        })
+        .catch(() => {});
+    }
   }
 }
