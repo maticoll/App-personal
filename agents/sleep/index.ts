@@ -31,11 +31,9 @@ import {
   getWeeklyStats,
   upsertSleepLog,
 } from "@/lib/sleep";
-import {
-  syncGarminSleepRange,
-  checkGarminStatus,
-} from "@/lib/garmin";
+import { syncGarminSleepRange, checkGarminStatus } from "@/lib/garmin";
 import { formatDuration, formatTime } from "@/lib/utils";
+import { atHourUY } from "@/lib/dates";
 import { detectIntentAI, detectPeriod } from "@/lib/nlp";
 import { getGoals } from "@/lib/goals";
 import { buildSleepPrompt } from "@/agents/prompts";
@@ -51,7 +49,10 @@ export const sleepAgent = {
    * Callback invocado cuando el usuario actualiza sus objetivos en Settings.
    * Recalcula el scoring umbral y retorna ok si todo está bien.
    */
-  async onGoalsUpdate(userId: string, goals: import("@prisma/client").UserGoals): Promise<{ ok: boolean }> {
+  async onGoalsUpdate(
+    userId: string,
+    goals: import("@prisma/client").UserGoals,
+  ): Promise<{ ok: boolean }> {
     // El agente de sueño no necesita procesamiento especial al actualizar objetivos.
     // Los nuevos umbrales se aplican automáticamente en el próximo cálculo de score
     // porque calcSleepScore lee los goals frescos de DB.
@@ -73,13 +74,15 @@ export const sleepAgent = {
       {
         bed: "El usuario indica que se va a dormir, que se durmio, o que es hora de dormir (puede incluir una hora)",
         wake: "El usuario indica que se desperto o se levanto (puede incluir una hora)",
-        query: "El usuario pregunta por cuanto durmio, su calidad de sueno, estadisticas o historial",
+        query:
+          "El usuario pregunta por cuanto durmio, su calidad de sueno, estadisticas o historial",
         sync: "El usuario quiere sincronizar datos con Garmin",
-        flexible: "El usuario avisa que hoy sale tarde, no hay hora fija, o que ya te avisa despues",
+        flexible:
+          "El usuario avisa que hoy sale tarde, no hay hora fija, o que ya te avisa despues",
         unknown: "Otro mensaje no relacionado al sueno",
       },
       input.message,
-      systemPrompt
+      systemPrompt,
     );
 
     if (intentKey === "bed" || intentKey === "flexible") {
@@ -99,7 +102,8 @@ export const sleepAgent = {
     }
     return {
       success: false,
-      message: "No entendi tu mensaje sobre el sueno. Podes decirme: me voy a dormir, me desperte, cuanto dormi, o sync.",
+      message:
+        "No entendi tu mensaje sobre el sueno. Podes decirme: me voy a dormir, me desperte, cuanto dormi, o sync.",
     };
   },
 
@@ -108,7 +112,7 @@ export const sleepAgent = {
   async handleBedTime(
     userId: string,
     time?: Date,
-    flexible = false
+    flexible = false,
   ): Promise<AgentOutput> {
     try {
       const bedTime = time ?? new Date();
@@ -181,7 +185,7 @@ export const sleepAgent = {
           success: false,
           message:
             "⚠️ No encontré registro de cuándo te fuiste a dormir anoche. " +
-            'Podés registrarlo manualmente en la app con la hora real.',
+            "Podés registrarlo manualmente en la app con la hora real.",
         };
       }
       return {
@@ -194,7 +198,7 @@ export const sleepAgent = {
 
   async handleQuery(
     userId: string,
-    period: "today" | "yesterday" | "week"
+    period: "today" | "yesterday" | "week",
   ): Promise<AgentOutput> {
     try {
       if (period === "week") {
@@ -216,7 +220,9 @@ export const sleepAgent = {
       }
 
       const log =
-        period === "today" ? await getTodaySleep(userId) : await getSleepYesterday(userId);
+        period === "today"
+          ? await getTodaySleep(userId)
+          : await getSleepYesterday(userId);
 
       if (!log) {
         return {
@@ -229,7 +235,9 @@ export const sleepAgent = {
       }
 
       let message =
-        period === "today" ? "🌙 *Tu sueño de anoche:*\n" : "📋 *Tu sueño de antes de ayer:*\n";
+        period === "today"
+          ? "🌙 *Tu sueño de anoche:*\n"
+          : "📋 *Tu sueño de antes de ayer:*\n";
 
       if (log.durationMinutes) {
         message += `• Duración: *${formatDuration(log.durationMinutes)}*\n`;
@@ -274,7 +282,8 @@ export const sleepAgent = {
       if (result.synced === 0) {
         return {
           success: true,
-          message: "✅ Sync con Garmin completado. Ya tenés todos los datos al día.",
+          message:
+            "✅ Sync con Garmin completado. Ya tenés todos los datos al día.",
           data: result,
         };
       }
@@ -284,7 +293,9 @@ export const sleepAgent = {
         message:
           `✅ Sync con Garmin completado!\n` +
           `• ${result.synced} noche${result.synced > 1 ? "s" : ""} importada${result.synced > 1 ? "s" : ""}\n` +
-          (result.errors > 0 ? `• ${result.errors} error${result.errors > 1 ? "es" : ""}\n` : ""),
+          (result.errors > 0
+            ? `• ${result.errors} error${result.errors > 1 ? "es" : ""}\n`
+            : ""),
         data: result,
       };
     } catch (err) {
@@ -332,9 +343,7 @@ export const sleepAgent = {
       parts.push(`calidad Garmin: ${log.garminScore}/100`);
     }
     if (log.bedTime && log.wakeTime) {
-      parts.push(
-        `(${formatTime(log.bedTime)} → ${formatTime(log.wakeTime)})`
-      );
+      parts.push(`(${formatTime(log.bedTime)} → ${formatTime(log.wakeTime)})`);
     }
 
     return parts.join(", ");
@@ -380,12 +389,9 @@ function extractTime(msg: string): Date | undefined {
           : parseInt(match[2])
         : 0;
 
-      const now = new Date();
-      const result = new Date(now);
-      result.setHours(hours, minutes, 0, 0);
-
-      // Si la hora es del pasado (por mucho), asumimos que es de hoy
-      return result;
+      // La hora que dice el usuario es hora URUGUAY, no del server (UTC):
+      // con setHours() "me acosté a las 23" guardaba 23:00 UTC = 20:00 UY.
+      return atHourUY(new Date(), hours, minutes);
     }
   }
 

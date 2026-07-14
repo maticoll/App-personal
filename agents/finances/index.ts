@@ -40,15 +40,16 @@ import {
   type PendingTransactionData,
 } from "@/lib/pending-transaction";
 import { callClaude } from "@/lib/claude";
+import { uyDateKey } from "@/lib/dates";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 type FinancesIntent =
-  | "query_spending"   // ¿cuánto gasté? / ¿en qué gasté?
-  | "query_balance"    // ¿cuál es mi balance? / ¿cómo voy?
-  | "query_report"     // resumen general / reporte del mes
-  | "create_expense"   // gasté / pagué / compré
-  | "create_income"    // cobré / recibí / ingresé
+  | "query_spending" // ¿cuánto gasté? / ¿en qué gasté?
+  | "query_balance" // ¿cuál es mi balance? / ¿cómo voy?
+  | "query_report" // resumen general / reporte del mes
+  | "create_expense" // gasté / pagué / compré
+  | "create_income" // cobré / recibí / ingresé
   | "unknown";
 
 type ExtractedTransaction = {
@@ -67,19 +68,39 @@ type ExtractedTransaction = {
 function detectIntent(text: string): FinancesIntent {
   const t = text.toLowerCase();
 
-  if (/cuánto gasté|cuanto gaste|cuanto llevo gastado|en qué gasté|en que gaste|gastos del mes/i.test(t))
+  if (
+    /cuánto gasté|cuanto gaste|cuanto llevo gastado|en qué gasté|en que gaste|gastos del mes/i.test(
+      t,
+    )
+  )
     return "query_spending";
 
-  if (/balance|saldo|cuánto tengo|cuanto tengo|cómo voy|como voy financieramente/i.test(t))
+  if (
+    /balance|saldo|cuánto tengo|cuanto tengo|cómo voy|como voy financieramente/i.test(
+      t,
+    )
+  )
     return "query_balance";
 
-  if (/resumen|reporte|informe|finanzas del mes|últimas transacciones|ultimas transacciones/i.test(t))
+  if (
+    /resumen|reporte|informe|finanzas del mes|últimas transacciones|ultimas transacciones/i.test(
+      t,
+    )
+  )
     return "query_report";
 
-  if (/gasté|gaste|pagué|pague|compré|compre|salió|salio|desembolsé|desembolse/i.test(t))
+  if (
+    /gasté|gaste|pagué|pague|compré|compre|salió|salio|desembolsé|desembolse/i.test(
+      t,
+    )
+  )
     return "create_expense";
 
-  if (/cobré|cobre|recibí|recibi|ingresé|ingrese|deposité|deposite|me pagaron/i.test(t))
+  if (
+    /cobré|cobre|recibí|recibi|ingresé|ingrese|deposité|deposite|me pagaron/i.test(
+      t,
+    )
+  )
     return "create_income";
 
   return "unknown";
@@ -90,12 +111,15 @@ function detectIntent(text: string): FinancesIntent {
 async function extractTransaction(
   text: string,
   type: "gasto" | "ingreso",
-  categoryNames: { gasto: string[]; ingreso: string[] }
+  categoryNames: { gasto: string[]; ingreso: string[] },
 ): Promise<ExtractedTransaction | null> {
-  const today = new Date().toISOString().split("T")[0];
-  const catList = type === "gasto"
-    ? categoryNames.gasto.join(", ")
-    : categoryNames.ingreso.join(", ");
+  // Fecha en día calendario UY — con toISOString() (UTC), después de las
+  // 21:00 "hoy" era mañana y "ayer" era hoy en el prompt.
+  const today = uyDateKey();
+  const catList =
+    type === "gasto"
+      ? categoryNames.gasto.join(", ")
+      : categoryNames.ingreso.join(", ");
 
   try {
     const raw = await callClaude({
@@ -141,7 +165,10 @@ async function extractTransaction(
 
 // ─── Fuzzy matching ───────────────────────────────────────────────────────────
 
-function fuzzyMatchCard(hint: string, cards: FinancesCard[]): FinancesCard | null {
+function fuzzyMatchCard(
+  hint: string,
+  cards: FinancesCard[],
+): FinancesCard | null {
   if (!hint || cards.length === 0) return null;
   const lower = hint.toLowerCase();
   return (
@@ -153,7 +180,7 @@ function fuzzyMatchCard(hint: string, cards: FinancesCard[]): FinancesCard | nul
 
 function fuzzyMatchCategory(
   hint: string,
-  categories: FinancesCategory[]
+  categories: FinancesCategory[],
 ): FinancesCategory | null {
   if (categories.length === 0) return null;
   if (!hint) return categories.find((c) => c.name === "Otros") ?? categories[0];
@@ -216,7 +243,7 @@ function buildConfirmMessage(data: PendingTransactionData): string {
 async function handleCreateTransaction(
   userId: string,
   text: string,
-  type: "gasto" | "ingreso"
+  type: "gasto" | "ingreso",
 ): Promise<string> {
   // 1. Tarjetas + categorías en paralelo
   const [cards, categories] = await Promise.all([
@@ -230,7 +257,7 @@ async function handleCreateTransaction(
 
   // 2. Extraer transacción con NLP
   const categoryNames = {
-    gasto:   categories.filter((c) => c.type === "gasto").map((c) => c.name),
+    gasto: categories.filter((c) => c.type === "gasto").map((c) => c.name),
     ingreso: categories.filter((c) => c.type === "ingreso").map((c) => c.name),
   };
 
@@ -247,12 +274,15 @@ async function handleCreateTransaction(
   }
 
   // 3. Fuzzy match de categoria
-  const matchedCategory = fuzzyMatchCategory(extracted.categoryHint, categories);
+  const matchedCategory = fuzzyMatchCategory(
+    extracted.categoryHint,
+    categories,
+  );
 
   // 4. Fuzzy match de tarjeta
   const matchedCard = fuzzyMatchCard(extracted.cardHint, cards);
 
-  const dateStr = extracted.date ?? new Date().toISOString().split("T")[0];
+  const dateStr = extracted.date ?? uyDateKey();
 
   if (matchedCard) {
     // Tarjeta encontrada -> step "confirm"
@@ -262,9 +292,9 @@ async function handleCreateTransaction(
       currency: extracted.currency,
       description: extracted.description,
       date: dateStr,
-      cardId:       matchedCard.id,
-      cardName:     matchedCard.name,
-      categoryId:   matchedCategory?.id,
+      cardId: matchedCard.id,
+      cardName: matchedCard.name,
+      categoryId: matchedCategory?.id,
       categoryName: matchedCategory?.name,
     };
 
@@ -278,8 +308,8 @@ async function handleCreateTransaction(
       currency: extracted.currency,
       description: extracted.description,
       date: dateStr,
-      cardId:       "",
-      categoryId:   matchedCategory?.id,
+      cardId: "",
+      categoryId: matchedCategory?.id,
       categoryName: matchedCategory?.name,
     };
 
@@ -299,7 +329,7 @@ async function handleCreateTransaction(
 export async function handleConfirmation(
   userId: string,
   text: string,
-  pending: PendingRecord
+  pending: PendingRecord,
 ): Promise<string> {
   const lower = text.trim().toLowerCase();
 
@@ -328,7 +358,7 @@ export async function handleConfirmation(
 
     const updated: PendingTransactionData = {
       ...pending.data,
-      cardId:   selectedCard.id,
+      cardId: selectedCard.id,
       cardName: selectedCard.name,
     };
 
@@ -337,7 +367,11 @@ export async function handleConfirmation(
   }
 
   // Step: confirmar
-  if (/^(si|sí|dale|confirmar|confirmo|ok|va|listo|bueno|perfecto|yes|yep|claro|obvio)$/i.test(lower)) {
+  if (
+    /^(si|sí|dale|confirmar|confirmo|ok|va|listo|bueno|perfecto|yes|yep|claro|obvio)$/i.test(
+      lower,
+    )
+  ) {
     const { data } = pending;
 
     if (!data.cardId) {
@@ -346,12 +380,12 @@ export async function handleConfirmation(
     }
 
     const result = await createTransaction(userId, {
-      cardId:      data.cardId,
-      amount:      data.amount,
-      type:        data.type,
+      cardId: data.cardId,
+      amount: data.amount,
+      type: data.type,
       description: data.description,
-      date:        data.date,
-      categoryId:  data.categoryId,
+      date: data.date,
+      categoryId: data.categoryId,
     });
 
     await clearPending(userId);
@@ -372,7 +406,8 @@ export async function handleConfirmation(
 
 export const financesAgent = {
   name: "finances",
-  description: "Interfaz con la app de finanzas externa (finanzas-lemon.vercel.app)",
+  description:
+    "Interfaz con la app de finanzas externa (finanzas-lemon.vercel.app)",
 
   async process(input: AgentInput): Promise<AgentOutput> {
     const { userId, message } = input;
@@ -387,15 +422,26 @@ export const financesAgent = {
         case "query_spending": {
           const report = await getMonthlyReport(userId);
           if (!report)
-            return { success: true, message: "No pude obtener los gastos del mes. Configuraste tu API key de finanzas en Ajustes?" };
+            return {
+              success: true,
+              message:
+                "No pude obtener los gastos del mes. Configuraste tu API key de finanzas en Ajustes?",
+            };
           const gastos = report.monthly.totalExpenses ?? 0;
-          return { success: true, message: `Este mes llevas ${formatCurrency(gastos)} en gastos.` };
+          return {
+            success: true,
+            message: `Este mes llevas ${formatCurrency(gastos)} en gastos.`,
+          };
         }
 
         case "query_balance": {
           const report = await getMonthlyReport(userId);
           if (!report)
-            return { success: true, message: "No pude obtener tu balance. Configuraste tu API key de finanzas en Ajustes?" };
+            return {
+              success: true,
+              message:
+                "No pude obtener tu balance. Configuraste tu API key de finanzas en Ajustes?",
+            };
           const inc = report.monthly.totalIncome ?? 0;
           const exp = report.monthly.totalExpenses ?? 0;
           const balance = inc - exp;
@@ -412,7 +458,11 @@ export const financesAgent = {
             getRecentTransactions(userId, 5),
           ]);
           if (!report)
-            return { success: true, message: "No pude obtener el reporte. Configuraste tu API key de finanzas en Ajustes?" };
+            return {
+              success: true,
+              message:
+                "No pude obtener el reporte. Configuraste tu API key de finanzas en Ajustes?",
+            };
           const inc = report.monthly.totalIncome ?? 0;
           const exp = report.monthly.totalExpenses ?? 0;
           const balance = inc - exp;
@@ -442,11 +492,17 @@ export const financesAgent = {
 
         default: {
           const summary = await getFinancesSummaryText(userId);
-          return { success: true, message: summary ?? "No hay datos de finanzas disponibles." };
+          return {
+            success: true,
+            message: summary ?? "No hay datos de finanzas disponibles.",
+          };
         }
       }
     } catch {
-      return { success: false, message: "Error consultando finanzas. Verifica tu conexion." };
+      return {
+        success: false,
+        message: "Error consultando finanzas. Verifica tu conexion.",
+      };
     }
   },
 
@@ -454,7 +510,7 @@ export const financesAgent = {
 
   async onGoalsUpdate(
     _userId: string,
-    _goals: import("@prisma/client").UserGoals
+    _goals: import("@prisma/client").UserGoals,
   ): Promise<{ ok: boolean }> {
     return { ok: true };
   },

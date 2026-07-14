@@ -25,6 +25,17 @@ export function uyDateKey(date: Date = new Date()): string {
 }
 
 /**
+ * Key de día para la DB: medianoche UTC del día calendario de Uruguay.
+ * Los campos `@db.Date` (SleepLog, Meal, WaterLog, DailyScore, DailySteps)
+ * guardan solo la fecha, y Prisma toma la parte de fecha UTC del Date —
+ * por eso la key debe ser 00:00Z del día UY (igual que las filas históricas),
+ * NO startOfDayUY (que es 03:00Z y crearía keys duplicadas por día).
+ */
+export function uyDayDate(date: Date = new Date()): Date {
+  return new Date(`${uyDateKey(date)}T00:00:00.000Z`);
+}
+
+/**
  * Medianoche de Uruguay (00:00 UY = 03:00 UTC) del día en que cae `date`.
  */
 export function startOfDayUY(date: Date = new Date()): Date {

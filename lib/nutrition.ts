@@ -5,6 +5,7 @@
 
 import { db } from "@/lib/db";
 import { callClaude } from "@/lib/claude";
+import { uyDayDate, addDays } from "@/lib/dates";
 import type { MealType } from "@prisma/client";
 
 // -------------------------------------------------------
@@ -61,16 +62,11 @@ export type DietInfo = {
 // Helpers de fecha
 // -------------------------------------------------------
 
+// Key de día en la DB = medianoche UTC del día calendario UY (ver lib/dates.ts).
+// Antes se usaba setHours(0,0,0,0) del server (UTC en Vercel): la cena o el
+// agua registradas después de las 21:00 UY caían con fecha del día siguiente.
 function startOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function endOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(23, 59, 59, 999);
-  return d;
+  return uyDayDate(date);
 }
 
 // -------------------------------------------------------
@@ -79,7 +75,7 @@ function endOfDay(date: Date): Date {
 
 export async function getTodayNutritionSummary(
   userId: string,
-  date: Date = new Date()
+  date: Date = new Date(),
 ): Promise<NutritionSummary> {
   const [meals, waterLogs, settings] = await Promise.all([
     db.meal.findMany({
@@ -92,7 +88,10 @@ export async function getTodayNutritionSummary(
     db.userSettings.findUnique({ where: { userId } }),
   ]);
 
-  const totalWaterThermos = waterLogs.reduce((acc: any, w: any) => acc + w.thermos, 0);
+  const totalWaterThermos = waterLogs.reduce(
+    (acc: any, w: any) => acc + w.thermos,
+    0,
+  );
   const waterGoalThermos = settings?.dailyWaterGoalThermos ?? 1.0;
 
   const mealsWithMacros = meals.map((m: any) => ({
@@ -112,20 +111,20 @@ export async function getTodayNutritionSummary(
   const mealsWithCalories = meals.filter((m: any) => m.calories !== null);
   const totalCalories =
     mealsWithCalories.length > 0
-      ? mealsWithCalories.reduce((acc: any, m: any) => acc + (m.calories ?? 0), 0)
+      ? mealsWithCalories.reduce(
+          (acc: any, m: any) => acc + (m.calories ?? 0),
+          0,
+        )
       : null;
-  const totalProteinG =
-    meals.some((m: any) => m.proteinG !== null)
-      ? meals.reduce((acc: any, m: any) => acc + (m.proteinG ?? 0), 0)
-      : null;
-  const totalCarbsG =
-    meals.some((m: any) => m.carbsG !== null)
-      ? meals.reduce((acc: any, m: any) => acc + (m.carbsG ?? 0), 0)
-      : null;
-  const totalFatG =
-    meals.some((m: any) => m.fatG !== null)
-      ? meals.reduce((acc: any, m: any) => acc + (m.fatG ?? 0), 0)
-      : null;
+  const totalProteinG = meals.some((m: any) => m.proteinG !== null)
+    ? meals.reduce((acc: any, m: any) => acc + (m.proteinG ?? 0), 0)
+    : null;
+  const totalCarbsG = meals.some((m: any) => m.carbsG !== null)
+    ? meals.reduce((acc: any, m: any) => acc + (m.carbsG ?? 0), 0)
+    : null;
+  const totalFatG = meals.some((m: any) => m.fatG !== null)
+    ? meals.reduce((acc: any, m: any) => acc + (m.fatG ?? 0), 0)
+    : null;
 
   const mealTypes = meals.map((m: any) => m.mealType);
   const hasAllMainMeals =
@@ -159,11 +158,9 @@ export type DayNutrition = {
 
 export async function getMealHistory(
   userId: string,
-  days: number = 14
+  days: number = 14,
 ): Promise<DayNutrition[]> {
-  const since = new Date();
-  since.setDate(since.getDate() - days);
-  since.setHours(0, 0, 0, 0);
+  const since = uyDayDate(addDays(new Date(), -days));
 
   const [meals, waterLogs, settings] = await Promise.all([
     db.meal.findMany({
@@ -222,12 +219,15 @@ export async function getMealHistory(
   for (const day of dayMap.values()) {
     const withCal = day.meals.filter((m) => m.calories !== null);
     if (withCal.length > 0) {
-      day.totalCalories = withCal.reduce((acc, m) => acc + (m.calories ?? 0), 0);
+      day.totalCalories = withCal.reduce(
+        (acc, m) => acc + (m.calories ?? 0),
+        0,
+      );
     }
   }
 
   return Array.from(dayMap.values()).sort(
-    (a, b) => b.date.getTime() - a.date.getTime()
+    (a, b) => b.date.getTime() - a.date.getTime(),
   );
 }
 
@@ -243,7 +243,7 @@ export async function getUserDiet(userId: string): Promise<DietInfo> {
 
 export async function updateUserDiet(
   userId: string,
-  content: string
+  content: string,
 ): Promise<DietInfo> {
   const diet = await db.userDiet.upsert({
     where: { userId },
@@ -260,7 +260,7 @@ export async function updateUserDiet(
 async function callClaudeForMacros(
   description: string,
   mealType: string,
-  dietContent: string | null
+  dietContent: string | null,
 ): Promise<ParsedMacros> {
   const dietContext = dietContent
     ? `La dieta habitual del usuario es:\n${dietContent}\n\n`
@@ -297,7 +297,10 @@ Estimá los macros basándote en porciones típicas argentinas. Sé conservador 
     proteinG: parseFloat((parsed.proteinG ?? 0).toFixed(1)),
     carbsG: parseFloat((parsed.carbsG ?? 0).toFixed(1)),
     fatG: parseFloat((parsed.fatG ?? 0).toFixed(1)),
-    dietAlignmentScore: Math.min(100, Math.max(0, Math.round(parsed.dietAlignmentScore ?? 75))),
+    dietAlignmentScore: Math.min(
+      100,
+      Math.max(0, Math.round(parsed.dietAlignmentScore ?? 75)),
+    ),
   };
 }
 
@@ -309,14 +312,18 @@ export async function logMealNLP(
   userId: string,
   description: string,
   mealType: MealType,
-  date: Date = new Date()
+  date: Date = new Date(),
 ): Promise<MealWithMeta> {
   // Obtener dieta del usuario para contexto
   const diet = await db.userDiet.findUnique({ where: { userId } });
 
   let macros: ParsedMacros | null = null;
   try {
-    macros = await callClaudeForMacros(description, mealType, diet?.content ?? null);
+    macros = await callClaudeForMacros(
+      description,
+      mealType,
+      diet?.content ?? null,
+    );
   } catch (err) {
     console.error("[nutrition] Error calculando macros:", err);
     // Continuar sin macros si falla Claude
@@ -358,7 +365,7 @@ export async function logMealNLP(
 export async function logWater(
   userId: string,
   thermos: number = 1.0,
-  date: Date = new Date()
+  date: Date = new Date(),
 ): Promise<{ totalThermos: number; goal: number }> {
   await db.waterLog.create({
     data: { userId, date: startOfDay(date), thermos },
@@ -371,7 +378,10 @@ export async function logWater(
     db.userSettings.findUnique({ where: { userId } }),
   ]);
 
-  const totalThermos = waterLogs.reduce((acc: any, w: any) => acc + w.thermos, 0);
+  const totalThermos = waterLogs.reduce(
+    (acc: any, w: any) => acc + w.thermos,
+    0,
+  );
   const goal = settings?.dailyWaterGoalThermos ?? 1.0;
 
   return { totalThermos, goal };
@@ -381,7 +391,10 @@ export async function logWater(
 // Eliminar comida (verificando ownership)
 // -------------------------------------------------------
 
-export async function deleteMeal(userId: string, mealId: string): Promise<void> {
+export async function deleteMeal(
+  userId: string,
+  mealId: string,
+): Promise<void> {
   const meal = await db.meal.findUnique({ where: { id: mealId } });
   if (!meal || meal.userId !== userId) {
     throw new Error("Comida no encontrada o sin permiso");
@@ -394,11 +407,9 @@ export async function deleteMeal(userId: string, mealId: string): Promise<void> 
 // -------------------------------------------------------
 
 export async function getWeeklyNutritionStats(
-  userId: string
+  userId: string,
 ): Promise<WeeklyNutritionStats> {
-  const since = new Date();
-  since.setDate(since.getDate() - 7);
-  since.setHours(0, 0, 0, 0);
+  const since = uyDayDate(addDays(new Date(), -7));
 
   const [meals, waterLogs] = await Promise.all([
     db.meal.findMany({
@@ -413,13 +424,16 @@ export async function getWeeklyNutritionStats(
   const dayCaloriesMap = new Map<string, number>();
   for (const meal of meals.filter((m: any) => m.calories !== null)) {
     const key = meal.date.toISOString().split("T")[0];
-    dayCaloriesMap.set(key, (dayCaloriesMap.get(key) ?? 0) + (meal.calories ?? 0));
+    dayCaloriesMap.set(
+      key,
+      (dayCaloriesMap.get(key) ?? 0) + (meal.calories ?? 0),
+    );
   }
   const avgCalories =
     dayCaloriesMap.size > 0
       ? Math.round(
           Array.from(dayCaloriesMap.values()).reduce((a, b) => a + b, 0) /
-            dayCaloriesMap.size
+            dayCaloriesMap.size,
         )
       : null;
 
@@ -433,9 +447,8 @@ export async function getWeeklyNutritionStats(
     dayWaterMap.size > 0
       ? parseFloat(
           (
-            Array.from(dayWaterMap.values()).reduce((a, b) => a + b, 0) /
-            7
-          ).toFixed(1)
+            Array.from(dayWaterMap.values()).reduce((a, b) => a + b, 0) / 7
+          ).toFixed(1),
         )
       : 0;
 
@@ -448,7 +461,7 @@ export async function getWeeklyNutritionStats(
   }
   const daysWithAllMeals = Array.from(dayMealTypesMap.values()).filter(
     (types) =>
-      types.has("BREAKFAST") && types.has("LUNCH") && types.has("DINNER")
+      types.has("BREAKFAST") && types.has("LUNCH") && types.has("DINNER"),
   ).length;
 
   return {
@@ -465,7 +478,7 @@ export async function getWeeklyNutritionStats(
 
 export async function getNutritionSummaryText(
   userId: string,
-  date: Date = new Date()
+  date: Date = new Date(),
 ): Promise<string> {
   const summary = await getTodayNutritionSummary(userId, date);
   const mealNames = summary.meals.map((m) => {
@@ -487,7 +500,7 @@ export async function getNutritionSummaryText(
   }
 
   lines.push(
-    `💧 Agua: ${summary.totalWaterThermos.toFixed(1)}/${summary.waterGoalThermos.toFixed(1)} termos`
+    `💧 Agua: ${summary.totalWaterThermos.toFixed(1)}/${summary.waterGoalThermos.toFixed(1)} termos`,
   );
 
   if (summary.totalCalories !== null) {
@@ -501,7 +514,9 @@ export async function getNutritionSummaryText(
 // Texto del recordatorio de hidratación (para cron/WhatsApp)
 // -------------------------------------------------------
 
-export async function getWaterReminderText(userId: string): Promise<string | null> {
+export async function getWaterReminderText(
+  userId: string,
+): Promise<string | null> {
   const [waterLogs, settings] = await Promise.all([
     db.waterLog.findMany({
       where: { userId, date: startOfDay(new Date()) },
@@ -509,7 +524,10 @@ export async function getWaterReminderText(userId: string): Promise<string | nul
     db.userSettings.findUnique({ where: { userId } }),
   ]);
 
-  const totalThermos = waterLogs.reduce((acc: any, w: any) => acc + w.thermos, 0);
+  const totalThermos = waterLogs.reduce(
+    (acc: any, w: any) => acc + w.thermos,
+    0,
+  );
   const goal = settings?.dailyWaterGoalThermos ?? 1.0;
 
   if (totalThermos >= goal) return null; // Ya cumplió, no enviar recordatorio

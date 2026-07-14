@@ -5,6 +5,7 @@
 // ============================================================
 
 import { db } from "@/lib/db";
+import { uyDateKey } from "@/lib/dates";
 
 // ─── Tipos de la API de Finanzas ──────────────────────────────────────────────
 
@@ -100,11 +101,15 @@ const FINANCES_URL =
  * Obtiene la API key del usuario desde UserSettings.
  * Fallback a FINANCES_API_KEY de env si no está configurada por el usuario.
  */
-export async function getFinancesApiKey(userId: string): Promise<string | null> {
-  const settings = await db.userSettings.findUnique({
-    where: { userId },
-    select: { financesApiKey: true } as { financesApiKey: true },
-  }).catch(() => null);
+export async function getFinancesApiKey(
+  userId: string,
+): Promise<string | null> {
+  const settings = await db.userSettings
+    .findUnique({
+      where: { userId },
+      select: { financesApiKey: true } as { financesApiKey: true },
+    })
+    .catch(() => null);
 
   const userKey = settings?.financesApiKey as string | null | undefined;
   return userKey ?? process.env.FINANCES_API_KEY ?? null;
@@ -116,7 +121,7 @@ export async function getFinancesApiKey(userId: string): Promise<string | null> 
 async function financesApiFetch<T>(
   apiKey: string,
   path: string,
-  options?: RequestInit
+  options?: RequestInit,
 ): Promise<T> {
   const url = FINANCES_URL + path;
   const res = await fetch(url, {
@@ -131,7 +136,9 @@ async function financesApiFetch<T>(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Finances API error ${res.status} en ${path}: ${text.slice(0, 200)}`);
+    throw new Error(
+      `Finances API error ${res.status} en ${path}: ${text.slice(0, 200)}`,
+    );
   }
 
   // La API a veces devuelve HTML (200) si el endpoint no existe o la API key
@@ -143,7 +150,7 @@ async function financesApiFetch<T>(
     throw new Error(
       `Finances API devolvió ${contentType || "sin content-type"} (no JSON) en ${path} ` +
         `[status ${res.status}]. Probablemente el endpoint no existe o la API key es inválida. ` +
-        `Respuesta: ${text.slice(0, 120).replace(/\s+/g, " ")}`
+        `Respuesta: ${text.slice(0, 120).replace(/\s+/g, " ")}`,
     );
   }
 
@@ -174,19 +181,24 @@ export async function getFinancesStatus(userId: string): Promise<{
 export async function getMonthlyReport(
   userId: string,
   month?: number,
-  year?: number
+  year?: number,
 ): Promise<FinancesReport | null> {
   const apiKey = await getFinancesApiKey(userId);
   if (!apiKey) return null;
 
-  const now = new Date();
+  // Mes/año del calendario UY (getMonth()/getFullYear() usan el reloj del
+  // server, que en fin de mes de noche ya está en el mes siguiente)
+  const [uyYear, uyMonth] = uyDateKey().split("-");
   const params = new URLSearchParams({
-    month: String(month ?? now.getMonth() + 1),
-    year: String(year ?? now.getFullYear()),
+    month: String(month ?? Number(uyMonth)),
+    year: String(year ?? Number(uyYear)),
   });
 
   try {
-    return await financesApiFetch<FinancesReport>(apiKey, `/api/reports?${params}`);
+    return await financesApiFetch<FinancesReport>(
+      apiKey,
+      `/api/reports?${params}`,
+    );
   } catch (err) {
     console.error("[finances] getMonthlyReport error:", err);
     return null;
@@ -202,25 +214,26 @@ export async function getRecentTransactions(
   userId: string,
   limit = 10,
   month?: number,
-  year?: number
+  year?: number,
 ): Promise<FinancesTransaction[]> {
   const apiKey = await getFinancesApiKey(userId);
   if (!apiKey) return [];
 
-  const now = new Date();
+  const [uyYear, uyMonth] = uyDateKey().split("-");
   const params = new URLSearchParams({
-    month: String(month ?? now.getMonth() + 1),
-    year: String(year ?? now.getFullYear()),
+    month: String(month ?? Number(uyMonth)),
+    year: String(year ?? Number(uyYear)),
     limit: String(limit),
   });
 
   try {
-    const data = await financesApiFetch<FinancesTransaction[] | { transactions: FinancesTransaction[] }>(
-      apiKey,
-      `/api/transactions?${params}`
-    );
+    const data = await financesApiFetch<
+      FinancesTransaction[] | { transactions: FinancesTransaction[] }
+    >(apiKey, `/api/transactions?${params}`);
     // La API puede devolver array directo o { transactions: [...] }
-    return Array.isArray(data) ? data : (data as { transactions: FinancesTransaction[] }).transactions ?? [];
+    return Array.isArray(data)
+      ? data
+      : ((data as { transactions: FinancesTransaction[] }).transactions ?? []);
   } catch (err) {
     console.error("[finances] getRecentTransactions error:", err);
     return [];
@@ -239,21 +252,27 @@ export async function createTransaction(
     description: string;
     date?: string;
     categoryId?: string;
-  }
+  },
 ): Promise<FinancesTransaction | null> {
   const apiKey = await getFinancesApiKey(userId);
   if (!apiKey) return null;
 
   const body = {
     ...data,
-    date: data.date ?? new Date().toISOString().split("T")[0],
+    // Día calendario UY — con toISOString() (UTC) un gasto registrado después
+    // de las 21:00 quedaba fechado al día siguiente en finanzas-lemon.
+    date: data.date ?? uyDateKey(),
   };
 
   try {
-    return await financesApiFetch<FinancesTransaction>(apiKey, "/api/transactions", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
+    return await financesApiFetch<FinancesTransaction>(
+      apiKey,
+      "/api/transactions",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    );
   } catch (err) {
     console.error("[finances] createTransaction error:", err);
     return null;
@@ -270,8 +289,12 @@ export async function getCards(userId: string): Promise<FinancesCard[]> {
   if (!apiKey) return [];
 
   try {
-    const data = await financesApiFetch<FinancesCard[] | { cards: FinancesCard[] }>(apiKey, "/api/cards");
-    return Array.isArray(data) ? data : (data as { cards: FinancesCard[] }).cards ?? [];
+    const data = await financesApiFetch<
+      FinancesCard[] | { cards: FinancesCard[] }
+    >(apiKey, "/api/cards");
+    return Array.isArray(data)
+      ? data
+      : ((data as { cards: FinancesCard[] }).cards ?? []);
   } catch (err) {
     console.error("[finances] getCards error:", err);
     return [];
@@ -284,7 +307,7 @@ export async function getCards(userId: string): Promise<FinancesCard[]> {
 export async function getBalances(
   userId: string,
   month?: number,
-  year?: number
+  year?: number,
 ): Promise<FinancesBalance[]> {
   const apiKey = await getFinancesApiKey(userId);
   if (!apiKey) return [];
@@ -296,11 +319,12 @@ export async function getBalances(
   });
 
   try {
-    const data = await financesApiFetch<FinancesBalance[] | { balances: FinancesBalance[] }>(
-      apiKey,
-      `/api/balances?${params}`
-    );
-    return Array.isArray(data) ? data : (data as { balances: FinancesBalance[] }).balances ?? [];
+    const data = await financesApiFetch<
+      FinancesBalance[] | { balances: FinancesBalance[] }
+    >(apiKey, `/api/balances?${params}`);
+    return Array.isArray(data)
+      ? data
+      : ((data as { balances: FinancesBalance[] }).balances ?? []);
   } catch (err) {
     console.error("[finances] getBalances error:", err);
     return [];
@@ -312,7 +336,7 @@ export async function getBalances(
  */
 export async function getCategories(
   userId: string,
-  type?: "gasto" | "ingreso"
+  type?: "gasto" | "ingreso",
 ): Promise<FinancesCategory[]> {
   const apiKey = await getFinancesApiKey(userId);
   if (!apiKey) return [];
@@ -320,11 +344,12 @@ export async function getCategories(
   const params = type ? `?type=${type}` : "";
 
   try {
-    const data = await financesApiFetch<FinancesCategory[] | { categories: FinancesCategory[] }>(
-      apiKey,
-      `/api/categories${params}`
-    );
-    return Array.isArray(data) ? data : (data as { categories: FinancesCategory[] }).categories ?? [];
+    const data = await financesApiFetch<
+      FinancesCategory[] | { categories: FinancesCategory[] }
+    >(apiKey, `/api/categories${params}`);
+    return Array.isArray(data)
+      ? data
+      : ((data as { categories: FinancesCategory[] }).categories ?? []);
   } catch (err) {
     console.error("[finances] getCategories error:", err);
     return [];
@@ -374,7 +399,9 @@ export async function getFinancesDashboard(userId: string): Promise<{
 /**
  * Genera un resumen de finanzas del mes en texto plano para WhatsApp.
  */
-export async function getFinancesSummaryText(userId: string): Promise<string | null> {
+export async function getFinancesSummaryText(
+  userId: string,
+): Promise<string | null> {
   const report = await getMonthlyReport(userId);
   if (!report) return null;
 

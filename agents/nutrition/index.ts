@@ -30,6 +30,7 @@ import {
   getNutritionSummaryText,
   getWaterReminderText,
 } from "@/lib/nutrition";
+import { currentHourUY } from "@/lib/dates";
 import type { MealType } from "@prisma/client";
 
 // --- Normalización (sin acentos, minúsculas) ---
@@ -54,7 +55,9 @@ function detectMealType(text: string): MealType {
   if (/almorce|almuerzo/.test(n)) return "LUNCH";
   if (/cene|cena/.test(n)) return "DINNER";
   if (/snack|merienda|colacion/.test(n)) return "SNACK";
-  const hour = new Date().getHours();
+  // Hora UY, no del server (UTC): con getHours() el desayuno de las 9:00 UY
+  // se clasificaba como almuerzo.
+  const hour = currentHourUY();
   if (hour < 11) return "BREAKFAST";
   if (hour < 16) return "LUNCH";
   if (hour < 20) return "SNACK";
@@ -80,33 +83,43 @@ function extractMealDescription(text: string): string {
 
 function extractDietContent(text: string): string {
   const n = normalize(text);
-  const m = n.match(/^.*(mi dieta (es|tiene|incluye)|cambia mi dieta|nueva dieta)\s*/);
+  const m = n.match(
+    /^.*(mi dieta (es|tiene|incluye)|cambia mi dieta|nueva dieta)\s*/,
+  );
   return m ? text.slice(m[0].length).trim() : text.trim();
 }
 
 // --- Función principal ---
 
-export async function processNutritionMessage(userId: string, text: string): Promise<string> {
+export async function processNutritionMessage(
+  userId: string,
+  text: string,
+): Promise<string> {
   const goals = await getGoals(userId).catch(() => null);
   const systemPrompt = goals ? buildNutritionPrompt(goals) : undefined;
   const intent = await detectIntentAI(
     "Eres el agente de nutricion de una app personal. El usuario registra lo que come y toma, consulta su resumen nutricional, o actualiza su dieta.",
     {
-      meal_log: "El usuario registro o menciono que comio algo: desayuno, almuerzo, cena, snack, una fruta, etc.",
-      water_log: "El usuario bebio agua, un termo de agua, o menciona hidratacion",
-      query: "El usuario pregunta por lo que comio, cuanta agua tomo, o quiere ver su resumen nutricional",
-      diet_update: "El usuario quiere cambiar o indicar cual es su dieta (cetogenica, vegana, sin gluten, etc.)",
+      meal_log:
+        "El usuario registro o menciono que comio algo: desayuno, almuerzo, cena, snack, una fruta, etc.",
+      water_log:
+        "El usuario bebio agua, un termo de agua, o menciona hidratacion",
+      query:
+        "El usuario pregunta por lo que comio, cuanta agua tomo, o quiere ver su resumen nutricional",
+      diet_update:
+        "El usuario quiere cambiar o indicar cual es su dieta (cetogenica, vegana, sin gluten, etc.)",
       unknown: "Otro mensaje no relacionado a nutricion",
     },
     text,
-    systemPrompt
+    systemPrompt,
   );
 
   try {
     if (intent === "meal_log") {
       const mealType = detectMealType(text);
       const description = extractMealDescription(text);
-      if (description.length < 3) return "Que comiste exactamente? Contame con mas detalle.";
+      if (description.length < 3)
+        return "Que comiste exactamente? Contame con mas detalle.";
       const meal = await logMealNLP(userId, description, mealType);
       const labels: Record<MealType, string> = {
         BREAKFAST: "Desayuno",
@@ -124,8 +137,8 @@ export async function processNutritionMessage(userId: string, text: string): Pro
           meal.dietAlignmentScore >= 70
             ? "Alineado con tu dieta"
             : meal.dietAlignmentScore >= 40
-            ? "Parcialmente alineado"
-            : "Fuera de tu dieta";
+              ? "Parcialmente alineado"
+              : "Fuera de tu dieta";
         response += `\n${align} (${meal.dietAlignmentScore}%)`;
       }
       return response;
@@ -153,15 +166,22 @@ export async function processNutritionMessage(userId: string, text: string): Pro
       };
       const lines = ["Resumen nutricional de hoy:"];
       if (s.meals.length === 0) lines.push("Sin comidas registradas.");
-      else s.meals.forEach((m) => lines.push(`${labels[m.mealType]}: ${m.description}`));
-      if (s.totalCalories !== null) lines.push(`Total: ~${Math.round(s.totalCalories)} kcal`);
-      lines.push(`Agua: ${s.totalWaterThermos.toFixed(1)}/${s.waterGoalThermos.toFixed(1)} termos`);
+      else
+        s.meals.forEach((m) =>
+          lines.push(`${labels[m.mealType]}: ${m.description}`),
+        );
+      if (s.totalCalories !== null)
+        lines.push(`Total: ~${Math.round(s.totalCalories)} kcal`);
+      lines.push(
+        `Agua: ${s.totalWaterThermos.toFixed(1)}/${s.waterGoalThermos.toFixed(1)} termos`,
+      );
       return lines.join("\n");
     }
 
     if (intent === "diet_update") {
       const dietContent = extractDietContent(text);
-      if (dietContent.length < 10) return "Contame mas sobre tu dieta para poder guardarla.";
+      if (dietContent.length < 10)
+        return "Contame mas sobre tu dieta para poder guardarla.";
       await updateUserDiet(userId, dietContent);
       return "Dieta actualizada. La voy a usar como referencia para evaluar tus comidas.";
     }
@@ -179,7 +199,10 @@ export const nutritionAgent = {
   name: "nutrition",
   description: "Registra y analiza nutricion e hidratacion",
 
-  async onGoalsUpdate(_userId: string, _goals: import("@prisma/client").UserGoals): Promise<{ ok: boolean }> {
+  async onGoalsUpdate(
+    _userId: string,
+    _goals: import("@prisma/client").UserGoals,
+  ): Promise<{ ok: boolean }> {
     return { ok: true };
   },
 
@@ -190,7 +213,10 @@ export const nutritionAgent = {
     const message = await processNutritionMessage(input.userId, input.message);
     return { success: true, message };
   },
-  async calculateMacros(_d: string, _u: string): Promise<Record<string, number>> {
+  async calculateMacros(
+    _d: string,
+    _u: string,
+  ): Promise<Record<string, number>> {
     return {};
   },
   async calculateScore(_u: string, _date: Date): Promise<number> {
