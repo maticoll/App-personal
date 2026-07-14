@@ -150,6 +150,37 @@ async function loadSummaries(userId: string) {
   };
 }
 
+// ── Vapes: stock resumido para la tira del dashboard ─────────────────────────
+// Fail-silent con timeout corto: si Nubez no responde rápido, la tira no se
+// muestra y el dashboard no se frena.
+
+type VapesSummary = {
+  totalStock: number;
+  lowStock: Array<{ nombre: string; stock: number }>;
+};
+
+async function loadVapesSummary(): Promise<VapesSummary | null> {
+  try {
+    const { getProductos } = await import("@/lib/vapes");
+    const timeout = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 2000),
+    );
+    const productos = await Promise.race([getProductos(), timeout]);
+    if (!productos || productos.length === 0) return null;
+
+    const totalStock = productos.reduce((acc, p) => acc + (p.stock ?? 0), 0);
+    const lowStock = productos
+      .filter((p) => p.stock <= (p.stockMinimo ?? 2))
+      .sort((a, b) => a.stock - b.stock)
+      .slice(0, 3)
+      .map((p) => ({ nombre: p.nombre, stock: p.stock }));
+
+    return { totalStock, lowStock };
+  } catch {
+    return null;
+  }
+}
+
 // ── Página ────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage() {
@@ -157,12 +188,14 @@ export default async function DashboardPage() {
   const userId = session?.user?.id;
   const firstName = session?.user?.name?.split(" ")[0] ?? "Corea";
 
-  const [todayScore, summaries, tasksData, projectsData] = await Promise.all([
-    userId ? loadTodayScore(userId) : Promise.resolve(null),
-    userId ? loadSummaries(userId) : Promise.resolve(null),
-    userId ? getThisWeekTasks(userId).catch(() => []) : Promise.resolve([]),
-    userId ? getAllProjects(userId).catch(() => []) : Promise.resolve([]),
-  ]);
+  const [todayScore, summaries, tasksData, projectsData, vapesSummary] =
+    await Promise.all([
+      userId ? loadTodayScore(userId) : Promise.resolve(null),
+      userId ? loadSummaries(userId) : Promise.resolve(null),
+      userId ? getThisWeekTasks(userId).catch(() => []) : Promise.resolve([]),
+      userId ? getAllProjects(userId).catch(() => []) : Promise.resolve([]),
+      userId ? loadVapesSummary() : Promise.resolve(null),
+    ]);
 
   const activeProjects = projectsData.filter(
     (p) => p.status === "TODO" || p.status === "IN_PROGRESS",
@@ -261,6 +294,35 @@ export default async function DashboardPage() {
           );
         })}
       </div>
+
+      {/* Tira de Vapes (stock desde Nubez, sin score) */}
+      {vapesSummary && (
+        <div className="glass-card rounded-2xl p-3.5 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-[22px] text-[#a78bfa]">
+              storefront
+            </span>
+            <div>
+              <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-widest text-[#a78bfa]">
+                Vapes
+              </p>
+              <p className="text-[11px] text-on-surface-variant mt-0.5 leading-snug">
+                {vapesSummary.lowStock.length > 0
+                  ? `Por agotarse: ${vapesSummary.lowStock
+                      .map((p) => `${p.nombre} (${p.stock})`)
+                      .join(", ")}`
+                  : "Stock sin alertas"}
+              </p>
+            </div>
+          </div>
+          <p className="text-lg font-bold text-on-surface whitespace-nowrap">
+            {vapesSummary.totalStock}
+            <span className="text-xs font-normal text-on-surface-variant ml-1">
+              u.
+            </span>
+          </p>
+        </div>
+      )}
 
       {/* Bloque de Tareas (sin score) */}
       <div className="mb-6">

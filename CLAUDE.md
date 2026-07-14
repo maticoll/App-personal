@@ -64,7 +64,7 @@ Next.js (App Router) + TypeScript · Tailwind (dark + light, mobile-first) · Su
 - `agents/` — capa conversacional WhatsApp. Un directorio por módulo, exportados desde `agents/index.ts`. Cada agente expone `process(input: AgentInput): Promise<AgentOutput>` (tipos en `lib/types.ts`); llaman a `lib/` y devuelven **datos crudos**. `agents/prompts/` arma system prompts según objetivos del usuario.
 - `app/` — App Router. Páginas en `app/(app)/<modulo>/page.tsx` (Server Components con carga paralela `Promise.all` → `*ModuleClient.tsx`). API en `app/api/<modulo>/...`. Crons en `app/api/cron/...`.
 
-**3. Orquestrador WhatsApp (HERMES) — `lib/orchestrator.ts`.** Flujo de `orchestrate(userId, text)`: 0. **Bypass de pending:** si hay `PendingTransaction` activa → directo a `financesAgent.handleConfirmation` (sin clasificar).
+**3. Orquestrador WhatsApp (HERMES) — `lib/orchestrator.ts`.** Flujo de `orchestrate(userId, text)`: 0. **Bypass de pending:** si hay `PendingTransaction` activa → directo a `financesAgent.handleConfirmation` (sin clasificar). **Fast-paths sin IA** (`tryFastPath`): "sync" (sincroniza Garmin sueño+actividades+pasos y Notion en paralelo), "tomé un termo", "me desperté"/"me voy a dormir" — regex estricta + template, 0 llamadas a Claude.
 
 1.  Carga contexto (`lib/conversation.ts`: rolling window K=8 + summary) + objetivos en paralelo.
 2.  **Clasificación con Haiku** → módulo (`MODULE_DESCRIPTIONS`).

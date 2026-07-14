@@ -28,7 +28,12 @@ import { scoringAgent } from "@/agents/scoring";
 import { calendarAgent } from "@/agents/calendar";
 import { financesAgent } from "@/agents/finances";
 import { synthesisAgent } from "@/agents/synthesis";
-import { vapesAgent, looksLikeVapeMessage, handleBuyerReply, handleClarify } from "@/agents/vapes";
+import {
+  vapesAgent,
+  looksLikeVapeMessage,
+  handleBuyerReply,
+  handleClarify,
+} from "@/agents/vapes";
 import { getVapePending } from "@/lib/pending-vape";
 import { getGoals } from "@/lib/goals";
 import { buildOrchestratorPrompt } from "@/agents/prompts";
@@ -40,6 +45,15 @@ import {
 } from "@/lib/conversation";
 import { getPending } from "@/lib/pending-transaction";
 import { callClaude } from "@/lib/claude";
+import { logWater } from "@/lib/nutrition";
+import {
+  syncGarminSleepRange,
+  fetchGarminActivities,
+  fetchGarminDailySteps,
+} from "@/lib/garmin";
+import { upsertWorkoutFromGarmin, upsertDailySteps } from "@/lib/fitness";
+import { syncNotionToProjects } from "@/lib/notion";
+import { uyDateKey, addDays } from "@/lib/dates";
 
 type Module =
   | "sleep"
@@ -54,16 +68,26 @@ type Module =
   | "general";
 
 const MODULE_DESCRIPTIONS: Record<Module, string> = {
-  sleep:     "El usuario habla de dormir, despertar, horas de sueño, cansancio, Garmin o descanso",
-  fitness:   "El usuario habla de gym, ejercicio, cardio, correr, nadar, entrenar, pasos, o rutinas (incluye pedir/traer una rutina por nombre como 'tráeme push A', o mandar la rutina que hizo con pesos y repeticiones para registrarla)",
-  nutrition: "El usuario habla de comida, comer, agua, hidratacion, dieta, calorías o macros",
-  projects:  "El usuario habla de proyectos, tareas, trabajo, Notion, pendientes o deadlines",
-  ideas:     "El usuario quiere capturar, anotar o explorar una idea, pensamiento u ocurrencia",
-  scoring:   "El usuario pregunta por su score, puntaje, rendimiento o estadísticas del día",
-  calendar:  "El usuario habla de agenda, calendario, eventos, reuniones, quiere agendar algo, o pide un recordatorio (recordame, avisame, acordame)",
-  finances:  "El usuario habla de dinero, gastos, ingresos, balance, plata, compras, pagos o finanzas",
-  synthesis: "El usuario pide un análisis global, patrones entre módulos, recomendaciones generales o un resumen de su semana",
-  general:   "Saludos, preguntas generales, ayuda, o mensajes que no encajan en otro módulo",
+  sleep:
+    "El usuario habla de dormir, despertar, horas de sueño, cansancio, Garmin o descanso",
+  fitness:
+    "El usuario habla de gym, ejercicio, cardio, correr, nadar, entrenar, pasos, o rutinas (incluye pedir/traer una rutina por nombre como 'tráeme push A', o mandar la rutina que hizo con pesos y repeticiones para registrarla)",
+  nutrition:
+    "El usuario habla de comida, comer, agua, hidratacion, dieta, calorías o macros",
+  projects:
+    "El usuario habla de proyectos, tareas, trabajo, Notion, pendientes o deadlines",
+  ideas:
+    "El usuario quiere capturar, anotar o explorar una idea, pensamiento u ocurrencia",
+  scoring:
+    "El usuario pregunta por su score, puntaje, rendimiento o estadísticas del día",
+  calendar:
+    "El usuario habla de agenda, calendario, eventos, reuniones, quiere agendar algo, o pide un recordatorio (recordame, avisame, acordame)",
+  finances:
+    "El usuario habla de dinero, gastos, ingresos, balance, plata, compras, pagos o finanzas",
+  synthesis:
+    "El usuario pide un análisis global, patrones entre módulos, recomendaciones generales o un resumen de su semana",
+  general:
+    "Saludos, preguntas generales, ayuda, o mensajes que no encajan en otro módulo",
 };
 
 // -------------------------------------------------------
@@ -74,7 +98,9 @@ async function classifyModule(text: string): Promise<Module> {
     .map(([k, v]) => `${k}: ${v}`)
     .join("\n");
 
-  const validModules = (Object.keys(MODULE_DESCRIPTIONS) as Module[]).join(", ");
+  const validModules = (Object.keys(MODULE_DESCRIPTIONS) as Module[]).join(
+    ", ",
+  );
 
   const result = await callClaude({
     model: "claude-haiku-4-5-20251001",
@@ -89,8 +115,11 @@ async function classifyModule(text: string): Promise<Module> {
         content:
           "Módulos disponibles:\n" +
           moduleList +
-          "\n\nMensaje del usuario: \"" + text + "\"\n\n" +
-          "Responde SOLO con uno de estos: " + validModules,
+          '\n\nMensaje del usuario: "' +
+          text +
+          '"\n\n' +
+          "Responde SOLO con uno de estos: " +
+          validModules,
       },
     ],
   });
@@ -118,9 +147,14 @@ async function callSpecialistAgent(
   module: Module,
   userId: string,
   text: string,
-  conversationContext?: string
+  conversationContext?: string,
 ): Promise<AgentResult> {
-  const input = { userId, message: text, timestamp: new Date(), context: conversationContext };
+  const input = {
+    userId,
+    message: text,
+    timestamp: new Date(),
+    context: conversationContext,
+  };
 
   const GENERAL_HELP =
     "HERMES puede ayudar con: sueño (registrar, Garmin), fitness (gym, cardio), " +
@@ -135,18 +169,26 @@ async function callSpecialistAgent(
       }
       case "fitness": {
         const result = await fitnessAgent.process(input);
-        const verbatim = !!(result.data as { verbatim?: boolean } | undefined)?.verbatim;
+        const verbatim = !!(result.data as { verbatim?: boolean } | undefined)
+          ?.verbatim;
         return { text: result.message, verbatim };
       }
       case "nutrition": {
-        return { text: await processNutritionMessage(userId, text), verbatim: false };
+        return {
+          text: await processNutritionMessage(userId, text),
+          verbatim: false,
+        };
       }
       case "projects": {
-        return { text: await processProjectsMessage(userId, text), verbatim: false };
+        return {
+          text: await processProjectsMessage(userId, text),
+          verbatim: false,
+        };
       }
       case "ideas": {
         const result = await ideasAgent.process(input);
-        const verbatim = !!(result.data as { verbatim?: boolean } | undefined)?.verbatim;
+        const verbatim = !!(result.data as { verbatim?: boolean } | undefined)
+          ?.verbatim;
         return { text: result.message, verbatim };
       }
       case "scoring": {
@@ -162,7 +204,10 @@ async function callSpecialistAgent(
         return { text: result.message, verbatim: false };
       }
       case "synthesis": {
-        return { text: await synthesisAgent.getSynthesisText(userId, 7), verbatim: false };
+        return {
+          text: await synthesisAgent.getSynthesisText(userId, 7),
+          verbatim: false,
+        };
       }
       case "general":
       default:
@@ -182,7 +227,7 @@ async function generateFinalResponse(
   systemPrompt: string,
   conversationContext: string,
   userMessage: string,
-  agentData: string
+  agentData: string,
 ): Promise<string> {
   const contextSection = conversationContext
     ? `\n\n${conversationContext}\n\n---`
@@ -214,26 +259,153 @@ async function generateFinalResponse(
 }
 
 // -------------------------------------------------------
+// Fast-paths sin IA — mensajes frecuentes y de formato fijo.
+// Se resuelven con regex + lib directa: 0 llamadas a Claude
+// (vs 3 del flujo normal: clasificador + intent + Sonnet).
+// Devuelve null si el mensaje no matchea ningún fast-path.
+// -------------------------------------------------------
+
+/** "sync" global: Garmin (sueño + actividades + pasos) y Notion en paralelo. */
+async function runGlobalSync(userId: string): Promise<string> {
+  const today = uyDateKey();
+  const yesterday = uyDateKey(addDays(new Date(), -1));
+
+  const syncFitnessDay = async (dateStr: string): Promise<number> => {
+    const activities = await fetchGarminActivities(userId, dateStr);
+    for (const a of activities) {
+      await upsertWorkoutFromGarmin(userId, a);
+    }
+    const daily = await fetchGarminDailySteps(userId, dateStr).catch(
+      () => null,
+    );
+    if (daily) await upsertDailySteps(userId, dateStr, daily.totalSteps);
+    return activities.length;
+  };
+
+  const [sleepRes, fitYesterday, fitToday, notionRes] =
+    await Promise.allSettled([
+      syncGarminSleepRange(userId, addDays(new Date(), -2), new Date()),
+      syncFitnessDay(yesterday),
+      syncFitnessDay(today),
+      syncNotionToProjects(userId),
+    ]);
+
+  const lines: string[] = ["🔄 Sync completo:"];
+
+  if (sleepRes.status === "fulfilled") {
+    lines.push("• Sueño Garmin: sincronizado ✓");
+  } else {
+    lines.push("• Sueño Garmin: falló");
+  }
+
+  if (fitYesterday.status === "fulfilled" || fitToday.status === "fulfilled") {
+    const count =
+      (fitYesterday.status === "fulfilled" ? fitYesterday.value : 0) +
+      (fitToday.status === "fulfilled" ? fitToday.value : 0);
+    lines.push(
+      count > 0
+        ? `• Actividades Garmin: ${count} importada${count > 1 ? "s" : ""} ✓`
+        : "• Actividades Garmin: sin novedades ✓",
+    );
+  } else {
+    lines.push("• Actividades Garmin: falló");
+  }
+
+  if (notionRes.status === "fulfilled") {
+    const n = notionRes.value;
+    const parts: string[] = [];
+    if (n.created > 0) parts.push(`${n.created} creados`);
+    if (n.updated > 0) parts.push(`${n.updated} actualizados`);
+    lines.push(
+      `• Notion: ${parts.length > 0 ? parts.join(", ") + " ✓" : "sin cambios ✓"}`,
+    );
+  } else {
+    lines.push("• Notion: falló");
+  }
+
+  return lines.join("\n");
+}
+
+async function tryFastPath(
+  userId: string,
+  text: string,
+): Promise<string | null> {
+  const t = text.trim().toLowerCase();
+
+  // "sync" / "sincronizar" / "sincroniza todo" — sync global de integraciones
+  if (/^(sync|sincronizar|sincroniza(r)?( todo)?)\s*[.!]?$/i.test(t)) {
+    return runGlobalSync(userId);
+  }
+
+  // "tomé un termo" / "medio termo" / "2 termos" — agua directo a la lib
+  const waterMatch = t.match(
+    /^(?:me\s+)?tom[eé]\s+(?:(un|1|medio|[\d.,]+)\s+)?termos?(?:\s+de\s+agua)?\s*[.!]?$/i,
+  );
+  if (waterMatch) {
+    const raw = waterMatch[1];
+    const thermos =
+      raw === "medio"
+        ? 0.5
+        : raw && raw !== "un" && raw !== "1"
+          ? Math.min(parseFloat(raw.replace(",", ".")) || 1, 5)
+          : 1;
+    const result = await logWater(userId, thermos);
+    const done = result.totalThermos >= result.goal;
+    return (
+      `💧 +${thermos} termo${thermos !== 1 ? "s" : ""}. ` +
+      `Llevás ${result.totalThermos.toFixed(1)}/${result.goal.toFixed(1)} hoy.` +
+      (done ? " Meta cumplida! 🎯" : "")
+    );
+  }
+
+  // "me desperté" / "me voy a dormir" (sin hora) — directo al agente de sueño
+  if (
+    /^me despert[eé]\s*[.!]?$/i.test(t) ||
+    /^me levant[eé]\s*[.!]?$/i.test(t)
+  ) {
+    const result = await sleepAgent.handleWakeTime(userId);
+    return result.message;
+  }
+  if (/^me voy a dormir\s*[.!]?$/i.test(t) || /^a dormir\s*[.!]?$/i.test(t)) {
+    const result = await sleepAgent.handleBedTime(userId);
+    return result.message;
+  }
+
+  return null;
+}
+
+// -------------------------------------------------------
 // orchestrate — Función principal
 // -------------------------------------------------------
-export async function orchestrate(userId: string, text: string): Promise<string> {
+export async function orchestrate(
+  userId: string,
+  text: string,
+): Promise<string> {
   console.log(`[orchestrator] userId=${userId} texto="${text}"`);
 
   // 0.0 Pendiente de vapes (esperando el nombre del comprador) — antes que finanzas.
   //     Si hay uno activo, este mensaje es el nombre del comprador.
   const vapePending = await getVapePending(userId).catch(() => null);
   if (vapePending) {
-    console.log(`[orchestrator] Vape pending (${vapePending.kind}) — desviando al agente de vapes`);
+    console.log(
+      `[orchestrator] Vape pending (${vapePending.kind}) — desviando al agente de vapes`,
+    );
     const response =
       vapePending.kind === "vape_clarify"
         ? await handleClarify(userId, text, vapePending)
         : await handleBuyerReply(userId, text, vapePending);
     await Promise.all([
       addTurn(userId, "user", text).catch((err) =>
-        console.error("[orchestrator] Error guardando turno user (vape-pending):", err)
+        console.error(
+          "[orchestrator] Error guardando turno user (vape-pending):",
+          err,
+        ),
       ),
       addTurn(userId, "assistant", response).catch((err) =>
-        console.error("[orchestrator] Error guardando turno assistant (vape-pending):", err)
+        console.error(
+          "[orchestrator] Error guardando turno assistant (vape-pending):",
+          err,
+        ),
       ),
     ]);
     return response;
@@ -245,17 +417,60 @@ export async function orchestrate(userId: string, text: string): Promise<string>
   //    Se bypasea Haiku + Sonnet y se responde directo.
   const pending = await getPending(userId).catch(() => null);
   if (pending) {
-    console.log(`[orchestrator] Pending transaction encontrada (step: ${pending.step}) — desviando a financesAgent.handleConfirmation`);
-    const response = await financesAgent.handleConfirmation(userId, text, pending);
+    console.log(
+      `[orchestrator] Pending transaction encontrada (step: ${pending.step}) — desviando a financesAgent.handleConfirmation`,
+    );
+    const response = await financesAgent.handleConfirmation(
+      userId,
+      text,
+      pending,
+    );
     await Promise.all([
       addTurn(userId, "user", text).catch((err) =>
-        console.error("[orchestrator] Error guardando turno user (pending):", err)
+        console.error(
+          "[orchestrator] Error guardando turno user (pending):",
+          err,
+        ),
       ),
       addTurn(userId, "assistant", response).catch((err) =>
-        console.error("[orchestrator] Error guardando turno assistant (pending):", err)
+        console.error(
+          "[orchestrator] Error guardando turno assistant (pending):",
+          err,
+        ),
       ),
     ]);
     return response;
+  }
+
+  // 0.3. Fast-paths sin IA (sync global, agua, dormir/despertar simples).
+  //    Regex estricta sobre mensajes de formato fijo: responde con template,
+  //    sin clasificador ni Sonnet. Si no matchea, sigue el flujo normal.
+  try {
+    const fastResponse = await tryFastPath(userId, text);
+    if (fastResponse) {
+      console.log("[orchestrator] Fast-path resuelto sin IA");
+      await Promise.all([
+        addTurn(userId, "user", text).catch((err) =>
+          console.error(
+            "[orchestrator] Error guardando turno user (fast-path):",
+            err,
+          ),
+        ),
+        addTurn(userId, "assistant", fastResponse).catch((err) =>
+          console.error(
+            "[orchestrator] Error guardando turno assistant (fast-path):",
+            err,
+          ),
+        ),
+      ]);
+      return fastResponse;
+    }
+  } catch (err) {
+    // Si un fast-path explota, caer al flujo normal (el clasificador decide)
+    console.error(
+      "[orchestrator] Error en fast-path — sigo flujo normal:",
+      err,
+    );
   }
 
   // 0.5. Fast-path de vapes (registro de ventas/compras de stock).
@@ -264,16 +479,27 @@ export async function orchestrate(userId: string, text: string): Promise<string>
   //    sin IA. Si el agente determina que NO es un movimiento de vapes (notVapes),
   //    se cae al flujo normal de clasificación.
   if (looksLikeVapeMessage(text)) {
-    const result = await vapesAgent.process({ userId, message: text, timestamp: new Date() });
-    const notVapes = !!(result.data as { notVapes?: boolean } | undefined)?.notVapes;
+    const result = await vapesAgent.process({
+      userId,
+      message: text,
+      timestamp: new Date(),
+    });
+    const notVapes = !!(result.data as { notVapes?: boolean } | undefined)
+      ?.notVapes;
     if (!notVapes) {
       const finalResponse = result.message;
       await Promise.all([
         addTurn(userId, "user", text).catch((err) =>
-          console.error("[orchestrator] Error guardando turno user (vapes):", err)
+          console.error(
+            "[orchestrator] Error guardando turno user (vapes):",
+            err,
+          ),
         ),
         addTurn(userId, "assistant", finalResponse).catch((err) =>
-          console.error("[orchestrator] Error guardando turno assistant (vapes):", err)
+          console.error(
+            "[orchestrator] Error guardando turno assistant (vapes):",
+            err,
+          ),
         ),
       ]);
       return finalResponse;
@@ -284,7 +510,9 @@ export async function orchestrate(userId: string, text: string): Promise<string>
   const [ctx, goals, userRecord] = await Promise.all([
     getConversationContext(userId),
     getGoals(userId).catch(() => null),
-    db.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null),
+    db.user
+      .findUnique({ where: { id: userId }, select: { name: true } })
+      .catch(() => null),
   ]);
 
   // Primer nombre del usuario para los prompts (fallback a "vos")
@@ -292,7 +520,7 @@ export async function orchestrate(userId: string, text: string): Promise<string>
 
   // 2. Guardar el turno del usuario en memoria (no bloqueante en paralelo con el resto)
   const saveUserTurn = addTurn(userId, "user", text).catch((err) =>
-    console.error("[orchestrator] Error guardando turno user:", err)
+    console.error("[orchestrator] Error guardando turno user:", err),
   );
 
   // 3. Clasificar módulo (Haiku, rápido)
@@ -303,7 +531,12 @@ export async function orchestrate(userId: string, text: string): Promise<string>
   const conversationContext = formatContextForPrompt(ctx);
 
   // 4. Ejecutar agente especialista (pasa contexto para módulos que lo necesitan)
-  const agent = await callSpecialistAgent(module, userId, text, conversationContext);
+  const agent = await callSpecialistAgent(
+    module,
+    userId,
+    text,
+    conversationContext,
+  );
 
   // 5. Generar respuesta natural con Claude Sonnet (si hay goals cargados).
   //    Si el agente marcó la respuesta como verbatim (ej: "tráeme push A" con
@@ -313,13 +546,17 @@ export async function orchestrate(userId: string, text: string): Promise<string>
   if (agent.verbatim) {
     finalResponse = agent.text;
   } else if (goals) {
-    const systemPrompt = buildOrchestratorPrompt(goals, ctx.summary ?? undefined, userName);
+    const systemPrompt = buildOrchestratorPrompt(
+      goals,
+      ctx.summary ?? undefined,
+      userName,
+    );
 
     finalResponse = await generateFinalResponse(
       systemPrompt,
       conversationContext,
       text,
-      agent.text
+      agent.text,
     );
   } else {
     finalResponse = agent.text;
@@ -329,7 +566,7 @@ export async function orchestrate(userId: string, text: string): Promise<string>
   await Promise.all([
     saveUserTurn,
     addTurn(userId, "assistant", finalResponse).catch((err) =>
-      console.error("[orchestrator] Error guardando turno assistant:", err)
+      console.error("[orchestrator] Error guardando turno assistant:", err),
     ),
   ]);
 

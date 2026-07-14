@@ -22,6 +22,7 @@ import { sleepAgent } from "@/agents/sleep";
 import { synthesisAgent } from "@/agents/synthesis";
 import { getNutritionSummaryText } from "@/lib/nutrition";
 import { getTodayEventsText } from "@/lib/calendar";
+import { getThisWeekTasks } from "@/lib/tasks";
 import { callClaude } from "@/lib/claude";
 import { addDays } from "@/lib/dates";
 import { logger } from "@/lib/logger";
@@ -106,6 +107,7 @@ type MessageParts = {
   sleepText: string | null;
   nutritionText: string | null;
   agendaText: string | null;
+  tasksText: string | null;
   insightText: string | null;
   motivation: string;
 };
@@ -154,6 +156,12 @@ function buildMessage(parts: MessageParts): string {
     lines.push(parts.agendaText);
   }
 
+  // 6.5. Tareas pendientes de la semana
+  if (parts.tasksText) {
+    lines.push("");
+    lines.push(parts.tasksText);
+  }
+
   // 7. Insight de síntesis (patrones cross-módulo)
   if (parts.insightText) {
     lines.push("");
@@ -165,6 +173,7 @@ function buildMessage(parts: MessageParts): string {
     parts.sleepText ||
     parts.nutritionText ||
     parts.agendaText ||
+    parts.tasksText ||
     parts.insightText
   ) {
     lines.push("");
@@ -174,6 +183,28 @@ function buildMessage(parts: MessageParts): string {
   lines.push("💬 " + parts.motivation);
 
   return lines.join("\n");
+}
+
+// -------------------------------------------------------
+// getTasksText — tareas pendientes de la semana (máx 5)
+// Retorna null si no hay pendientes, para omitir la sección
+// -------------------------------------------------------
+
+async function getTasksText(userId: string): Promise<string | null> {
+  try {
+    const tasks = await getThisWeekTasks(userId);
+    const pending = tasks.filter((t) => !t.done);
+    if (pending.length === 0) return null;
+
+    const lines = [`📋 Tareas pendientes (${pending.length}):`];
+    for (const t of pending.slice(0, 5)) {
+      lines.push(`• ${t.title}`);
+    }
+    if (pending.length > 5) lines.push(`...y ${pending.length - 5} más`);
+    return lines.join("\n");
+  } catch {
+    return null;
+  }
 }
 
 // -------------------------------------------------------
@@ -240,6 +271,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           sleepText,
           nutritionText,
           agendaText,
+          tasksText,
           insightText,
         ] = await Promise.allSettled([
           fetchVerse(),
@@ -247,6 +279,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           sleepAgent.getSleepSummaryText(s.userId),
           getNutritionSummaryText(s.userId, yesterday),
           getTodayEventsText(s.userId),
+          getTasksText(s.userId),
           synthesisAgent.getDailyInsight(s.userId),
         ]);
 
@@ -259,6 +292,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           nutritionText.status === "fulfilled" ? nutritionText.value : null;
         const agendaValue =
           agendaText.status === "fulfilled" ? agendaText.value : null;
+        const tasksValue =
+          tasksText.status === "fulfilled" ? tasksText.value : null;
         const insightValue =
           insightText.status === "fulfilled" ? insightText.value : null;
 
@@ -278,6 +313,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           sleepText: sleepValue,
           nutritionText: nutritionValue,
           agendaText: agendaValue,
+          tasksText: tasksValue,
           insightText: insightValue,
           motivation,
         });

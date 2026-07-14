@@ -12,6 +12,7 @@ import {
   getTodayProjectsSummary,
 } from "@/lib/projects";
 import { syncNotionToProjects } from "@/lib/notion";
+import { getThisWeekTasks, getTasksStats } from "@/lib/tasks";
 import type { AgentInput, AgentOutput } from "@/lib/types";
 import { detectIntentAI } from "@/lib/nlp";
 import { getGoals } from "@/lib/goals";
@@ -43,24 +44,34 @@ type Intention =
   | "update_status"
   | "task_done"
   | "query"
+  | "list_tasks"
   | "sync_notion"
   | "unknown";
 
-async function detectIntention(text: string, systemPrompt?: string): Promise<Intention> {
+async function detectIntention(
+  text: string,
+  systemPrompt?: string,
+): Promise<Intention> {
   const intent = await detectIntentAI(
     `Eres el agente de proyectos de una app personal.
 IMPORTANTE: una TAREA es una acción concreta que pertenece a un proyecto (ej: "hacer el mockup", "llamar al cliente"). Un PROYECTO es un objetivo mayor o iniciativa (ej: "lanzar la web", "rediseñar la app").`,
     {
-      create_project: "El usuario quiere crear un nuevo PROYECTO (iniciativa, objetivo, área de trabajo)",
-      create_task: "El usuario quiere agregar una TAREA o ítem concreto a un proyecto existente",
-      update_status: "El usuario quiere cambiar el estado de un proyecto (en progreso, hecho, archivado)",
+      create_project:
+        "El usuario quiere crear un nuevo PROYECTO (iniciativa, objetivo, área de trabajo)",
+      create_task:
+        "El usuario quiere agregar una TAREA o ítem concreto a un proyecto existente",
+      update_status:
+        "El usuario quiere cambiar el estado de un proyecto (en progreso, hecho, archivado)",
       task_done: "El usuario marcó una tarea como completada o terminada",
-      query: "El usuario pregunta por sus proyectos, tareas pendientes o estado general",
+      query:
+        "El usuario pregunta por sus PROYECTOS o su estado general (ej: 'mis proyectos', 'cómo van los proyectos')",
+      list_tasks:
+        "El usuario pregunta por sus TAREAS pendientes o de la semana (ej: 'qué tareas tengo', 'mis tareas', 'qué me queda pendiente esta semana')",
       sync_notion: "El usuario quiere sincronizar con Notion",
       unknown: "Otro mensaje no relacionado a proyectos",
     },
     text,
-    systemPrompt
+    systemPrompt,
   );
   return intent as Intention;
 }
@@ -69,10 +80,15 @@ IMPORTANTE: una TAREA es una acción concreta que pertenece a un proyecto (ej: "
 // Handlers por intención
 // -------------------------------------------------------
 
-async function handleCreateProject(userId: string, text: string): Promise<string> {
+async function handleCreateProject(
+  userId: string,
+  text: string,
+): Promise<string> {
   // Acepta: "nuevo proyecto: X", "crear proyecto X", "agregar proyecto X"
   const match = text.match(/(?:nuevo|crear?|agregar?)\s+proyecto[:\s]+(.+)/i);
-  const title = match?.[1]?.trim() ?? text.replace(/nuevo|crear?|agregar?|proyecto/gi, "").trim();
+  const title =
+    match?.[1]?.trim() ??
+    text.replace(/nuevo|crear?|agregar?|proyecto/gi, "").trim();
 
   if (!title) {
     return "¿Cómo se llama el proyecto que querés crear?";
@@ -88,7 +104,9 @@ async function handleCreateProject(userId: string, text: string): Promise<string
  */
 function extractTaskList(text: string): string[] {
   // Separar la cabecera ("agrega las siguientes tareas:") del contenido
-  const bodyMatch = text.match(/(?:tareas?[:\s]+|siguiente[s]?[:\s]+)([\s\S]+)/i);
+  const bodyMatch = text.match(
+    /(?:tareas?[:\s]+|siguiente[s]?[:\s]+)([\s\S]+)/i,
+  );
   const body = bodyMatch?.[1] ?? text;
 
   const lines = body
@@ -102,7 +120,7 @@ function extractTaskList(text: string): string[] {
 async function handleCreateTask(userId: string, text: string): Promise<string> {
   const projects = await getAllProjects(userId);
   const activeProjects = projects.filter(
-    (p) => p.status === "TODO" || p.status === "IN_PROGRESS"
+    (p) => p.status === "TODO" || p.status === "IN_PROGRESS",
   );
 
   if (activeProjects.length === 0) {
@@ -117,9 +135,10 @@ async function handleCreateTask(userId: string, text: string): Promise<string> {
   }
 
   // --- Tarea única ---
-  const taskMatch = text.match(
-    /(?:nueva?|crear?|agregar?|añadir?)\s+tarea[:\s]+(.+?)(?:\s+(?:en|a|al|para)\s+(.+))?$/i
-  ) ?? text.match(/tarea[:\s]+(.+?)(?:\s+(?:en|a|al|para)\s+(.+))?$/i);
+  const taskMatch =
+    text.match(
+      /(?:nueva?|crear?|agregar?|añadir?)\s+tarea[:\s]+(.+?)(?:\s+(?:en|a|al|para)\s+(.+))?$/i,
+    ) ?? text.match(/tarea[:\s]+(.+?)(?:\s+(?:en|a|al|para)\s+(.+))?$/i);
 
   let taskTitle = taskMatch?.[1]?.trim();
   const projectHint = taskMatch?.[2]?.trim();
@@ -135,7 +154,9 @@ async function handleCreateTask(userId: string, text: string): Promise<string> {
   }
 
   let targetProject = projectHint
-    ? activeProjects.find((p) => normalize(p.title).includes(normalize(projectHint)))
+    ? activeProjects.find((p) =>
+        normalize(p.title).includes(normalize(projectHint)),
+      )
     : null;
 
   if (!targetProject && activeProjects.length === 1) {
@@ -145,7 +166,10 @@ async function handleCreateTask(userId: string, text: string): Promise<string> {
   if (!targetProject) {
     return (
       `¿En qué proyecto va la tarea "${taskTitle}"?\n` +
-      activeProjects.slice(0, 5).map((p) => `• ${p.title}`).join("\n")
+      activeProjects
+        .slice(0, 5)
+        .map((p) => `• ${p.title}`)
+        .join("\n")
     );
   }
 
@@ -156,16 +180,18 @@ async function handleCreateTask(userId: string, text: string): Promise<string> {
 async function handleCreateTasksBulk(
   userId: string,
   text: string,
-  activeProjects: Awaited<ReturnType<typeof getAllProjects>>
+  activeProjects: Awaited<ReturnType<typeof getAllProjects>>,
 ): Promise<string> {
   // Detectar proyecto mencionado en la cabecera
   const headerProjectMatch = text.match(
-    /(?:en|a|al|para)\s+(?:el\s+proyecto\s+)?[""]?([^:\n]+?)[""]?\s*[:\n]/i
+    /(?:en|a|al|para)\s+(?:el\s+proyecto\s+)?[""]?([^:\n]+?)[""]?\s*[:\n]/i,
   );
   const projectHint = headerProjectMatch?.[1]?.trim();
 
   let targetProject = projectHint
-    ? activeProjects.find((p) => normalize(p.title).includes(normalize(projectHint)))
+    ? activeProjects.find((p) =>
+        normalize(p.title).includes(normalize(projectHint)),
+      )
     : null;
 
   if (!targetProject && activeProjects.length === 1) {
@@ -181,20 +207,26 @@ async function handleCreateTasksBulk(
   if (!targetProject) {
     return (
       `¿En qué proyecto van estas ${taskTitles.length} tareas?\n` +
-      activeProjects.slice(0, 5).map((p) => `• ${p.title}`).join("\n")
+      activeProjects
+        .slice(0, 5)
+        .map((p) => `• ${p.title}`)
+        .join("\n")
     );
   }
 
   // Crear todas en paralelo
   await Promise.all(
-    taskTitles.map((title) => createTask(targetProject!.id, userId, title))
+    taskTitles.map((title) => createTask(targetProject!.id, userId, title)),
   );
 
   const list = taskTitles.map((t) => `• ${t}`).join("\n");
   return `✅ ${taskTitles.length} tareas agregadas al proyecto "${targetProject.title}":\n${list}`;
 }
 
-async function handleUpdateStatus(userId: string, text: string): Promise<string> {
+async function handleUpdateStatus(
+  userId: string,
+  text: string,
+): Promise<string> {
   const projects = await getAllProjects(userId);
 
   if (projects.length === 0) {
@@ -204,7 +236,8 @@ async function handleUpdateStatus(userId: string, text: string): Promise<string>
   const n = normalize(text);
 
   let newStatus: "TODO" | "IN_PROGRESS" | "DONE" | "ARCHIVED" | null = null;
-  if (/en progreso|empece|inicio|comenzar|in.progress/.test(n)) newStatus = "IN_PROGRESS";
+  if (/en progreso|empece|inicio|comenzar|in.progress/.test(n))
+    newStatus = "IN_PROGRESS";
   else if (/termin|complet|hecho|done|listo/.test(n)) newStatus = "DONE";
   else if (/archiv/.test(n)) newStatus = "ARCHIVED";
   else if (/todo|pendiente|por hacer/.test(n)) newStatus = "TODO";
@@ -214,7 +247,7 @@ async function handleUpdateStatus(userId: string, text: string): Promise<string>
   }
 
   let projectToUpdate = projects.find((p) =>
-    normalize(text).includes(normalize(p.title))
+    normalize(text).includes(normalize(p.title)),
   );
 
   if (!projectToUpdate) {
@@ -222,7 +255,7 @@ async function handleUpdateStatus(userId: string, text: string): Promise<string>
       projectToUpdate = projects[0];
     } else {
       const activeProjects = projects.filter(
-        (p) => p.status === "TODO" || p.status === "IN_PROGRESS"
+        (p) => p.status === "TODO" || p.status === "IN_PROGRESS",
       );
       if (activeProjects.length === 1) {
         projectToUpdate = activeProjects[0];
@@ -274,7 +307,7 @@ async function handleTaskDone(userId: string, text: string): Promise<string> {
     const allTasks = projects.flatMap((p) =>
       p.tasks
         .filter((t) => !t.done)
-        .map((t) => ({ ...t, projectTitle: p.title }))
+        .map((t) => ({ ...t, projectTitle: p.title })),
     );
 
     if (allTasks.length === 0) {
@@ -333,6 +366,50 @@ async function handleQuery(userId: string): Promise<string> {
   return lines.join("\n").trim();
 }
 
+async function handleListTasks(userId: string): Promise<string> {
+  const [tasks, stats] = await Promise.all([
+    getThisWeekTasks(userId),
+    getTasksStats(userId),
+  ]);
+
+  const pending = tasks.filter((t) => !t.done);
+  const doneToday = tasks.filter((t) => t.done);
+
+  if (pending.length === 0 && doneToday.length === 0) {
+    return "No tenés tareas pendientes esta semana. 🎉";
+  }
+
+  const lines: string[] = [];
+
+  if (pending.length > 0) {
+    lines.push(`📋 Tareas pendientes (${pending.length}):`);
+    for (const t of pending.slice(0, 8)) {
+      lines.push(`• ${t.title} (${t.projectName})`);
+    }
+    if (pending.length > 8) {
+      lines.push(`...y ${pending.length - 8} más`);
+    }
+  } else {
+    lines.push("📋 Sin tareas pendientes.");
+  }
+
+  if (doneToday.length > 0) {
+    lines.push("");
+    lines.push(
+      `✅ Completadas hoy: ${doneToday.map((t) => t.title).join(", ")}`,
+    );
+  }
+
+  if (stats.completedThisWeek > 0) {
+    lines.push("");
+    lines.push(
+      `Esta semana completaste ${stats.completedThisWeek} tarea${stats.completedThisWeek > 1 ? "s" : ""}.`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
 async function handleSyncNotion(userId: string): Promise<string> {
   const result = await syncNotionToProjects(userId);
 
@@ -357,7 +434,7 @@ async function handleSyncNotion(userId: string): Promise<string> {
 
 export async function processProjectsMessage(
   userId: string,
-  text: string
+  text: string,
 ): Promise<string> {
   const goals = await getGoals(userId).catch(() => null);
   const systemPrompt = goals ? buildProjectsPrompt(goals) : undefined;
@@ -374,6 +451,8 @@ export async function processProjectsMessage(
       return handleTaskDone(userId, text);
     case "query":
       return handleQuery(userId);
+    case "list_tasks":
+      return handleListTasks(userId);
     case "sync_notion":
       return handleSyncNotion(userId);
     default:
@@ -384,6 +463,7 @@ export async function processProjectsMessage(
         '• "moví [proyecto] a en progreso"\n' +
         '• "terminé la tarea [nombre]"\n' +
         '• "mis proyectos"\n' +
+        '• "mis tareas" / "qué tengo pendiente"\n' +
         '• "sync notion"'
       );
   }
@@ -394,7 +474,7 @@ export async function processProjectsMessage(
  */
 export async function getProjectsSummaryText(
   userId: string,
-  _date?: Date
+  _date?: Date,
 ): Promise<string> {
   return getTodayProjectsSummary(userId);
 }
@@ -412,7 +492,10 @@ export const projectsAgent = {
     return { success: true, message: result };
   },
 
-  async onGoalsUpdate(_userId: string, _goals: import("@prisma/client").UserGoals): Promise<{ ok: boolean }> {
+  async onGoalsUpdate(
+    _userId: string,
+    _goals: import("@prisma/client").UserGoals,
+  ): Promise<{ ok: boolean }> {
     return { ok: true };
   },
 };
