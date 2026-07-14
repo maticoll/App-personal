@@ -10,24 +10,36 @@ import crypto from "crypto";
  * @param rawBody   Cuerpo del request como texto crudo (NO re-serializado)
  * @param signature Valor del header "x-hub-signature-256"
  * @returns true si la firma es válida. Si WHATSAPP_APP_SECRET no está
- *          configurado, devuelve true (omite la validación) y loguea un aviso.
+ *          configurado: en producción RECHAZA (fail-closed — sin firma
+ *          cualquiera puede inyectar mensajes al orquestrador); en dev
+ *          permite pasar para poder probar sin el secret.
  */
 export function verifyWebhookSignature(
   rawBody: string,
-  signature: string | null
+  signature: string | null,
 ): boolean {
   const appSecret = process.env.WHATSAPP_APP_SECRET;
   if (!appSecret) {
-    console.warn("[whatsapp] WHATSAPP_APP_SECRET no configurado — firma del webhook NO validada");
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        "[whatsapp] WHATSAPP_APP_SECRET falta en producción — webhook RECHAZADO (fail-closed)",
+      );
+      return false;
+    }
+    console.warn(
+      "[whatsapp] WHATSAPP_APP_SECRET no configurado — firma del webhook NO validada (solo dev)",
+    );
     return true;
   }
 
   if (!signature || !signature.startsWith("sha256=")) return false;
 
-  const expected = "sha256=" + crypto
-    .createHmac("sha256", appSecret)
-    .update(rawBody, "utf8")
-    .digest("hex");
+  const expected =
+    "sha256=" +
+    crypto
+      .createHmac("sha256", appSecret)
+      .update(rawBody, "utf8")
+      .digest("hex");
 
   // Comparación en tiempo constante para evitar timing attacks.
   const sigBuf = Buffer.from(signature);
@@ -47,7 +59,9 @@ export type WhatsAppIncomingMessage = {
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function parseIncomingWebhook(body: any): WhatsAppIncomingMessage | null {
+export function parseIncomingWebhook(
+  body: any,
+): WhatsAppIncomingMessage | null {
   try {
     const entry = body?.entry?.[0];
     const change = entry?.changes?.[0];
@@ -59,15 +73,42 @@ export function parseIncomingWebhook(body: any): WhatsAppIncomingMessage | null 
     const timestamp = new Date(parseInt(msg.timestamp, 10) * 1000);
     const rawType: string = msg.type;
     if (!from || !messageId || !rawType) return null;
-    const forwarded: boolean = !!(msg.context?.forwarded || msg.context?.frequently_forwarded);
-    if (rawType === "text") return { from, messageId, type: "text", text: msg.text?.body ?? undefined, timestamp, forwarded };
-    if (rawType === "audio") return { from, messageId, type: "audio", audioId: msg.audio?.id ?? undefined, timestamp, forwarded };
-    if (rawType === "image") return { from, messageId, type: "image", timestamp, forwarded };
-    if (rawType === "document") return { from, messageId, type: "document", timestamp, forwarded };
+    const forwarded: boolean = !!(
+      msg.context?.forwarded || msg.context?.frequently_forwarded
+    );
+    if (rawType === "text")
+      return {
+        from,
+        messageId,
+        type: "text",
+        text: msg.text?.body ?? undefined,
+        timestamp,
+        forwarded,
+      };
+    if (rawType === "audio")
+      return {
+        from,
+        messageId,
+        type: "audio",
+        audioId: msg.audio?.id ?? undefined,
+        timestamp,
+        forwarded,
+      };
+    if (rawType === "image")
+      return { from, messageId, type: "image", timestamp, forwarded };
+    if (rawType === "document")
+      return { from, messageId, type: "document", timestamp, forwarded };
     // Botón de template Quick Reply — tratar como texto con el label del botón
     if (rawType === "button") {
       const buttonText: string = msg.button?.text ?? msg.button?.payload ?? "";
-      return { from, messageId, type: "text", text: buttonText, timestamp, forwarded };
+      return {
+        from,
+        messageId,
+        type: "text",
+        text: buttonText,
+        timestamp,
+        forwarded,
+      };
     }
     return { from, messageId, type: "unknown", timestamp, forwarded };
   } catch (err) {
@@ -79,16 +120,29 @@ export function parseIncomingWebhook(body: any): WhatsAppIncomingMessage | null 
 export async function sendTextMessage(to: string, text: string): Promise<void> {
   const phoneId = process.env.WHATSAPP_PHONE_ID;
   const token = process.env.WHATSAPP_TOKEN;
-  if (!phoneId || !token) throw new Error("[whatsapp] WHATSAPP_PHONE_ID o WHATSAPP_TOKEN no configurados");
+  if (!phoneId || !token)
+    throw new Error(
+      "[whatsapp] WHATSAPP_PHONE_ID o WHATSAPP_TOKEN no configurados",
+    );
   const url = "https://graph.facebook.com/v21.0/" + phoneId + "/messages";
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-    body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body: text } }),
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + token,
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "text",
+      text: { body: text },
+    }),
   });
   if (!res.ok) {
     const errorBody = await res.text();
-    throw new Error("[whatsapp] Error enviando mensaje " + res.status + ": " + errorBody);
+    throw new Error(
+      "[whatsapp] Error enviando mensaje " + res.status + ": " + errorBody,
+    );
   }
 }
 
@@ -99,12 +153,24 @@ export async function markAsRead(messageId: string): Promise<void> {
   const url = "https://graph.facebook.com/v21.0/" + phoneId + "/messages";
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-    body: JSON.stringify({ messaging_product: "whatsapp", status: "read", message_id: messageId }),
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + token,
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      status: "read",
+      message_id: messageId,
+    }),
   });
   if (!res.ok) {
     const errorBody = await res.text();
-    console.warn("[whatsapp] No se pudo marcar como leido " + res.status + ": " + errorBody);
+    console.warn(
+      "[whatsapp] No se pudo marcar como leido " +
+        res.status +
+        ": " +
+        errorBody,
+    );
   }
 }
 
@@ -125,7 +191,10 @@ export async function sendTypingIndicator(messageId: string): Promise<void> {
   const url = "https://graph.facebook.com/v21.0/" + phoneId + "/messages";
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + token,
+    },
     body: JSON.stringify({
       messaging_product: "whatsapp",
       status: "read",
@@ -135,7 +204,12 @@ export async function sendTypingIndicator(messageId: string): Promise<void> {
   });
   if (!res.ok) {
     const errorBody = await res.text();
-    console.warn("[whatsapp] No se pudo enviar el indicador de escribiendo " + res.status + ": " + errorBody);
+    console.warn(
+      "[whatsapp] No se pudo enviar el indicador de escribiendo " +
+        res.status +
+        ": " +
+        errorBody,
+    );
   }
 }
 
@@ -147,7 +221,12 @@ export async function downloadAudio(audioId: string): Promise<Buffer> {
   });
   if (!metaRes.ok) {
     const errBody = await metaRes.text();
-    throw new Error("[whatsapp] Error obteniendo media URL " + metaRes.status + ": " + errBody);
+    throw new Error(
+      "[whatsapp] Error obteniendo media URL " +
+        metaRes.status +
+        ": " +
+        errBody,
+    );
   }
   const mediaData = (await metaRes.json()) as { url: string };
   const audioRes = await fetch(mediaData.url, {
@@ -155,7 +234,9 @@ export async function downloadAudio(audioId: string): Promise<Buffer> {
   });
   if (!audioRes.ok) {
     const errBody = await audioRes.text();
-    throw new Error("[whatsapp] Error descargando audio " + audioRes.status + ": " + errBody);
+    throw new Error(
+      "[whatsapp] Error descargando audio " + audioRes.status + ": " + errBody,
+    );
   }
   const arrayBuffer = await audioRes.arrayBuffer();
   return Buffer.from(arrayBuffer);
@@ -194,11 +275,14 @@ export async function sendTemplateMessage(
   templateName: string,
   bodyParams: TemplateTextParam[] = [],
   buttons: TemplateQuickReplyButton[] = [],
-  languageCode = "es_AR"
+  languageCode = "es_AR",
 ): Promise<void> {
   const phoneId = process.env.WHATSAPP_PHONE_ID;
   const token = process.env.WHATSAPP_TOKEN;
-  if (!phoneId || !token) throw new Error("[whatsapp] WHATSAPP_PHONE_ID o WHATSAPP_TOKEN no configurados");
+  if (!phoneId || !token)
+    throw new Error(
+      "[whatsapp] WHATSAPP_PHONE_ID o WHATSAPP_TOKEN no configurados",
+    );
 
   // Construir components: body (si hay variables) + botones
   const components: object[] = [];
@@ -212,7 +296,10 @@ export async function sendTemplateMessage(
   const url = "https://graph.facebook.com/v21.0/" + phoneId + "/messages";
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + token,
+    },
     body: JSON.stringify({
       messaging_product: "whatsapp",
       recipient_type: "individual",
@@ -228,7 +315,14 @@ export async function sendTemplateMessage(
 
   if (!res.ok) {
     const errorBody = await res.text();
-    throw new Error("[whatsapp] Error enviando template '" + templateName + "' " + res.status + ": " + errorBody);
+    throw new Error(
+      "[whatsapp] Error enviando template '" +
+        templateName +
+        "' " +
+        res.status +
+        ": " +
+        errorBody,
+    );
   }
 }
 
@@ -245,7 +339,7 @@ export async function sendTemplateMessage(
 export async function sendReminderTemplate(
   to: string,
   timeLabel: string,
-  eventLabel: string
+  eventLabel: string,
 ): Promise<void> {
   await sendTemplateMessage(
     to,
@@ -255,7 +349,7 @@ export async function sendReminderTemplate(
       { type: "text", text: eventLabel },
     ],
     [{ type: "button", sub_type: "QUICK_REPLY", index: 0 }],
-    "en"
+    "en",
   );
 }
 
@@ -274,7 +368,9 @@ export async function transcribeAudio(buffer: Buffer): Promise<string> {
   });
   if (!res.ok) {
     const errBody = await res.text();
-    throw new Error("[whatsapp] Error en Whisper " + res.status + ": " + errBody);
+    throw new Error(
+      "[whatsapp] Error en Whisper " + res.status + ": " + errBody,
+    );
   }
   const data = (await res.json()) as { text: string };
   return data.text?.trim() ?? "";
