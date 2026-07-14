@@ -1,7 +1,7 @@
 # BACKLOG — qué falta hacer (listo para ejecutar)
 
-> Actualizado: 2026-07-13. Origen: `AUDIT-2026-07-13-timezone-y-mejoras.md` + `AUDIT-app-personal.md` (2026-07-07).
-> Para arrancar la próxima sesión: **"ejecutá la Fase 3 del @docs/audits/BACKLOG.md"** (o la fase que toque).
+> Actualizado: 2026-07-13 (noche). Origen: `AUDIT-2026-07-13-timezone-y-mejoras.md` + `AUDIT-app-personal.md` (2026-07-07).
+> Para arrancar la próxima sesión: **"ejecutá la Fase 4 del @docs/audits/BACKLOG.md"** (o la fase que toque).
 > Verificación estándar: `npx tsc --noEmit` (0 errores) + `npm run build`. Commits atómicos por ítem o grupo.
 
 ## ✅ Ya hecho (no tocar)
@@ -10,54 +10,7 @@
 - Fase 2 completa: timezone en TODA la app (~30 puntos) — commits `af0a8da`, `01550a2`, `61e41b0`
 - Score de hoy sin congelar + `financesScore` en `getStoredScore` — commit `01550a2`
 - Quick wins: sync global, fast-paths sin IA, tareas por WhatsApp, morning summary con tareas, tira de vapes — commit `ac2d38d`
-
----
-
-## 🔴 Fase 3 — Robustez (la próxima sesión)
-
-Orden sugerido: 3.1 → 3.2 → 3.3 → 3.4 → 3.5. Los tres primeros son los que protegen plata y mensajes.
-
-### 3.1 Claim atómico de pendings — evita transacciones y stock DUPLICADOS
-
-- **Problema:** dos mensajes de WhatsApp casi simultáneos (doble "sí", retry de Meta) leen el mismo pending antes de que ninguno lo borre → dos transacciones en finanzas-lemon o doble descuento de stock en Nubez. El flujo actual es _read → efecto externo → clear_.
-- **Dónde:** `agents/finances/index.ts` (`handleConfirmation`, ~línea 340-357: crea transacción y DESPUÉS `clearPending`) · `agents/vapes/index.ts` (`handleBuyerReply`, ~663-685) · lecturas en `lib/orchestrator.ts` (`getVapePending` / `getPending`).
-- **Fix:** claim atómico ANTES de ejecutar efectos externos:
-  ```ts
-  const { count } = await db.pendingTransaction.deleteMany({
-    where: { userId },
-  });
-  if (count === 0) return "Ya lo estoy procesando 👍"; // otra lambda ganó
-  // recién acá llamar a createTransaction / ejecutarMovimientos
-  ```
-  Mismo patrón para el pending de vapes (`lib/pending-vape.ts`). Si el efecto externo falla después del claim, recrear el pending o avisar.
-
-### 3.2 Error visible al usuario cuando `orchestrate()` explota
-
-- **Problema:** si `orchestrate` o el envío lanzan, el catch solo loguea → el usuario queda mirando "escribiendo…" y el mensaje INBOUND queda `PENDING` para siempre.
-- **Dónde:** `app/api/whatsapp/webhook/route.ts` (~194-196, catch de `processIncomingMessage`).
-- **Fix:** en el catch, best-effort `sendTextMessage(from, "Uy, algo se rompió procesando eso. Probá de nuevo.")` (envuelto en su propio try) + marcar el `WhatsAppMessage` INBOUND como `FAILED`.
-
-### 3.3 Reminders de Calendar: enviar ANTES de marcar `sent`
-
-- **Problema:** `db.reminder.create({ sent: true })` ocurre ANTES de `sendReminderTemplate`. Si Meta falla, el dedupe queda marcado y el aviso se pierde para siempre.
-- **Dónde:** `app/api/cron/reminders/route.ts` (~140-151, Parte 2 / alertas de Calendar).
-- **Fix:** crear con `sent: false` → enviar → marcar `sent: true`; o borrar el registro en el catch. (La Parte 1 del mismo archivo ya hace send-then-mark: copiar ese patrón.)
-
-### 3.4 Axiom nunca flushea — logs fantasma en serverless
-
-- **Problema:** `lib/logger.ts:40` hace `void client.ingest(...)`; el buffer muere cuando la lambda se congela. Cero llamadas a `flush()` en el repo.
-- **Fix:** migrar a `@axiomhq/nextjs` (**ya está instalado y sin usar**, `package.json`), o `await client.flush()` dentro de `after()` al final de cada request. Si no se usa, desinstalar `@axiomhq/logging` y `@axiomhq/nextjs`.
-
-### 3.5 `addTurn` en paralelo pierde un turno de memoria
-
-- **Problema:** `Promise.all([addTurn(user), addTurn(assistant)])` en los paths de pending y fast-path: `addTurn` es read-modify-write no atómico → el último write pisa al otro casi siempre.
-- **Dónde:** `lib/orchestrator.ts` (los 4 bloques `Promise.all([addTurn..., addTurn...])`) · `lib/conversation.ts` (~66-120).
-- **Fix:** crear `addTurns(userId, turns[])` en `lib/conversation.ts` (un solo read + un solo write) y reemplazar los 4 call sites.
-
-### 3.6 (Menor) `.catch(() => null)` en pendings convierte DB caída en misrouting
-
-- **Dónde:** `lib/orchestrator.ts` (lecturas de pending), `lib/pending-transaction.ts:83`, `lib/pending-vape.ts:53`.
-- **Fix:** distinguir `{ ok: false }` (error) de `null` (no hay pending); ante error responder "dame un segundo y repetímelo" en vez de mandar el "sí" al clasificador.
+- Fase 3 completa (robustez, 6 ítems): claim atómico de pendings (`claimPending`/`claimVapePending` antes de efectos externos), error visible + INBOUND `FAILED` cuando el webhook explota, reminders de Calendar send-then-mark, flush de Axiom vía `after()` (y desinstalados `@axiomhq/logging`/`@axiomhq/nextjs`), `addTurns` para no perder turnos de memoria, y pendings que distinguen DB caída de "no hay pending" — commits `a942113`, `65df600`, `959990f`, `2792096`, `8158446`, `5248fcf`
 
 ---
 
