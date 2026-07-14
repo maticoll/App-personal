@@ -41,6 +41,7 @@ import { db } from "@/lib/db";
 import {
   getConversationContext,
   addTurn,
+  addTurns,
   formatContextForPrompt,
 } from "@/lib/conversation";
 import { getPending } from "@/lib/pending-transaction";
@@ -394,20 +395,15 @@ export async function orchestrate(
       vapePending.kind === "vape_clarify"
         ? await handleClarify(userId, text, vapePending)
         : await handleBuyerReply(userId, text, vapePending);
-    await Promise.all([
-      addTurn(userId, "user", text).catch((err) =>
-        console.error(
-          "[orchestrator] Error guardando turno user (vape-pending):",
-          err,
-        ),
+    await addTurns(userId, [
+      { role: "user", content: text },
+      { role: "assistant", content: response },
+    ]).catch((err) =>
+      console.error(
+        "[orchestrator] Error guardando turnos (vape-pending):",
+        err,
       ),
-      addTurn(userId, "assistant", response).catch((err) =>
-        console.error(
-          "[orchestrator] Error guardando turno assistant (vape-pending):",
-          err,
-        ),
-      ),
-    ]);
+    );
     return response;
   }
 
@@ -425,20 +421,12 @@ export async function orchestrate(
       text,
       pending,
     );
-    await Promise.all([
-      addTurn(userId, "user", text).catch((err) =>
-        console.error(
-          "[orchestrator] Error guardando turno user (pending):",
-          err,
-        ),
-      ),
-      addTurn(userId, "assistant", response).catch((err) =>
-        console.error(
-          "[orchestrator] Error guardando turno assistant (pending):",
-          err,
-        ),
-      ),
-    ]);
+    await addTurns(userId, [
+      { role: "user", content: text },
+      { role: "assistant", content: response },
+    ]).catch((err) =>
+      console.error("[orchestrator] Error guardando turnos (pending):", err),
+    );
     return response;
   }
 
@@ -449,20 +437,15 @@ export async function orchestrate(
     const fastResponse = await tryFastPath(userId, text);
     if (fastResponse) {
       console.log("[orchestrator] Fast-path resuelto sin IA");
-      await Promise.all([
-        addTurn(userId, "user", text).catch((err) =>
-          console.error(
-            "[orchestrator] Error guardando turno user (fast-path):",
-            err,
-          ),
+      await addTurns(userId, [
+        { role: "user", content: text },
+        { role: "assistant", content: fastResponse },
+      ]).catch((err) =>
+        console.error(
+          "[orchestrator] Error guardando turnos (fast-path):",
+          err,
         ),
-        addTurn(userId, "assistant", fastResponse).catch((err) =>
-          console.error(
-            "[orchestrator] Error guardando turno assistant (fast-path):",
-            err,
-          ),
-        ),
-      ]);
+      );
       return fastResponse;
     }
   } catch (err) {
@@ -488,20 +471,12 @@ export async function orchestrate(
       ?.notVapes;
     if (!notVapes) {
       const finalResponse = result.message;
-      await Promise.all([
-        addTurn(userId, "user", text).catch((err) =>
-          console.error(
-            "[orchestrator] Error guardando turno user (vapes):",
-            err,
-          ),
-        ),
-        addTurn(userId, "assistant", finalResponse).catch((err) =>
-          console.error(
-            "[orchestrator] Error guardando turno assistant (vapes):",
-            err,
-          ),
-        ),
-      ]);
+      await addTurns(userId, [
+        { role: "user", content: text },
+        { role: "assistant", content: finalResponse },
+      ]).catch((err) =>
+        console.error("[orchestrator] Error guardando turnos (vapes):", err),
+      );
       return finalResponse;
     }
   }
@@ -562,13 +537,13 @@ export async function orchestrate(
     finalResponse = agent.text;
   }
 
-  // 6. Guardar respuesta del asistente en memoria
-  await Promise.all([
-    saveUserTurn,
-    addTurn(userId, "assistant", finalResponse).catch((err) =>
-      console.error("[orchestrator] Error guardando turno assistant:", err),
-    ),
-  ]);
+  // 6. Guardar respuesta del asistente en memoria — DESPUÉS de que terminó
+  //    el guardado del turno user (addTurn es read-modify-write: en paralelo
+  //    el último write pisa al otro).
+  await saveUserTurn;
+  await addTurn(userId, "assistant", finalResponse).catch((err) =>
+    console.error("[orchestrator] Error guardando turno assistant:", err),
+  );
 
   return finalResponse;
 }

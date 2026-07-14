@@ -12,9 +12,9 @@ import { callClaude } from "@/lib/claude";
 import type { ConversationTurn } from "@/lib/types";
 
 // ── Configuración ──────────────────────────────────────────
-const K = 8;        // Turnos recientes a mantener en ventana
-const M = 12;       // Número de turnos que dispara summarización
-const GAP_H = 6;    // Horas de inactividad que disparan summarización
+const K = 8; // Turnos recientes a mantener en ventana
+const M = 12; // Número de turnos que dispara summarización
+const GAP_H = 6; // Horas de inactividad que disparan summarización
 
 // ── Tipos internos ─────────────────────────────────────────
 export type ConversationContext = {
@@ -38,7 +38,9 @@ function isoNow(): string {
 /**
  * Retorna los turnos recientes + resumen actual para el orquestrador.
  */
-export async function getConversationContext(userId: string): Promise<ConversationContext> {
+export async function getConversationContext(
+  userId: string,
+): Promise<ConversationContext> {
   const mem = await db.conversationMemory.findUnique({ where: { userId } });
   if (!mem) return { recentTurns: [], summary: null };
 
@@ -50,54 +52,64 @@ export async function getConversationContext(userId: string): Promise<Conversati
 }
 
 /**
- * Añade un nuevo turno (user o assistant) a la ventana deslizante.
- * Si se llega a M turnos, dispara summarización en background.
+ * Añade uno o más turnos (user/assistant) a la ventana deslizante en UNA sola
+ * operación read-modify-write. Guardar el par user+assistant con dos addTurn
+ * en paralelo perdía casi siempre uno de los dos (el último write pisaba al
+ * otro) — por eso los call sites del orquestrador usan esta función.
+ * Si se llega a M turnos, dispara summarización.
  * Si hay un gap >= GAP_H desde el último turno, también summariza.
  */
-export async function addTurn(
+export async function addTurns(
   userId: string,
-  role: "user" | "assistant",
-  content: string
+  turns: { role: "user" | "assistant"; content: string }[],
 ): Promise<void> {
+  if (turns.length === 0) return;
+
   const now = isoNow();
-  const newTurn: ConversationTurn = { role, content, timestamp: now };
+  const newTurns: ConversationTurn[] = turns.map((t) => ({
+    role: t.role,
+    content: t.content,
+    timestamp: now,
+  }));
 
   // Upsert: crear si no existe, actualizar si existe
-  const existing = await db.conversationMemory.findUnique({ where: { userId } });
+  const existing = await db.conversationMemory.findUnique({
+    where: { userId },
+  });
 
   if (!existing) {
     await db.conversationMemory.create({
       data: {
         userId,
-        recentMessages: [newTurn],
+        recentMessages: newTurns,
         summary: null,
-        turnCount: 1,
+        turnCount: newTurns.length,
         updatedAt: new Date(),
       },
     });
     return;
   }
 
-  const turns = parseTurns(existing.recentMessages);
-  const newCount = existing.turnCount + 1;
+  const prevTurns = parseTurns(existing.recentMessages);
+  const newCount = existing.turnCount + newTurns.length;
 
   // Detectar gap temporal
-  const lastTimestamp = turns[turns.length - 1]?.timestamp;
+  const lastTimestamp = prevTurns[prevTurns.length - 1]?.timestamp;
   const hasLongGap = lastTimestamp
-    ? (Date.now() - new Date(lastTimestamp).getTime()) > GAP_H * 60 * 60 * 1000
+    ? Date.now() - new Date(lastTimestamp).getTime() > GAP_H * 60 * 60 * 1000
     : false;
 
   // Si hay gap o se alcanzó el umbral M → summarizar primero
   const shouldSummarize = hasLongGap || newCount >= M;
 
   let summary = existing.summary ?? null;
-  let updatedTurns = [...turns, newTurn];
+  let updatedTurns = [...prevTurns, ...newTurns];
 
-  if (shouldSummarize && turns.length > 0) {
+  if (shouldSummarize && prevTurns.length > 0) {
     try {
-      summary = await summarizeTurns(turns, summary);
+      summary = await summarizeTurns(prevTurns, summary);
       // Después de summarizar, limpiamos la ventana (solo mantenemos K más recientes)
-      updatedTurns = [...turns.slice(-K), newTurn];
+      updatedTurns = [...prevTurns.slice(-K), ...newTurns];
     } catch (err) {
       console.error("[conversation] Error summarizando:", err);
       // Si falla la summarización, igual continuamos
@@ -114,10 +126,22 @@ export async function addTurn(
     data: {
       recentMessages: updatedTurns,
       summary,
-      turnCount: shouldSummarize ? 1 : newCount,
+      turnCount: shouldSummarize ? newTurns.length : newCount,
       updatedAt: new Date(),
     },
   });
+}
+
+/**
+ * Añade un único turno. Para guardar user+assistant juntos usar addTurns
+ * (dos addTurn en paralelo se pisan entre sí).
+ */
+export async function addTurn(
+  userId: string,
+  role: "user" | "assistant",
+  content: string,
+): Promise<void> {
+  return addTurns(userId, [{ role, content }]);
 }
 
 /**
@@ -150,7 +174,7 @@ export function formatContextForPrompt(ctx: ConversationContext): string {
  */
 async function summarizeTurns(
   turns: ConversationTurn[],
-  previousSummary: string | null
+  previousSummary: string | null,
 ): Promise<string> {
   const conversationText = turns
     .map((t) => `${t.role === "user" ? "Usuario" : "Asistente"}: ${t.content}`)
