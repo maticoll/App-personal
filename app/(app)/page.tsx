@@ -9,6 +9,7 @@ import { GlobalScoreRing } from "@/components/scoring/GlobalScoreRing";
 import TasksBlock from "@/components/dashboard/TasksBlock";
 import { db } from "@/lib/db";
 import { calculateFullScore, saveScore, getStoredScore } from "@/lib/scoring";
+import { uyDayDate, startOfDayUY, endOfDayUY } from "@/lib/dates";
 import { getThisWeekTasks } from "@/lib/tasks";
 import { getAllProjects } from "@/lib/projects";
 import type { DailyScoreData } from "@/lib/types";
@@ -64,58 +65,87 @@ const MODULES = [
 
 async function loadTodayScore(userId: string): Promise<DailyScoreData | null> {
   const today = new Date();
-  const stored = await getStoredScore(userId, today);
-  if (stored) return stored;
+  // El score de HOY se recalcula siempre: devolver el stored lo congelaba
+  // con los datos de la primera visita del día. El stored queda como
+  // fallback si el cálculo falla (ej: API de finanzas caída).
   try {
     const result = await calculateFullScore(userId, today);
     await saveScore(userId, today, result);
     return {
-      sleep:     result.sleep.score,
-      fitness:   result.fitness.score,
+      sleep: result.sleep.score,
+      fitness: result.fitness.score,
       nutrition: result.nutrition.score,
-      projects:  result.projects.score,
-      finances:  result.finances.score,
-      global:    result.global,
-      date:      today,
+      projects: result.projects.score,
+      finances: result.finances.score,
+      global: result.global,
+      date: today,
       details: {
-        sleep:     { met: result.sleep.met,     missed: result.sleep.missed },
-        fitness:   { met: result.fitness.met,   missed: result.fitness.missed },
-        nutrition: { met: result.nutrition.met, missed: result.nutrition.missed },
-        projects:  { met: result.projects.met,  missed: result.projects.missed },
-        finances:  { met: result.finances.met,  missed: result.finances.missed },
+        sleep: { met: result.sleep.met, missed: result.sleep.missed },
+        fitness: { met: result.fitness.met, missed: result.fitness.missed },
+        nutrition: {
+          met: result.nutrition.met,
+          missed: result.nutrition.missed,
+        },
+        projects: { met: result.projects.met, missed: result.projects.missed },
+        finances: { met: result.finances.met, missed: result.finances.missed },
       },
     };
   } catch {
-    return null;
+    return getStoredScore(userId, today).catch(() => null);
   }
 }
 
 async function loadSummaries(userId: string) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const endToday = new Date(today);
-  endToday.setHours(23, 59, 59, 999);
+  // Key de día UY para @db.Date; rango en hora UY para instantes (workouts)
+  const today = uyDayDate();
+  const dayStart = startOfDayUY();
+  const dayEnd = endOfDayUY();
 
   const [sleepLog, workouts, meals, waterLogs, activeProjects, recentIdeas] =
     await Promise.all([
-      db.sleepLog.findUnique({ where: { userId_date: { userId, date: today } } }).catch(() => null),
-      db.workout.findMany({ where: { userId, date: { gte: today, lte: endToday } } }).catch(() => []),
+      db.sleepLog
+        .findUnique({ where: { userId_date: { userId, date: today } } })
+        .catch(() => null),
+      db.workout
+        .findMany({ where: { userId, date: { gte: dayStart, lte: dayEnd } } })
+        .catch(() => []),
       db.meal.findMany({ where: { userId, date: today } }).catch(() => []),
       db.waterLog.findMany({ where: { userId, date: today } }).catch(() => []),
-      db.project.findMany({ where: { userId, status: "IN_PROGRESS" }, take: 3 }).catch(() => []),
-      db.idea.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 3 }).catch(() => []),
+      db.project
+        .findMany({ where: { userId, status: "IN_PROGRESS" }, take: 3 })
+        .catch(() => []),
+      db.idea
+        .findMany({
+          where: { userId },
+          orderBy: { createdAt: "desc" },
+          take: 3,
+        })
+        .catch(() => []),
     ]);
 
-  const waterTotal = waterLogs.reduce((acc: number, w: any) => acc + w.thermos, 0);
+  const waterTotal = waterLogs.reduce(
+    (acc: number, w: any) => acc + w.thermos,
+    0,
+  );
 
   return {
     sleep: sleepLog?.durationMinutes
       ? `${Math.floor(sleepLog.durationMinutes / 60)}h ${sleepLog.durationMinutes % 60}min`
       : "Sin datos",
-    fitness: workouts.length > 0 ? `${workouts.length} actividad${workouts.length > 1 ? "es" : ""}` : "Sin actividad",
-    nutrition: meals.length > 0 ? `${meals.length} comidas · ${waterTotal.toFixed(1)}L` : "Sin comidas",
-    projects: activeProjects.length > 0 ? `${activeProjects.length} en progreso` : "Sin proyectos",
-    ideas: recentIdeas.length > 0 ? `${recentIdeas.length} recientes` : "Sin ideas",
+    fitness:
+      workouts.length > 0
+        ? `${workouts.length} actividad${workouts.length > 1 ? "es" : ""}`
+        : "Sin actividad",
+    nutrition:
+      meals.length > 0
+        ? `${meals.length} comidas · ${waterTotal.toFixed(1)}L`
+        : "Sin comidas",
+    projects:
+      activeProjects.length > 0
+        ? `${activeProjects.length} en progreso`
+        : "Sin proyectos",
+    ideas:
+      recentIdeas.length > 0 ? `${recentIdeas.length} recientes` : "Sin ideas",
     finances: "Ver resumen →",
   };
 }
@@ -135,13 +165,18 @@ export default async function DashboardPage() {
   ]);
 
   const activeProjects = projectsData.filter(
-    (p) => p.status === "TODO" || p.status === "IN_PROGRESS"
+    (p) => p.status === "TODO" || p.status === "IN_PROGRESS",
   );
 
   const hora = parseInt(
-    new Date().toLocaleString("es-UY", { timeZone: "America/Montevideo", hour: "numeric", hour12: false })
+    new Date().toLocaleString("es-UY", {
+      timeZone: "America/Montevideo",
+      hour: "numeric",
+      hour12: false,
+    }),
   );
-  const saludo = hora < 13 ? "Buenos dias" : hora < 20 ? "Buenas tardes" : "Buenas noches";
+  const saludo =
+    hora < 13 ? "Buenos dias" : hora < 20 ? "Buenas tardes" : "Buenas noches";
   const emoji = hora < 13 ? "☀️" : hora < 20 ? "🌤️" : "🌙";
 
   const dateLabel = new Date().toLocaleDateString("es-UY", {
@@ -152,13 +187,14 @@ export default async function DashboardPage() {
 
   return (
     <div className="animate-fade-in">
-
       {/* Saludo */}
       <section className="mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-on-surface tracking-tight">
           {saludo}, {firstName} {emoji}
         </h1>
-        <p className="text-sm text-on-surface-variant mt-0.5 capitalize">{dateLabel}</p>
+        <p className="text-sm text-on-surface-variant mt-0.5 capitalize">
+          {dateLabel}
+        </p>
       </section>
 
       {/* Score Ring */}
@@ -170,12 +206,17 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-2 gap-3 mb-6">
         {MODULES.map(({ href, label, icon, color, key }) => {
           const score =
-            key === "sleep" ? todayScore?.sleep :
-            key === "fitness" ? todayScore?.fitness :
-            key === "nutrition" ? todayScore?.nutrition :
-            key === "projects" ? todayScore?.projects :
-            key === "finances" ? todayScore?.finances :
-            null;
+            key === "sleep"
+              ? todayScore?.sleep
+              : key === "fitness"
+                ? todayScore?.fitness
+                : key === "nutrition"
+                  ? todayScore?.nutrition
+                  : key === "projects"
+                    ? todayScore?.projects
+                    : key === "finances"
+                      ? todayScore?.finances
+                      : null;
 
           const summary = summaries?.[key as keyof typeof summaries] ?? "—";
 
@@ -203,10 +244,14 @@ export default async function DashboardPage() {
                 {score !== null && score !== undefined ? (
                   <h3 className="text-[22px] sm:text-2xl font-bold text-on-surface leading-none">
                     {score}
-                    <span className="text-xs sm:text-sm font-normal text-on-surface-variant ml-1">/100</span>
+                    <span className="text-xs sm:text-sm font-normal text-on-surface-variant ml-1">
+                      /100
+                    </span>
                   </h3>
                 ) : (
-                  <h3 className="text-xl font-semibold text-on-surface leading-none">&mdash;</h3>
+                  <h3 className="text-xl font-semibold text-on-surface leading-none">
+                    &mdash;
+                  </h3>
                 )}
                 <p className="text-[10px] sm:text-[11px] text-on-surface-variant mt-1.5 leading-snug line-clamp-2">
                   {summary}
@@ -228,11 +273,14 @@ export default async function DashboardPage() {
           href="/sleep"
           className="bg-surface-container-highest px-6 py-3 rounded-full flex items-center gap-2 border border-outline-variant/20 hover:bg-surface-bright transition-colors active:scale-95 duration-150"
         >
-          <span className="material-symbols-outlined text-primary text-[20px]">sync</span>
-          <span className="text-sm font-medium text-on-surface">Sync con Garmin</span>
+          <span className="material-symbols-outlined text-primary text-[20px]">
+            sync
+          </span>
+          <span className="text-sm font-medium text-on-surface">
+            Sync con Garmin
+          </span>
         </Link>
       </div>
-
     </div>
   );
 }

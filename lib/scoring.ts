@@ -14,6 +14,13 @@
 import { db } from "@/lib/db";
 import { average } from "@/lib/utils";
 import { getGoals, normalizeWeights, calcWeightedGlobal } from "@/lib/goals";
+import {
+  uyDayDate,
+  startOfDayUY,
+  endOfDayUY,
+  uyDateKey,
+  UY_TIMEZONE,
+} from "@/lib/dates";
 import type { DailyScoreData, ScoreDetails } from "@/lib/types";
 import type { UserGoals } from "@prisma/client";
 
@@ -31,19 +38,15 @@ export type ModuleScoreResult = {
 
 // -------------------------------------------------------
 // Helpers de fecha
+//
+// Dos semánticas distintas (ver lib/dates.ts):
+//   - Keys @db.Date (SleepLog, Meal, WaterLog, DailyScore, DailySteps):
+//     uyDayDate() — medianoche UTC del día calendario UY.
+//   - Rangos sobre instantes reales (Workout.date, updatedAt, createdAt):
+//     startOfDayUY()/endOfDayUY() — límites del día en hora Uruguay.
+// Antes ambos usaban setHours() del server (UTC en Vercel): después de las
+// 21:00 UY el score se calculaba y guardaba bajo la fecha de mañana.
 // -------------------------------------------------------
-
-function startOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function endOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(23, 59, 59, 999);
-  return d;
-}
 
 // -------------------------------------------------------
 // Score de SUEÑO — Basado en UserGoals del usuario
@@ -74,14 +77,14 @@ function endOfDay(date: Date): Date {
 async function calcSleepScore(
   userId: string,
   date: Date,
-  goals?: UserGoals
+  goals?: UserGoals,
 ): Promise<ModuleScoreResult> {
   const met: string[] = [];
   const missed: string[] = [];
 
   const [log, userGoals] = await Promise.all([
     db.sleepLog.findUnique({
-      where: { userId_date: { userId, date: startOfDay(date) } },
+      where: { userId_date: { userId, date: uyDayDate(date) } },
     }),
     goals ?? getGoals(userId),
   ]);
@@ -108,7 +111,8 @@ async function calcSleepScore(
   if (log.durationMinutes !== null) {
     actualHours = log.durationMinutes / 60;
   } else if (log.wakeTime) {
-    actualHours = (log.wakeTime.getTime() - log.bedTime.getTime()) / (1000 * 60 * 60);
+    actualHours =
+      (log.wakeTime.getTime() - log.bedTime.getTime()) / (1000 * 60 * 60);
   }
 
   if (actualHours !== null) {
@@ -121,12 +125,18 @@ async function calcSleepScore(
     } else if (ratio >= 0.85) {
       score += 28;
       met.push(`Duración: ${hoursRounded}h (objetivo: ${targetHours}h)`);
-      missed.push(`Cerca del objetivo — faltan ${Math.round((targetHours - actualHours) * 60)}min`);
+      missed.push(
+        `Cerca del objetivo — faltan ${Math.round((targetHours - actualHours) * 60)}min`,
+      );
     } else if (ratio >= 0.75) {
       score += 16;
-      missed.push(`Duración baja: ${hoursRounded}h (objetivo: ${targetHours}h)`);
+      missed.push(
+        `Duración baja: ${hoursRounded}h (objetivo: ${targetHours}h)`,
+      );
     } else {
-      missed.push(`Duración insuficiente: ${hoursRounded}h (objetivo: ${targetHours}h)`);
+      missed.push(
+        `Duración insuficiente: ${hoursRounded}h (objetivo: ${targetHours}h)`,
+      );
     }
   } else {
     missed.push("Sin hora de despertar — no se puede calcular la duración");
@@ -142,25 +152,46 @@ async function calcSleepScore(
     }
   } else {
     // Sin Garmin: comparar hora de acostarse vs objetivo
-    const [targetH, targetM] = userGoals.sleepTargetBedTime.split(":").map(Number);
+    const [targetH, targetM] = userGoals.sleepTargetBedTime
+      .split(":")
+      .map(Number);
     const targetBedDecimal = targetH < 12 ? targetH + 24 : targetH; // normalizar noche
     const targetBedNorm = targetBedDecimal + targetM / 60;
 
-    const bedHour = log.bedTime.getHours() + log.bedTime.getMinutes() / 60;
+    // Hora de acostarse en UY — con getHours() (UTC) las 22:30 UY se leían
+    // como 01:30 y siempre caía en "hora muy tardía".
+    const [bedH, bedM] = log.bedTime
+      .toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: UY_TIMEZONE,
+      })
+      .split(":")
+      .map(Number);
+    const bedHour = bedH + bedM / 60;
     const normalizedBedHour = bedHour < 12 ? bedHour + 24 : bedHour;
 
     if (normalizedBedHour <= targetBedNorm) {
       score += 30;
-      met.push(`Hora de dormir: ${formatBedTime(log.bedTime)} (meta: ${userGoals.sleepTargetBedTime}) ✓`);
+      met.push(
+        `Hora de dormir: ${formatBedTime(log.bedTime)} (meta: ${userGoals.sleepTargetBedTime}) ✓`,
+      );
     } else if (normalizedBedHour <= targetBedNorm + 0.5) {
       score += 20;
       met.push(`Hora de dormir: ${formatBedTime(log.bedTime)}`);
-      missed.push(`Intentá dormir antes de las ${userGoals.sleepTargetBedTime}`);
+      missed.push(
+        `Intentá dormir antes de las ${userGoals.sleepTargetBedTime}`,
+      );
     } else if (normalizedBedHour <= targetBedNorm + 1) {
       score += 10;
-      missed.push(`Hora tardía: ${formatBedTime(log.bedTime)} (meta: ${userGoals.sleepTargetBedTime})`);
+      missed.push(
+        `Hora tardía: ${formatBedTime(log.bedTime)} (meta: ${userGoals.sleepTargetBedTime})`,
+      );
     } else {
-      missed.push(`Hora muy tardía: ${formatBedTime(log.bedTime)} (meta: ${userGoals.sleepTargetBedTime})`);
+      missed.push(
+        `Hora muy tardía: ${formatBedTime(log.bedTime)} (meta: ${userGoals.sleepTargetBedTime})`,
+      );
     }
 
     missed.push("Conectá Garmin para el score de calidad del sueño");
@@ -175,7 +206,7 @@ async function calcSleepScore(
  */
 export async function calcSleepScoreForDate(
   userId: string,
-  date: Date
+  date: Date,
 ): Promise<ModuleScoreResult> {
   return calcSleepScore(userId, date);
 }
@@ -185,6 +216,7 @@ function formatBedTime(bedTime: Date): string {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone: UY_TIMEZONE,
   });
 }
 
@@ -204,31 +236,39 @@ function formatBedTime(bedTime: Date): string {
 // -------------------------------------------------------
 
 function getDayName(date: Date): string {
-  const days = ["SUNDAY","MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY"];
-  return days[date.getDay()];
+  // Día de semana del calendario UY — con getDay() (UTC), de noche se
+  // evaluaba isGymDay con el día de mañana.
+  return date
+    .toLocaleDateString("en-US", { weekday: "long", timeZone: UY_TIMEZONE })
+    .toUpperCase();
 }
 
-/** "YYYY-MM-DD" (UTC) → Date medianoche UTC, para la clave @db.Date de DailySteps */
+/** Clave @db.Date de DailySteps = día calendario UY (medianoche UTC) */
 function stepsDateKey(date: Date): Date {
-  return new Date(date.toISOString().split("T")[0] + "T00:00:00.000Z");
+  return uyDayDate(date);
 }
 
 async function calcFitnessScore(
   userId: string,
   date: Date,
-  goals?: UserGoals
+  goals?: UserGoals,
 ): Promise<ModuleScoreResult> {
   const met: string[] = [];
   const missed: string[] = [];
 
   const [workouts, settings, userGoals, stepsRow] = await Promise.all([
     db.workout.findMany({
-      where: { userId, date: { gte: startOfDay(date), lte: endOfDay(date) } },
+      where: {
+        userId,
+        date: { gte: startOfDayUY(date), lte: endOfDayUY(date) },
+      },
     }),
     db.userSettings.findUnique({ where: { userId } }),
     goals ?? getGoals(userId),
     db.dailySteps
-      .findUnique({ where: { userId_date: { userId, date: stepsDateKey(date) } } })
+      .findUnique({
+        where: { userId_date: { userId, date: stepsDateKey(date) } },
+      })
       .catch(() => null),
   ]);
 
@@ -248,7 +288,10 @@ async function calcFitnessScore(
     if (reachedSteps) {
       return {
         score: 60,
-        met: [`${stepsLabel} pasos (meta ${stepsGoal.toLocaleString("es-UY")}) ✓`, "Movimiento diario ✓"],
+        met: [
+          `${stepsLabel} pasos (meta ${stepsGoal.toLocaleString("es-UY")}) ✓`,
+          "Movimiento diario ✓",
+        ],
         missed: ["Sin entrenamiento registrado", "Sin gym"],
       };
     }
@@ -257,7 +300,12 @@ async function calcFitnessScore(
       const partial = Math.round(Math.min(steps / stepsGoal, 1) * 40);
       return {
         score: partial,
-        met: partial > 0 ? [`${stepsLabel} pasos (meta ${stepsGoal.toLocaleString("es-UY")})`] : [],
+        met:
+          partial > 0
+            ? [
+                `${stepsLabel} pasos (meta ${stepsGoal.toLocaleString("es-UY")})`,
+              ]
+            : [],
         missed: [
           "Sin entrenamiento registrado",
           `Faltan ${Math.max(stepsGoal - steps, 0).toLocaleString("es-UY")} pasos para la meta`,
@@ -266,16 +314,26 @@ async function calcFitnessScore(
     }
     // Sin nada
     if (isGymDay && (settings?.gymDays?.length ?? 0) > 0) {
-      return { score: 0, met: [], missed: ["Hoy era día de gym — sin actividad registrada"] };
+      return {
+        score: 0,
+        met: [],
+        missed: ["Hoy era día de gym — sin actividad registrada"],
+      };
     }
-    return { score: null, met: [], missed: ["Sin actividad física registrada"] };
+    return {
+      score: null,
+      met: [],
+      missed: ["Sin actividad física registrada"],
+    };
   }
 
   let score = 0;
 
   // Base: hizo algo (40 pts)
   score += 40;
-  met.push(`${workouts.length} actividad${workouts.length > 1 ? "es" : ""} registrada${workouts.length > 1 ? "s" : ""}`);
+  met.push(
+    `${workouts.length} actividad${workouts.length > 1 ? "es" : ""} registrada${workouts.length > 1 ? "s" : ""}`,
+  );
 
   // Gym (20 pts)
   const hasGym = workouts.some((w: any) => w.type === "GYM");
@@ -287,7 +345,10 @@ async function calcFitnessScore(
   }
 
   // Duración vs objetivo (20 pts)
-  const totalMinutes = workouts.reduce((sum: any, w: any) => sum + (w.durationMinutes ?? 0), 0);
+  const totalMinutes = workouts.reduce(
+    (sum: any, w: any) => sum + (w.durationMinutes ?? 0),
+    0,
+  );
   if (totalMinutes >= targetDuration) {
     score += 20;
     met.push(`Duración: ${totalMinutes}min (objetivo: ${targetDuration}min) ✓`);
@@ -296,14 +357,18 @@ async function calcFitnessScore(
     met.push(`Duración: ${totalMinutes}min (objetivo: ${targetDuration}min)`);
     missed.push(`Faltan ${targetDuration - totalMinutes}min para el objetivo`);
   } else if (totalMinutes > 0) {
-    missed.push(`Duración baja: ${totalMinutes}min (objetivo: ${targetDuration}min)`);
+    missed.push(
+      `Duración baja: ${totalMinutes}min (objetivo: ${targetDuration}min)`,
+    );
   } else {
     missed.push("Sin duración registrada");
   }
 
   // Cardio o meta de pasos (20 pts)
   // Los pasos del día cuentan como cardio: alcanzar la meta cumple este bloque.
-  const hasCardio = workouts.some((w: any) => ["RUNNING", "SWIMMING", "CYCLING"].includes(w.type));
+  const hasCardio = workouts.some((w: any) =>
+    ["RUNNING", "SWIMMING", "CYCLING"].includes(w.type),
+  );
   if (hasCardio) {
     score += 20;
     met.push("Actividad cardiovascular ✓");
@@ -312,7 +377,9 @@ async function calcFitnessScore(
     score += 20;
     met.push(`Meta de pasos alcanzada (${stepsLabel}) ✓`);
   } else {
-    missed.push(`Sin cardio ni meta de pasos (${stepsLabel}/${stepsGoal.toLocaleString("es-UY")})`);
+    missed.push(
+      `Sin cardio ni meta de pasos (${stepsLabel}/${stepsGoal.toLocaleString("es-UY")})`,
+    );
   }
 
   return { score: Math.min(score, 100), met, missed };
@@ -320,7 +387,7 @@ async function calcFitnessScore(
 
 export async function calcFitnessScoreForDate(
   userId: string,
-  date: Date
+  date: Date,
 ): Promise<ModuleScoreResult> {
   return calcFitnessScore(userId, date);
 }
@@ -348,20 +415,24 @@ export async function calcFitnessScoreForDate(
 async function calcNutritionScore(
   userId: string,
   date: Date,
-  goals?: UserGoals
+  goals?: UserGoals,
 ): Promise<ModuleScoreResult> {
   const met: string[] = [];
   const missed: string[] = [];
 
   const [meals, waterLogs, settings, userGoals] = await Promise.all([
-    db.meal.findMany({ where: { userId, date: startOfDay(date) } }),
-    db.waterLog.findMany({ where: { userId, date: startOfDay(date) } }),
+    db.meal.findMany({ where: { userId, date: uyDayDate(date) } }),
+    db.waterLog.findMany({ where: { userId, date: uyDayDate(date) } }),
     db.userSettings.findUnique({ where: { userId } }),
     goals ?? getGoals(userId),
   ]);
 
   if (meals.length === 0 && waterLogs.length === 0) {
-    return { score: null, met: [], missed: ["No se registraron comidas ni agua"] };
+    return {
+      score: null,
+      met: [],
+      missed: ["No se registraron comidas ni agua"],
+    };
   }
 
   let score = 0;
@@ -370,33 +441,50 @@ async function calcNutritionScore(
   const totalWater = waterLogs.reduce((acc: any, w: any) => acc + w.thermos, 0);
 
   // === Bloque Registro (20 pts) ===
-  const mainMeals = ["BREAKFAST", "LUNCH", "DINNER"].filter((t) => mealTypes.includes(t as never));
+  const mainMeals = ["BREAKFAST", "LUNCH", "DINNER"].filter((t) =>
+    mealTypes.includes(t as never),
+  );
   if (mainMeals.length >= 2) {
     score += 20;
     met.push(`${mainMeals.length} comidas principales registradas`);
   } else if (mainMeals.length === 1) {
     score += 10;
     met.push("1 comida principal registrada");
-    missed.push("Registrá al menos 2 comidas principales para el puntaje completo");
+    missed.push(
+      "Registrá al menos 2 comidas principales para el puntaje completo",
+    );
   } else {
     missed.push("Solo snacks registrados — sin comidas principales");
   }
 
   // === Bloque Macros (60 pts) ===
-  const totalProtein  = meals.reduce((s: any, m: any) => s + (m.proteinG  ?? 0), 0);
-  const totalCalories = meals.reduce((s: any, m: any) => s + (m.calories  ?? 0), 0);
-  const totalFat      = meals.reduce((s: any, m: any) => s + (m.fatG      ?? 0), 0);
+  const totalProtein = meals.reduce(
+    (s: any, m: any) => s + (m.proteinG ?? 0),
+    0,
+  );
+  const totalCalories = meals.reduce(
+    (s: any, m: any) => s + (m.calories ?? 0),
+    0,
+  );
+  const totalFat = meals.reduce((s: any, m: any) => s + (m.fatG ?? 0), 0);
   const hasMacros = totalProtein > 0 || totalCalories > 0;
 
   if (hasMacros) {
     // Proteína (25 pts) — proporcional, cap en 100%
-    const proteinRatio = Math.min(totalProtein / userGoals.nutritionTargetProtein, 1);
+    const proteinRatio = Math.min(
+      totalProtein / userGoals.nutritionTargetProtein,
+      1,
+    );
     const proteinPts = Math.round(proteinRatio * 25);
     score += proteinPts;
     if (proteinRatio >= 0.9) {
-      met.push(`Proteína: ${Math.round(totalProtein)}g / ${userGoals.nutritionTargetProtein}g ✓`);
+      met.push(
+        `Proteína: ${Math.round(totalProtein)}g / ${userGoals.nutritionTargetProtein}g ✓`,
+      );
     } else {
-      missed.push(`Proteína baja: ${Math.round(totalProtein)}g (objetivo: ${userGoals.nutritionTargetProtein}g)`);
+      missed.push(
+        `Proteína baja: ${Math.round(totalProtein)}g (objetivo: ${userGoals.nutritionTargetProtein}g)`,
+      );
     }
 
     // Calorías (20 pts) — penaliza déficit y exceso
@@ -404,48 +492,73 @@ async function calcNutritionScore(
     let calPts = 0;
     if (calRatio >= 0.9 && calRatio <= 1.1) {
       calPts = 20;
-      met.push(`Calorías: ${Math.round(totalCalories)}kcal (objetivo: ${userGoals.nutritionTargetCalories}kcal) ✓`);
+      met.push(
+        `Calorías: ${Math.round(totalCalories)}kcal (objetivo: ${userGoals.nutritionTargetCalories}kcal) ✓`,
+      );
     } else if (calRatio >= 0.8 && calRatio <= 1.2) {
       calPts = 12;
-      met.push(`Calorías: ${Math.round(totalCalories)}kcal (objetivo: ${userGoals.nutritionTargetCalories}kcal)`);
+      met.push(
+        `Calorías: ${Math.round(totalCalories)}kcal (objetivo: ${userGoals.nutritionTargetCalories}kcal)`,
+      );
     } else if (calRatio > 1.2) {
       calPts = 5;
-      missed.push(`Exceso calórico: ${Math.round(totalCalories)}kcal (objetivo: ${userGoals.nutritionTargetCalories}kcal)`);
+      missed.push(
+        `Exceso calórico: ${Math.round(totalCalories)}kcal (objetivo: ${userGoals.nutritionTargetCalories}kcal)`,
+      );
     } else {
-      missed.push(`Déficit calórico: ${Math.round(totalCalories)}kcal (objetivo: ${userGoals.nutritionTargetCalories}kcal)`);
+      missed.push(
+        `Déficit calórico: ${Math.round(totalCalories)}kcal (objetivo: ${userGoals.nutritionTargetCalories}kcal)`,
+      );
     }
     score += calPts;
 
     // Grasa (15 pts) — proporcional, cap en 100%
     if (totalFat > 0) {
       const fatRatio = Math.min(totalFat / userGoals.nutritionTargetFat, 1.2);
-      const fatPts = fatRatio <= 1.1 ? Math.round(Math.min(fatRatio, 1) * 15) : 8;
+      const fatPts =
+        fatRatio <= 1.1 ? Math.round(Math.min(fatRatio, 1) * 15) : 8;
       score += fatPts;
       if (fatRatio >= 0.85 && fatRatio <= 1.1) {
-        met.push(`Grasas: ${Math.round(totalFat)}g (objetivo: ${userGoals.nutritionTargetFat}g) ✓`);
+        met.push(
+          `Grasas: ${Math.round(totalFat)}g (objetivo: ${userGoals.nutritionTargetFat}g) ✓`,
+        );
       } else {
-        missed.push(`Grasas: ${Math.round(totalFat)}g (objetivo: ${userGoals.nutritionTargetFat}g)`);
+        missed.push(
+          `Grasas: ${Math.round(totalFat)}g (objetivo: ${userGoals.nutritionTargetFat}g)`,
+        );
       }
     } else {
-      missed.push("Sin datos de grasas — registrá comidas con IA para calcular macros");
+      missed.push(
+        "Sin datos de grasas — registrá comidas con IA para calcular macros",
+      );
     }
   } else {
     // Fallback sin macros: scoring por tipos (desayuno/almuerzo/cena)
-    if (mealTypes.includes("BREAKFAST")) { score += 15; met.push("Desayuno registrado"); }
-    else missed.push("Sin desayuno");
-    if (mealTypes.includes("LUNCH"))     { score += 25; met.push("Almuerzo registrado"); }
-    else missed.push("Sin almuerzo");
-    if (mealTypes.includes("DINNER"))    { score += 20; met.push("Cena registrada"); }
-    else missed.push("Sin cena");
+    if (mealTypes.includes("BREAKFAST")) {
+      score += 15;
+      met.push("Desayuno registrado");
+    } else missed.push("Sin desayuno");
+    if (mealTypes.includes("LUNCH")) {
+      score += 25;
+      met.push("Almuerzo registrado");
+    } else missed.push("Sin almuerzo");
+    if (mealTypes.includes("DINNER")) {
+      score += 20;
+      met.push("Cena registrada");
+    } else missed.push("Sin cena");
     missed.push("Activá el cálculo de macros con IA para un score más preciso");
   }
 
   // === Bloque Agua (20 pts) ===
   if (totalWater >= waterGoal) {
     score += 20;
-    met.push(`Hidratación: ${totalWater.toFixed(1)}/${waterGoal.toFixed(1)} termos ✓`);
+    met.push(
+      `Hidratación: ${totalWater.toFixed(1)}/${waterGoal.toFixed(1)} termos ✓`,
+    );
   } else {
-    missed.push(`Hidratación: ${totalWater.toFixed(1)}/${waterGoal.toFixed(1)} termos`);
+    missed.push(
+      `Hidratación: ${totalWater.toFixed(1)}/${waterGoal.toFixed(1)} termos`,
+    );
   }
 
   return { score: Math.min(score, 100), met, missed };
@@ -453,7 +566,7 @@ async function calcNutritionScore(
 
 export async function calcNutritionScoreForDate(
   userId: string,
-  date: Date
+  date: Date,
 ): Promise<ModuleScoreResult> {
   return calcNutritionScore(userId, date);
 }
@@ -475,7 +588,7 @@ export async function calcNutritionScoreForDate(
 
 async function calcProjectsScore(
   userId: string,
-  date: Date
+  date: Date,
 ): Promise<ModuleScoreResult> {
   const met: string[] = [];
   const missed: string[] = [];
@@ -489,8 +602,8 @@ async function calcProjectsScore(
           done: true,
           project: { userId },
           updatedAt: {
-            gte: startOfDay(date),
-            lte: endOfDay(date),
+            gte: startOfDayUY(date),
+            lte: endOfDayUY(date),
           },
         },
         select: { id: true, title: true },
@@ -519,7 +632,7 @@ async function calcProjectsScore(
 
     if (activeProjects > 0) {
       met.push(
-        `${activeProjects} proyecto${activeProjects > 1 ? "s" : ""} en progreso`
+        `${activeProjects} proyecto${activeProjects > 1 ? "s" : ""} en progreso`,
       );
     } else {
       missed.push("Sin proyectos en progreso");
@@ -529,7 +642,7 @@ async function calcProjectsScore(
       met.push("Sin deadlines vencidos");
     } else {
       missed.push(
-        `${overdueProjects} proyecto${overdueProjects > 1 ? "s" : ""} con deadline vencido`
+        `${overdueProjects} proyecto${overdueProjects > 1 ? "s" : ""} con deadline vencido`,
       );
     }
 
@@ -543,7 +656,7 @@ async function calcProjectsScore(
   // === Actividad (60 pts) ===
   score += 40;
   met.push(
-    `${tasksCompletedToday.length} tarea${tasksCompletedToday.length > 1 ? "s" : ""} completada${tasksCompletedToday.length > 1 ? "s" : ""} hoy`
+    `${tasksCompletedToday.length} tarea${tasksCompletedToday.length > 1 ? "s" : ""} completada${tasksCompletedToday.length > 1 ? "s" : ""} hoy`,
   );
 
   if (tasksCompletedToday.length >= 2) {
@@ -557,7 +670,7 @@ async function calcProjectsScore(
   if (activeProjects > 0) {
     score += 20;
     met.push(
-      `${activeProjects} proyecto${activeProjects > 1 ? "s" : ""} en progreso`
+      `${activeProjects} proyecto${activeProjects > 1 ? "s" : ""} en progreso`,
     );
   } else {
     missed.push("Sin proyectos en progreso");
@@ -568,7 +681,7 @@ async function calcProjectsScore(
     met.push("Sin deadlines vencidos ✓");
   } else {
     missed.push(
-      `${overdueProjects} proyecto${overdueProjects > 1 ? "s" : ""} con deadline vencido`
+      `${overdueProjects} proyecto${overdueProjects > 1 ? "s" : ""} con deadline vencido`,
     );
   }
 
@@ -581,7 +694,7 @@ async function calcProjectsScore(
  */
 export async function calcProjectsScoreForDate(
   userId: string,
-  date: Date
+  date: Date,
 ): Promise<ModuleScoreResult> {
   return calcProjectsScore(userId, date);
 }
@@ -611,12 +724,12 @@ export async function calcProjectsScoreForDate(
 async function calcFinancesScore(
   userId: string,
   date: Date,
-  goals?: UserGoals
+  goals?: UserGoals,
 ): Promise<ModuleScoreResult> {
   const met: string[] = [];
   const missed: string[] = [];
 
-  const userGoals = goals ?? await getGoals(userId);
+  const userGoals = goals ?? (await getGoals(userId));
 
   // Obtener datos de finanzas vía lib/finances
   try {
@@ -624,59 +737,87 @@ async function calcFinancesScore(
     const report = await getMonthlyReport(userId);
 
     if (!report) {
-      return { score: null, met: [], missed: ["Sin datos de finanzas este mes"] };
+      return {
+        score: null,
+        met: [],
+        missed: ["Sin datos de finanzas este mes"],
+      };
     }
 
     let score = 0;
     const { totalExpenses, totalIncome } = report.monthly;
-    const budget  = userGoals.financesMonthlyBudget;
+    const budget = userGoals.financesMonthlyBudget;
     const savings = userGoals.financesMonthlyTarget;
 
     // Bloque Presupuesto (60 pts)
     const spendRatio = totalExpenses / budget;
     if (spendRatio <= 0.9) {
       score += 60;
-      met.push(`Gastos: $${Math.round(totalExpenses)} / $${budget} ✓ (${Math.round(spendRatio * 100)}%)`);
+      met.push(
+        `Gastos: $${Math.round(totalExpenses)} / $${budget} ✓ (${Math.round(spendRatio * 100)}%)`,
+      );
     } else if (spendRatio <= 1.0) {
       score += 40;
-      met.push(`Gastos: $${Math.round(totalExpenses)} / $${budget} (${Math.round(spendRatio * 100)}%)`);
+      met.push(
+        `Gastos: $${Math.round(totalExpenses)} / $${budget} (${Math.round(spendRatio * 100)}%)`,
+      );
       missed.push("Cerca del límite de presupuesto");
     } else if (spendRatio <= 1.1) {
       score += 20;
-      missed.push(`Presupuesto excedido: $${Math.round(totalExpenses)} / $${budget} (${Math.round(spendRatio * 100)}%)`);
+      missed.push(
+        `Presupuesto excedido: $${Math.round(totalExpenses)} / $${budget} (${Math.round(spendRatio * 100)}%)`,
+      );
     } else {
-      missed.push(`Presupuesto muy excedido: $${Math.round(totalExpenses)} / $${budget} ($${Math.round(spendRatio * 100)}%)`);
+      missed.push(
+        `Presupuesto muy excedido: $${Math.round(totalExpenses)} / $${budget} ($${Math.round(spendRatio * 100)}%)`,
+      );
     }
 
-    // Bloque Ahorro (40 pts) — proyeccion al fin de mes
-    const today = date.getDate();
-    const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-    const projectedSavings = (totalIncome - totalExpenses) * (daysInMonth / today);
+    // Bloque Ahorro (40 pts) — proyeccion al fin de mes (calendario UY:
+    // con getDate()/getMonth() del server, de noche a fin de mes la
+    // proyección se calculaba con el mes siguiente)
+    const [uyY, uyM, uyD] = uyDateKey(date).split("-").map(Number);
+    const today = uyD;
+    const daysInMonth = new Date(Date.UTC(uyY, uyM, 0)).getUTCDate();
+    const projectedSavings =
+      (totalIncome - totalExpenses) * (daysInMonth / today);
     const savingsRatio = projectedSavings / savings;
 
     if (savingsRatio >= 1.0) {
       score += 40;
-      met.push(`Ahorro proyectado: $${Math.round(projectedSavings)} (objetivo: $${savings}) ok`);
+      met.push(
+        `Ahorro proyectado: $${Math.round(projectedSavings)} (objetivo: $${savings}) ok`,
+      );
     } else if (savingsRatio >= 0.8) {
       score += 25;
-      met.push(`Ahorro proyectado: $${Math.round(projectedSavings)} (objetivo: $${savings})`);
+      met.push(
+        `Ahorro proyectado: $${Math.round(projectedSavings)} (objetivo: $${savings})`,
+      );
       missed.push("Cerca del objetivo de ahorro");
     } else if (savingsRatio >= 0.6) {
       score += 10;
-      missed.push(`Ahorro bajo: $${Math.round(projectedSavings)} proyectado (objetivo: $${savings})`);
+      missed.push(
+        `Ahorro bajo: $${Math.round(projectedSavings)} proyectado (objetivo: $${savings})`,
+      );
     } else {
-      missed.push(`Ahorro muy por debajo del objetivo (proyectado: $${Math.round(projectedSavings)} / $${savings})`);
+      missed.push(
+        `Ahorro muy por debajo del objetivo (proyectado: $${Math.round(projectedSavings)} / $${savings})`,
+      );
     }
 
     return { score: Math.min(score, 100), met, missed };
   } catch {
-    return { score: null, met: [], missed: ["Sin conexion con la app de finanzas"] };
+    return {
+      score: null,
+      met: [],
+      missed: ["Sin conexion con la app de finanzas"],
+    };
   }
 }
 
 export async function calcFinancesScoreForDate(
   userId: string,
-  date: Date
+  date: Date,
 ): Promise<ModuleScoreResult> {
   return calcFinancesScore(userId, date);
 }
@@ -686,12 +827,12 @@ export async function calcFinancesScoreForDate(
 // -------------------------------------------------------
 
 export type FullScoreResult = {
-  sleep:     ModuleScoreResult;
-  fitness:   ModuleScoreResult;
+  sleep: ModuleScoreResult;
+  fitness: ModuleScoreResult;
   nutrition: ModuleScoreResult;
-  projects:  ModuleScoreResult;
-  finances:  ModuleScoreResult;
-  global:    number;
+  projects: ModuleScoreResult;
+  finances: ModuleScoreResult;
+  global: number;
 };
 
 // -------------------------------------------------------
@@ -700,7 +841,7 @@ export type FullScoreResult = {
 
 export async function calculateFullScore(
   userId: string,
-  date: Date
+  date: Date,
 ): Promise<FullScoreResult> {
   const goals = await getGoals(userId);
   const weights = normalizeWeights(goals);
@@ -714,8 +855,14 @@ export async function calculateFullScore(
   ]);
 
   const global = calcWeightedGlobal(
-    { sleep: sleep.score, fitness: fitness.score, nutrition: nutrition.score, finances: finances.score, projects: projects.score },
-    weights
+    {
+      sleep: sleep.score,
+      fitness: fitness.score,
+      nutrition: nutrition.score,
+      finances: finances.score,
+      projects: projects.score,
+    },
+    weights,
   );
 
   return { sleep, fitness, nutrition, projects, finances, global };
@@ -728,36 +875,36 @@ export async function calculateFullScore(
 export async function saveScore(
   userId: string,
   date: Date,
-  result: FullScoreResult
+  result: FullScoreResult,
 ): Promise<void> {
   const details: ScoreDetails = {
-    sleep:     { met: result.sleep.met,     missed: result.sleep.missed },
-    fitness:   { met: result.fitness.met,   missed: result.fitness.missed },
+    sleep: { met: result.sleep.met, missed: result.sleep.missed },
+    fitness: { met: result.fitness.met, missed: result.fitness.missed },
     nutrition: { met: result.nutrition.met, missed: result.nutrition.missed },
-    projects:  { met: result.projects.met,  missed: result.projects.missed },
-    finances:  { met: result.finances.met,  missed: result.finances.missed },
+    projects: { met: result.projects.met, missed: result.projects.missed },
+    finances: { met: result.finances.met, missed: result.finances.missed },
   };
 
   await db.dailyScore.upsert({
-    where: { userId_date: { userId, date: startOfDay(date) } },
+    where: { userId_date: { userId, date: uyDayDate(date) } },
     update: {
-      sleepScore:     result.sleep.score,
-      fitnessScore:   result.fitness.score,
+      sleepScore: result.sleep.score,
+      fitnessScore: result.fitness.score,
       nutritionScore: result.nutrition.score,
-      projectsScore:  result.projects.score,
-      financesScore:  result.finances.score,
-      globalScore:    result.global,
+      projectsScore: result.projects.score,
+      financesScore: result.finances.score,
+      globalScore: result.global,
       details,
     },
     create: {
       userId,
-      date: startOfDay(date),
-      sleepScore:     result.sleep.score,
-      fitnessScore:   result.fitness.score,
+      date: uyDayDate(date),
+      sleepScore: result.sleep.score,
+      fitnessScore: result.fitness.score,
       nutritionScore: result.nutrition.score,
-      projectsScore:  result.projects.score,
-      financesScore:  result.finances.score,
-      globalScore:    result.global,
+      projectsScore: result.projects.score,
+      financesScore: result.finances.score,
+      globalScore: result.global,
       details,
     },
   });
@@ -765,10 +912,10 @@ export async function saveScore(
 
 export async function getStoredScore(
   userId: string,
-  date: Date
+  date: Date,
 ): Promise<DailyScoreData | null> {
   const score = await db.dailyScore.findUnique({
-    where: { userId_date: { userId, date: startOfDay(date) } },
+    where: { userId_date: { userId, date: uyDayDate(date) } },
   });
 
   if (!score) return null;
@@ -778,6 +925,7 @@ export async function getStoredScore(
     fitness: score.fitnessScore,
     nutrition: score.nutritionScore,
     projects: score.projectsScore,
+    finances: score.financesScore,
     global: score.globalScore ?? 0,
     date: score.date,
     details: (score.details as DailyScoreData["details"]) ?? undefined,
@@ -796,10 +944,10 @@ export type HistoricalScoreEntry = {
 export async function getScoreHistory(
   userId: string,
   from: Date,
-  to: Date
+  to: Date,
 ): Promise<HistoricalScoreEntry[]> {
   const scores = await db.dailyScore.findMany({
-    where: { userId, date: { gte: startOfDay(from), lte: endOfDay(to) } },
+    where: { userId, date: { gte: uyDayDate(from), lte: uyDayDate(to) } },
     orderBy: { date: "asc" },
   });
 
@@ -815,12 +963,12 @@ export async function getScoreHistory(
 
 export async function getIdeasActivityForDate(
   userId: string,
-  date: Date
+  date: Date,
 ): Promise<number> {
   return db.idea.count({
     where: {
       userId,
-      createdAt: { gte: startOfDay(date), lte: endOfDay(date) },
+      createdAt: { gte: startOfDayUY(date), lte: endOfDayUY(date) },
     },
   });
 }
@@ -836,7 +984,10 @@ export function generateMockHistory(days: number): HistoricalScoreEntry[] {
 
     const seed = d.getDate() + d.getMonth() * 31;
     const rand = (base: number, variance: number) =>
-      Math.max(0, Math.min(100, Math.round(base + (((seed * 7 + variance) % 30) - 15))));
+      Math.max(
+        0,
+        Math.min(100, Math.round(base + (((seed * 7 + variance) % 30) - 15))),
+      );
 
     const sleep = rand(72, 1);
     const fitness = d.getDay() % 2 === 0 ? null : rand(80, 2);
@@ -844,14 +995,23 @@ export function generateMockHistory(days: number): HistoricalScoreEntry[] {
     const projects = rand(55, 4);
 
     const validScores = [sleep, fitness, nutrition, projects].filter(
-      (v): v is number => v !== null
+      (v): v is number => v !== null,
     );
     const global =
       validScores.length > 0
-        ? Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length)
+        ? Math.round(
+            validScores.reduce((a, b) => a + b, 0) / validScores.length,
+          )
         : null;
 
-    entries.push({ date: dateStr, global, sleep, fitness, nutrition, projects });
+    entries.push({
+      date: dateStr,
+      global,
+      sleep,
+      fitness,
+      nutrition,
+      projects,
+    });
   }
 
   return entries;
